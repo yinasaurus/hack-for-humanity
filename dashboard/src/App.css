@@ -53,7 +53,7 @@
 .login-card button,
 .notes button {
   border: 0;
-  background: #2f5d50;
+  background: #5F7A6B;
   color: #fff;
   border-radius: 10px;
   padding: 10px 14px;
@@ -158,8 +158,8 @@ h3 {
 }
 
 .detail-head button {
-  background: #2f5d50;
-  border-color: #2f5d50;
+  background: #5F7A6B;
+  border-color: #5F7A6B;
   color: #fff;
 }
 
@@ -178,7 +178,7 @@ h3 {
 
 .banner.ethics {
   background: #eef6f2;
-  color: #2f5d50;
+  color: #5F7A6B;
   padding: 10px 14px;
   border-radius: 10px;
   margin-bottom: 16px;
@@ -187,7 +187,7 @@ h3 {
 }
 
 .ai-live {
-  color: #1f6b4a;
+  color: #5F7A6B;
 }
 
 .ai-mock {
@@ -199,7 +199,7 @@ h3 {
   font-size: 0.85rem;
   color: #5b6b7c;
   background: #f4f7fa;
-  border-left: 3px solid #8fbf9a;
+  border-left: 3px solid #8FA396;
   padding: 8px 10px;
   border-radius: 0 8px 8px 0;
 }
@@ -235,7 +235,7 @@ h3 {
 .why-guide {
   margin: 6px 0 0;
   font-size: 0.88rem;
-  color: #2f5d50;
+  color: #5F7A6B;
   font-weight: 600;
 }
 
@@ -259,7 +259,7 @@ h3 {
 }
 
 .alert-guide {
-  color: #2f5d50;
+  color: #5F7A6B;
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -281,7 +281,7 @@ h3 {
 
 .sev-info {
   background: #e7f0ea;
-  color: #2f5d50;
+  color: #5F7A6B;
 }
 
 .alerts {

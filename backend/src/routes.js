@@ -80,6 +80,7 @@ export function toPatientCompanionState(userId) {
     walksAvailable: walksUnlocked(checkIns),
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
+    helloDays: uniqueSortedDays(checkIns),
     ...appearance,
     // No calories, macros, scores
   };
