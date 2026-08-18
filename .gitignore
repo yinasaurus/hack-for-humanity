@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+build/
+.env
+backend/data/
+*.log
+.DS_Store
+dashboard/dist/
+mobile/.expo/
+**/coverage/

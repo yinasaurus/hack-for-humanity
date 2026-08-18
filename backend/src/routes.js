@@ -1,0 +1,501 @@
+import { v4 as uuid } from 'uuid';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { readDb, updateDb, DATA_DIR } from './db.js';
+import {
+  currentStreak,
+  daysSinceLastCheckIn,
+  milestonesReached,
+  petMood,
+  rewardForMilestone,
+  uniqueSortedDays,
+  walksUnlocked,
+  checkInRate,
+  toDateKey,
+  shiftDay,
+} from './streaks.js';
+import { evaluateAlerts } from './alerts.js';
+import { analyzeFoodPhoto, generateClinicianSummary } from './ai.js';
+import { appearanceFromUser, applyAppearancePatch } from './appearance.js';
+import { publicUser, requireAuth, signToken } from './auth.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UPLOADS = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(UPLOADS)) fs.mkdirSync(UPLOADS, { recursive: true });
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
+
+/** Strip nutrition fields — patient payloads must never include these. */
+export function toPatientSafeCheckIn(checkIn) {
+  return {
+    id: checkIn.id,
+    userId: checkIn.userId,
+    createdAt: checkIn.createdAt,
+    photoUrl: checkIn.photoUrl,
+    // Intentionally no analysis / nutrition fields
+  };
+}
+
+export function toPatientCompanionState(userId) {
+  const db = readDb();
+  const user = db.users.find((u) => u.id === userId);
+  const checkIns = db.checkIns.filter((c) => c.userId === userId);
+  const streak = currentStreak(checkIns);
+  const totalDays = uniqueSortedDays(checkIns).length;
+  const mood = petMood(checkIns);
+  const milestoneDays = milestonesReached(totalDays);
+  const unlocks = db.unlocks[userId] || [];
+  const newUnlocks = [];
+
+  for (const day of milestoneDays) {
+    if (!unlocks.some((u) => u.milestoneDay === day)) {
+      const reward = rewardForMilestone(day);
+      newUnlocks.push({
+        milestoneDay: day,
+        ...reward,
+        unlockedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  if (newUnlocks.length) {
+    updateDb((d) => {
+      d.unlocks[userId] = [...(d.unlocks[userId] || []), ...newUnlocks];
+    });
+  }
+
+  const allUnlocks = [...unlocks, ...newUnlocks];
+  const appearance = appearanceFromUser(user);
+
+  return {
+    mood,
+    streakDays: streak,
+    totalCheckInDays: totalDays,
+    daysSinceLastCheckIn: daysSinceLastCheckIn(checkIns),
+    walksAvailable: walksUnlocked(checkIns),
+    unlocks: allUnlocks,
+    newlyUnlocked: newUnlocks,
+    ...appearance,
+    // No calories, macros, scores
+  };
+}
+
+async function saveCheckInFromBuffer(user, buffer, mimeType) {
+  const checkInId = uuid();
+  const ext = (mimeType || '').includes('png') ? 'png' : 'jpg';
+  const filename = `${checkInId}.${ext}`;
+  const diskPath = path.join(UPLOADS, filename);
+  fs.writeFileSync(diskPath, buffer);
+
+  const createdAt = new Date().toISOString();
+  const checkIn = {
+    id: checkInId,
+    userId: user.id,
+    createdAt,
+    photoUrl: `/uploads/${filename}`,
+    photoPath: diskPath,
+  };
+
+  updateDb((d) => {
+    d.checkIns.push(checkIn);
+  });
+
+  const analysis = await analyzeFoodPhoto({
+    imageBase64: buffer.toString('base64'),
+    mimeType: mimeType || 'image/jpeg',
+  });
+
+  updateDb((d) => {
+    d.analyses[checkInId] = {
+      checkInId,
+      userId: user.id,
+      createdAt,
+      ...analysis,
+    };
+  });
+
+  return {
+    checkIn: toPatientSafeCheckIn(checkIn),
+    companion: toPatientCompanionState(user.id),
+  };
+}
+
+export function registerRoutes(app) {
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      ok: true,
+      aiStatus: process.env.OPENAI_API_KEY ? 'live' : 'mock',
+    });
+  });
+
+  // --- Auth ---
+  app.post('/api/auth/signup', async (req, res) => {
+    const { email, password, name } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ error: 'email and password required' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: 'password should be at least 6 characters' });
+    }
+    const normalized = String(email).trim().toLowerCase();
+    const db = readDb();
+    if (db.users.some((u) => u.email === normalized && u.role === 'patient')) {
+      return res.status(409).json({ error: 'An account with this email already exists. Try logging in.' });
+    }
+    const bcrypt = (await import('bcryptjs')).default;
+    const passwordHash = await bcrypt.hash(String(password), 10);
+    const user = {
+      id: uuid(),
+      email: normalized,
+      name: (name && String(name).trim()) || normalized.split('@')[0],
+      role: 'patient',
+      onboarded: false,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+    };
+    updateDb((d) => {
+      d.users.push(user);
+    });
+    const safe = publicUser(user);
+    res.status(201).json({ user: safe, token: signToken(user) });
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    const { email, password, role } = req.body || {};
+    const userRole = role || 'patient';
+    if (!email) {
+      return res.status(400).json({ error: 'email required' });
+    }
+    const normalized = String(email).trim().toLowerCase();
+    const db = readDb();
+    let user = db.users.find((u) => u.email === normalized && u.role === userRole);
+
+    if (!user && userRole === 'patient' && !password) {
+      return res.status(404).json({ error: 'No account found. Please sign up first.' });
+    }
+
+    if (!user && userRole === 'clinician') {
+      user = {
+        id: uuid(),
+        email: normalized,
+        name: normalized.split('@')[0],
+        role: 'clinician',
+        onboarded: true,
+        createdAt: new Date().toISOString(),
+      };
+      updateDb((d) => {
+        d.users.push(user);
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'No account found. Please sign up first.' });
+    }
+
+    if (user.passwordHash) {
+      if (!password) {
+        return res.status(401).json({ error: 'password required' });
+      }
+      const bcrypt = (await import('bcryptjs')).default;
+      const ok = await bcrypt.compare(String(password), user.passwordHash);
+      if (!ok) {
+        return res.status(401).json({ error: 'Email or password does not match' });
+      }
+    } else if (password && userRole === 'patient') {
+      const bcrypt = (await import('bcryptjs')).default;
+      const passwordHash = await bcrypt.hash(String(password), 10);
+      updateDb((d) => {
+        const u = d.users.find((x) => x.id === user.id);
+        if (u) u.passwordHash = passwordHash;
+      });
+      user = { ...user, passwordHash };
+    } else if (userRole === 'patient' && !user.passwordHash) {
+      return res.status(401).json({ error: 'password required' });
+    }
+
+    res.json({ user: publicUser(user), token: signToken(user) });
+  });
+
+  app.get('/api/auth/me', requireAuth(), (req, res) => {
+    const user = readDb().users.find((u) => u.id === req.auth.sub);
+    if (!user) return res.status(401).json({ error: 'Please sign in again' });
+    res.json({ user: publicUser(user) });
+  });
+
+  app.get('/api/users/:id', requireAuth(), (req, res) => {
+    if (req.auth.sub !== req.params.id && req.auth.role !== 'clinician') {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    const user = readDb().users.find((u) => u.id === req.params.id);
+    if (!user) return res.status(404).json({ error: 'not found' });
+    res.json({ user: publicUser(user) });
+  });
+
+  app.post('/api/users/:id/onboarded', requireAuth(), (req, res) => {
+    if (req.auth.sub !== req.params.id) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    updateDb((d) => {
+      const u = d.users.find((x) => x.id === req.params.id);
+      if (u) u.onboarded = true;
+    });
+    const user = readDb().users.find((u) => u.id === req.params.id);
+    res.json({ user: publicUser(user) });
+  });
+
+  // Cosmetic pet appearance only (species/color/outfits/scenes — never size/body)
+  app.patch('/api/patient/:userId/appearance', requireAuth(['patient']), (req, res) => {
+    if (req.auth.sub !== req.params.userId) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    updateDb((d) => {
+      const u = d.users.find((x) => x.id === req.params.userId && x.role === 'patient');
+      if (!u) return;
+      applyAppearancePatch(u, req.body || {});
+    });
+
+    const user = readDb().users.find((u) => u.id === req.params.userId);
+    if (!user) return res.status(404).json({ error: 'patient not found' });
+    res.json({
+      appearance: appearanceFromUser(user),
+      companion: toPatientCompanionState(user.id),
+    });
+  });
+
+  // --- Patient: companion state (no nutrition) ---
+  app.get('/api/patient/:userId/companion', requireAuth(['patient']), (req, res) => {
+    if (req.auth.sub !== req.params.userId) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    const user = readDb().users.find((u) => u.id === req.params.userId);
+    if (!user || user.role !== 'patient') {
+      return res.status(404).json({ error: 'patient not found' });
+    }
+    res.json(toPatientCompanionState(user.id));
+  });
+
+  app.get('/api/patient/:userId/check-ins', requireAuth(['patient']), (req, res) => {
+    if (req.auth.sub !== req.params.userId) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    const checkIns = readDb()
+      .checkIns.filter((c) => c.userId === req.params.userId)
+      .map(toPatientSafeCheckIn)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    res.json({ checkIns });
+  });
+
+  // Camera photo upload — multipart OR JSON base64 (Expo-friendly)
+  app.post(
+    '/api/patient/:userId/check-in',
+    requireAuth(['patient']),
+    upload.single('photo'),
+    async (req, res) => {
+      try {
+        if (req.auth.sub !== req.params.userId) {
+          return res.status(403).json({ error: 'Not allowed' });
+        }
+        const user = readDb().users.find((u) => u.id === req.params.userId);
+        if (!user || user.role !== 'patient') {
+          return res.status(404).json({ error: 'patient not found' });
+        }
+
+        let buffer = req.file?.buffer || null;
+        let mimeType = req.file?.mimetype || 'image/jpeg';
+
+        if (!buffer && req.body?.imageBase64) {
+          const raw = String(req.body.imageBase64).replace(/^data:[^;]+;base64,/, '');
+          buffer = Buffer.from(raw, 'base64');
+          mimeType = req.body.mimeType || 'image/jpeg';
+        }
+
+        if (!buffer || buffer.length === 0) {
+          return res.status(400).json({ error: 'photo required' });
+        }
+
+        const result = await saveCheckInFromBuffer(user, buffer, mimeType);
+        res.status(201).json(result);
+      } catch (err) {
+        console.error('check-in error:', err);
+        res.status(500).json({ error: 'Could not save check-in right now' });
+      }
+    }
+  );
+
+  // --- Standalone AI routes (easy to demo independently) ---
+  app.post('/api/analyze-photo', requireAuth(['clinician']), upload.single('photo'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'photo required' });
+    const analysis = await analyzeFoodPhoto({
+      imageBase64: req.file.buffer.toString('base64'),
+      mimeType: req.file.mimetype || 'image/jpeg',
+    });
+    res.json({ analysis });
+  });
+
+  app.post('/api/generate-summary', requireAuth(['clinician']), async (req, res) => {
+    const { patientId } = req.body || {};
+    if (!patientId) return res.status(400).json({ error: 'patientId required' });
+
+    const db = readDb();
+    const patient = db.users.find((u) => u.id === patientId && u.role === 'patient');
+    if (!patient) return res.status(404).json({ error: 'patient not found' });
+
+    const checkIns = db.checkIns.filter((c) => c.userId === patientId);
+    const analyses = Object.values(db.analyses).filter((a) => a.userId === patientId);
+    const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
+
+    const ai = await generateClinicianSummary({
+      patientName: patient.name,
+      metrics,
+      analyses,
+      alertReasons: alerts.map((a) => a.reason),
+    });
+
+    const summaryRecord = {
+      patientId,
+      createdAt: new Date().toISOString(),
+      ...ai,
+      metrics,
+    };
+
+    updateDb((d) => {
+      d.summaries[patientId] = summaryRecord;
+      // Refresh alerts for this patient
+      d.alerts = [
+        ...d.alerts.filter((a) => a.patientId !== patientId),
+        ...alerts.map((a) => ({ id: uuid(), ...a })),
+      ];
+      if (ai.shouldAlert && ai.alertReason) {
+        const exists = d.alerts.some(
+          (a) => a.patientId === patientId && a.reason === ai.alertReason
+        );
+        if (!exists) {
+          d.alerts.push({
+            id: uuid(),
+            patientId,
+            patientName: patient.name,
+            reason: ai.alertReason,
+            severity: 'attention',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+    });
+
+    res.json({ summary: summaryRecord, alerts: readDb().alerts.filter((a) => a.patientId === patientId) });
+  });
+
+  // --- Clinician endpoints ---
+  app.get('/api/clinician/patients', requireAuth(['clinician']), (_req, res) => {
+    const db = readDb();
+    const patients = db.users
+      .filter((u) => u.role === 'patient')
+      .map((p) => {
+        const checkIns = db.checkIns.filter((c) => c.userId === p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          rate7: checkInRate(checkIns, 7),
+          rate30: checkInRate(checkIns, 30),
+          streak: currentStreak(checkIns),
+          lastCheckIn: checkIns.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+            ?.createdAt,
+          totalDays: uniqueSortedDays(checkIns).length,
+        };
+      });
+    res.json({ patients });
+  });
+
+  app.get('/api/clinician/patients/:id', requireAuth(['clinician']), (req, res) => {
+    const db = readDb();
+    const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+    if (!patient) return res.status(404).json({ error: 'not found' });
+
+    const checkIns = db.checkIns
+      .filter((c) => c.userId === patient.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const analyses = checkIns.map((c) => db.analyses[c.id]).filter(Boolean);
+    const summary = db.summaries[patient.id] || null;
+    const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
+
+    const today = toDateKey(new Date());
+    const loggedDays = new Set(uniqueSortedDays(checkIns));
+    const consistency30 = [];
+    for (let i = 29; i >= 0; i--) {
+      const key = shiftDay(today, -i);
+      consistency30.push({ date: key, logged: loggedDays.has(key) });
+    }
+
+    const calorieTrend = analyses
+      .filter((a) => a.confidence !== 'low' && a.estimatedCalories > 0)
+      .slice(-14)
+      .map((a) => ({
+        date: (a.createdAt || '').slice(0, 10),
+        estimatedCalories: a.estimatedCalories,
+        foodType: a.foodType,
+        confidence: a.confidence,
+      }));
+
+    res.json({
+      patient: { id: patient.id, name: patient.name, email: patient.email },
+      metrics,
+      consistency30,
+      calorieTrend,
+      clinicianNotes: db.clinicianNotes?.[patient.id] || [],
+      checkIns: checkIns.map((c) => ({
+        ...toPatientSafeCheckIn(c),
+        analysis: db.analyses[c.id] || null,
+      })),
+      summary,
+      alerts,
+      aiStatus: process.env.OPENAI_API_KEY ? 'live' : 'mock',
+    });
+  });
+
+  app.post('/api/clinician/patients/:id/notes', requireAuth(['clinician']), (req, res) => {
+    const text = String(req.body?.text || '').trim().slice(0, 2000);
+    if (!text) return res.status(400).json({ error: 'note text required' });
+    const db = readDb();
+    const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+    if (!patient) return res.status(404).json({ error: 'not found' });
+
+    const note = {
+      id: uuid(),
+      text,
+      authorId: req.auth.sub,
+      createdAt: new Date().toISOString(),
+    };
+    updateDb((d) => {
+      if (!d.clinicianNotes) d.clinicianNotes = {};
+      if (!d.clinicianNotes[patient.id]) d.clinicianNotes[patient.id] = [];
+      d.clinicianNotes[patient.id].unshift(note);
+    });
+    res.status(201).json({ note });
+  });
+
+  app.get('/api/clinician/alerts', requireAuth(['clinician']), (_req, res) => {
+    const db = readDb();
+    const live = [];
+    for (const p of db.users.filter((u) => u.role === 'patient')) {
+      const checkIns = db.checkIns.filter((c) => c.userId === p.id);
+      const analyses = Object.values(db.analyses).filter((a) => a.userId === p.id);
+      const { alerts } = evaluateAlerts(p, checkIns, analyses);
+      live.push(...alerts.map((a) => ({ id: `${p.id}-${a.reason}`, ...a })));
+    }
+    res.json({ alerts: live });
+  });
+
+  // Static uploads
+  app.get('/uploads/:file', (req, res) => {
+    const filePath = path.join(UPLOADS, path.basename(req.params.file));
+    if (!fs.existsSync(filePath)) return res.status(404).end();
+    res.sendFile(filePath);
+  });
+}
