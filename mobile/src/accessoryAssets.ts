@@ -52,14 +52,11 @@ const BASE_NECK: AccAnchor = { top: '52%', left: '22%', width: 0.56, height: 0.2
 const BASE_HELD: AccAnchor = { top: '58%', right: '2%', width: 0.28, height: 0.28 };
 
 const HAT_BY_TYPE: Partial<Record<PetTypeId, AccAnchor>> = {
-  bun: { top: '-2%', left: '28%', width: 0.44, height: 0.28 },
-  pup: { top: '4%', left: '27%', width: 0.46, height: 0.3 },
-  kit: { top: '0%', left: '28%', width: 0.44, height: 0.28 },
   fox: { top: '2%', left: '30%', width: 0.4, height: 0.26 },
-  panda: { top: '4%', left: '26%', width: 0.48, height: 0.3 },
-  chick: { top: '8%', left: '28%', width: 0.44, height: 0.28 },
-  otter: { top: '2%', left: '27%', width: 0.46, height: 0.28 },
-  bean: { top: '6%', left: '26%', width: 0.48, height: 0.32 },
+  horse: { top: '4%', left: '27%', width: 0.46, height: 0.3 },
+  parrot: { top: '8%', left: '28%', width: 0.44, height: 0.28 },
+  flamingo: { top: '-2%', left: '28%', width: 0.44, height: 0.28 },
+  stork: { top: '6%', left: '26%', width: 0.48, height: 0.32 },
 };
 
 export function hatStyle(petType: PetTypeId, imgSize: number): StyleProp<ImageStyle> {
@@ -76,7 +73,7 @@ export function hatStyle(petType: PetTypeId, imgSize: number): StyleProp<ImageSt
 
 export function faceStyle(petType: PetTypeId, imgSize: number): StyleProp<ImageStyle> {
   const a = BASE_FACE;
-  const bump = petType === 'bean' ? 0.04 : petType === 'chick' ? 0.02 : 0;
+  const bump = petType === 'stork' ? 0.04 : petType === 'parrot' ? 0.02 : 0;
   return {
     position: 'absolute',
     top: typeof a.top === 'string' ? a.top : a.top,

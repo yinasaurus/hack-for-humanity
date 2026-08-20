@@ -9,6 +9,15 @@ import {
   isQuietBand,
   type CompanionExpression,
 } from '../companionMood';
+import { PET_SCENES, type PetSceneId } from '../pets';
+
+export type AnimalOutfit = {
+  hat?: string;
+  face?: string;
+  neck?: string;
+  held?: string;
+  scene?: string;
+};
 
 type Props = {
   character: CharacterDef;
@@ -20,6 +29,8 @@ type Props = {
   onReady?: (handle: AnimalWebHandle) => void;
   muted?: boolean;
   accessibilityLabel?: string;
+  /** Decorative outfit — bone-parented when the GLB has head/neck/hand bones */
+  outfit?: AnimalOutfit;
 };
 
 export type AnimalWebHandle = AnimalCharacterHandle & {
@@ -31,7 +42,7 @@ export type AnimalWebHandle = AnimalCharacterHandle & {
 
 /**
  * Expo Go–friendly 3D viewer. Expressions: happy, resting, waving, excited, curious, sleepy.
- * Never sadness / hunger / neediness.
+ * Outfit meshes parent to Fox skeleton bones when present — never body-size changes.
  */
 export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalWebView(
   {
@@ -42,6 +53,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     onReady,
     muted = true,
     accessibilityLabel = 'Companion character',
+    outfit,
   },
   ref
 ) {
@@ -49,6 +61,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   const reducedMotion = useReducedMotion();
   const active: CompanionExpression = expression || mood;
   const startQuiet = isQuietBand(active);
+  const readyRef = useRef(false);
 
   const html = useMemo(
     () => buildHtml(character, startQuiet, reducedMotion),
@@ -59,7 +72,6 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       character.clips.talk,
       character.clips.react,
       character.scale,
-      // Remount only when character changes — expressions inject via postMessage
       reducedMotion,
     ]
   );
@@ -107,7 +119,41 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     post('setExpression', { expression: active });
   }, [active, character.id]);
 
-  const onMessage = (_e: WebViewMessageEvent) => {};
+  useEffect(() => {
+    post('setOutfit', {
+      hat: outfit?.hat || 'none',
+      face: outfit?.face || 'none',
+      neck: outfit?.neck || 'none',
+      held: outfit?.held || 'none',
+      scene: outfit?.scene || 'sky',
+    });
+  }, [
+    outfit?.hat,
+    outfit?.face,
+    outfit?.neck,
+    outfit?.held,
+    outfit?.scene,
+    character.id,
+  ]);
+
+  const onMessage = (e: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(e.nativeEvent.data);
+      if (msg?.type === 'ready') {
+        readyRef.current = true;
+        post('setOutfit', {
+          hat: outfit?.hat || 'none',
+          face: outfit?.face || 'none',
+          neck: outfit?.neck || 'none',
+          held: outfit?.held || 'none',
+          scene: outfit?.scene || 'sky',
+        });
+        post('setExpression', { expression: active });
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   if (!character.modelPath) {
     return (
@@ -127,6 +173,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       accessibilityRole="image"
     >
       <WebView
+        key={character.modelPath}
         ref={webRef}
         originWhitelist={['*']}
         source={{ html, baseUrl: 'https://cdn.jsdelivr.net/' }}
@@ -145,6 +192,11 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     </View>
   );
 });
+
+function sceneFill(sceneId?: string) {
+  const hit = PET_SCENES.find((s) => s.id === (sceneId as PetSceneId));
+  return hit?.fill || '#F7F4EF';
+}
 
 function buildHtml(character: CharacterDef, startQuiet: boolean, reducedMotion: boolean) {
   const modelPath = JSON.stringify(character.modelPath);
@@ -165,7 +217,7 @@ function buildHtml(character: CharacterDef, startQuiet: boolean, reducedMotion: 
 <style>
   html,body{margin:0;height:100%;background:${startQuiet ? bgSleep : bgAwake};overflow:hidden;touch-action:none}
   canvas{display:block;width:100%;height:100%}
-  #hud{position:absolute;left:10px;top:8px;right:10px;font:500 11px/1.35 system-ui,sans-serif;color:#4F5B57;z-index:2;pointer-events:none;opacity:0.45}
+  #hud{position:absolute;left:10px;top:8px;right:10px;font:500 11px/1.35 system-ui,sans-serif;color:#4F5B57;z-index:2;pointer-events:none;opacity:0.55}
 </style>
 <script type="importmap">
 {
@@ -246,6 +298,10 @@ const clock = new THREE.Clock();
 let clipNames = [];
 let baseQuat = new THREE.Quaternion();
 let basePos = new THREE.Vector3();
+let boneByName = {};
+let hasSkeleton = false;
+let outfitState = { hat: 'none', face: 'none', neck: 'none', held: 'none', scene: 'sky' };
+const acc = { hat: null, face: null, neck: null, held: null };
 
 function easeSoft(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -278,7 +334,6 @@ function pickFallback(prefer) {
 function playClip(wanted, { loop = true, fade = 0.55, speed = 1 } = {}) {
   const name = pickFallback(wanted);
   if (!name || !actions[name]) {
-    hud.textContent = '';
     return null;
   }
   const next = actions[name];
@@ -365,7 +420,6 @@ function doReactGentle() {
 }
 
 function doWaveGreeting() {
-  // Greeting overlay — never guilt-coded; works in quiet band as a soft sway
   if (reducedMotion) return doReactGentle();
   playClip(WANT_TALK, { loop: false, speed: 0.5, fade: 0.65 });
   softBob({ amp: 0.04, dur: 2000, yaw: quiet ? 0.14 : 0.24 });
@@ -395,7 +449,6 @@ function doCurious() {
   applyQuietPose(true, false);
   setBackground('curious');
   if (reducedMotion) return;
-  // Soft look-around / "paw at something" — survey clip or talk at slow speed
   playClip(WANT_TALK, { loop: true, speed: 0.4, fade: 0.7 });
   softBob({ amp: 0.025, dur: 2800, yaw: 0.32 });
   setTimeout(() => {
@@ -410,7 +463,6 @@ function doSleepy() {
   applyQuietPose(true, true);
   setBackground('sleepy');
   playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.8 });
-  // Soft yawn: gentle scale pulse, cozy not needy
   softBob({ amp: 0.018, dur: 2400, scalePulse: 0.025 });
 }
 
@@ -434,7 +486,6 @@ function setExpression(next) {
   const allowed = ['happy','resting','waving','excited','curious','sleepy'];
   if (!allowed.includes(next)) return;
   expression = next;
-  hud.textContent = '';
   if (next === 'waving') return doWaveGreeting();
   if (next === 'excited') return doExcited();
   if (next === 'curious') return doCurious();
@@ -474,6 +525,227 @@ function doSpeak(url) {
   } catch { setTimeout(goBaseIdle, 2600); }
 }
 
+/* ——— Bone-attached decorative accessories (Fox skeleton) ——— */
+function indexBones(object) {
+  boneByName = {};
+  hasSkeleton = false;
+  object.traverse((o) => {
+    if (o.isSkinnedMesh && o.skeleton) {
+      o.skeleton.bones.forEach((b) => {
+        boneByName[b.name] = b;
+        hasSkeleton = true;
+      });
+    }
+    if (o.isBone) {
+      boneByName[o.name] = o;
+      hasSkeleton = true;
+    }
+  });
+}
+
+function findBone(candidates) {
+  for (const n of candidates) {
+    if (boneByName[n]) return boneByName[n];
+  }
+  return null;
+}
+
+function softMat(color) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.72,
+    metalness: 0.05,
+  });
+}
+
+function makeHat(kind) {
+  const g = new THREE.Group();
+  if (kind === 'beanie') {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58),
+      softMat(0x6fae8f)
+    );
+    cap.rotation.x = Math.PI;
+    cap.position.y = 0.35;
+    const brim = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.12, 10, 24), softMat(0x5F7A6B));
+    brim.rotation.x = Math.PI / 2;
+    brim.position.y = 0.2;
+    g.add(cap, brim);
+  } else if (kind === 'bow') {
+    const m = softMat(0xE8A0A8);
+    const L = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), m);
+    const R = L.clone();
+    L.position.x = -0.55; R.position.x = 0.55;
+    L.scale.set(1, 0.7, 0.45); R.scale.set(1, 0.7, 0.45);
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), softMat(0xD4848C));
+    g.add(L, R, knot);
+  } else if (kind === 'flower') {
+    const center = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), softMat(0xF5E6A8));
+    for (let i = 0; i < 5; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), softMat(0xF0C4C8));
+      const a = (i / 5) * Math.PI * 2;
+      p.position.set(Math.cos(a) * 0.55, 0.05, Math.sin(a) * 0.55);
+      p.scale.set(1, 0.45, 1);
+      g.add(p);
+    }
+    g.add(center);
+  } else if (kind === 'crown_soft') {
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.1, 8, 24), softMat(0xE8C48A));
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.15;
+    g.add(band);
+    for (let i = 0; i < 5; i++) {
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 6), softMat(0xF5E6A8));
+      const a = (i / 5) * Math.PI * 2;
+      tip.position.set(Math.cos(a) * 0.85, 0.4, Math.sin(a) * 0.85);
+      g.add(tip);
+    }
+  } else {
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), softMat(0xB8D9C4));
+    cap.rotation.x = Math.PI;
+    g.add(cap);
+  }
+  return g;
+}
+
+function makeFace(kind) {
+  const g = new THREE.Group();
+  if (kind === 'glasses') {
+    const m = softMat(0x445566);
+    const L = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.06, 8, 16), m);
+    const R = L.clone();
+    L.position.x = -0.42; R.position.x = 0.42;
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.06), m);
+    g.add(L, R, bridge);
+  }
+  return g;
+}
+
+function makeScarf(kind) {
+  const g = new THREE.Group();
+  const color = kind === 'ribbon' ? 0xE8A0A8 : 0x6fae8f;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.22, 12, 28), softMat(color));
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  if (kind === 'scarf') {
+    const drape = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.9, 0.14), softMat(color));
+    drape.position.set(0.55, -0.55, 0.1);
+    drape.rotation.z = 0.2;
+    g.add(drape);
+  }
+  return g;
+}
+
+function makeHeld(kind) {
+  const g = new THREE.Group();
+  if (kind === 'star') {
+    g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.45), softMat(0xF5E6A8)));
+  } else if (kind === 'heart') {
+    const m = softMat(0xE8A0A8);
+    const a = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), m);
+    const b = a.clone();
+    a.position.set(-0.18, 0.12, 0); b.position.set(0.18, 0.12, 0);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.55, 8), m);
+    tip.rotation.z = Math.PI; tip.position.y = -0.2;
+    g.add(a, b, tip);
+  } else if (kind === 'flower_stem') {
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), softMat(0x6fae8f));
+    stem.position.y = 0.15;
+    const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), softMat(0xF0C4C8));
+    bloom.position.y = 0.65;
+    g.add(stem, bloom);
+  } else {
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), softMat(0xE8C48A)));
+  }
+  return g;
+}
+
+function clearAcc(slot) {
+  if (acc[slot]) {
+    if (acc[slot].parent) acc[slot].parent.remove(acc[slot]);
+    acc[slot] = null;
+  }
+}
+
+/** Place accessory using small WORLD offsets so Fox root scale does not fling props into orbit. */
+function attachWorld(slot, bone, mesh, worldOffset, worldSize) {
+  clearAcc(slot);
+  if (!bone || !mesh) return;
+  bone.updateWorldMatrix(true, false);
+  bone.add(mesh);
+
+  const inv = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+  const bonePos = new THREE.Vector3();
+  const boneQuat = new THREE.Quaternion();
+  const boneScale = new THREE.Vector3();
+  bone.matrixWorld.decompose(bonePos, boneQuat, boneScale);
+
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(boneQuat).normalize();
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(boneQuat).normalize();
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(boneQuat).normalize();
+
+  const target = bonePos.clone()
+    .addScaledVector(up, worldOffset.up || 0)
+    .addScaledVector(forward, worldOffset.forward || 0)
+    .addScaledVector(right, worldOffset.right || 0);
+
+  mesh.position.copy(target).applyMatrix4(inv);
+  const s = (worldSize || 0.12) / Math.max(boneScale.x, 1e-4);
+  mesh.scale.setScalar(s);
+  mesh.quaternion.identity();
+  acc[slot] = mesh;
+}
+
+function applyOutfit(next) {
+  outfitState = { ...outfitState, ...next };
+  const fills = {
+    sky: '#E8F0F6',
+    sunny_meadow: '#C8E6D0',
+    cozy_nook: '#E8D9F0',
+    quiet_garden: '#D6E8F5',
+    dusk: '#F0D8D0',
+    cloudscape: '#F4F7FB',
+    window: '#FFF0E0',
+    lavender_field: '#E4D8F0',
+  };
+  if (outfitState.scene && fills[outfitState.scene]) {
+    const c = fills[outfitState.scene];
+    if (!isQuietExpr(expression)) {
+      scene.background = new THREE.Color(c);
+      document.body.style.background = c;
+    }
+  }
+
+  if (!root) return;
+
+  if (!hasSkeleton) {
+    hud.textContent = '';
+    clearAcc('hat'); clearAcc('face'); clearAcc('neck'); clearAcc('held');
+    return;
+  }
+  hud.textContent = '';
+
+  const head = findBone(['b_Head_05']);
+  const neck = findBone(['b_Neck_04']);
+  const hand = findBone(['b_RightHand_08']);
+
+  if (outfitState.hat && outfitState.hat !== 'none' && head) {
+    attachWorld('hat', head, makeHat(outfitState.hat), { up: 0.11, forward: 0.02 }, 0.13);
+  } else clearAcc('hat');
+
+  if (outfitState.face && outfitState.face !== 'none' && head) {
+    attachWorld('face', head, makeFace(outfitState.face), { up: 0.02, forward: 0.1 }, 0.09);
+  } else clearAcc('face');
+
+  if (outfitState.neck && outfitState.neck !== 'none' && neck) {
+    attachWorld('neck', neck, makeScarf(outfitState.neck), { up: -0.02, forward: 0.04 }, 0.11);
+  } else clearAcc('neck');
+
+  if (outfitState.held && outfitState.held !== 'none' && hand) {
+    attachWorld('held', hand, makeHeld(outfitState.held), { up: 0.02, forward: 0.06 }, 0.08);
+  } else clearAcc('held');
+}
+
 window.__kpCmd = (msg) => {
   if (!msg || !msg.type) return;
   if (msg.type === 'react') doReact();
@@ -489,6 +761,7 @@ window.__kpCmd = (msg) => {
     controls.enableZoom = !reducedMotion;
     goBaseIdle();
   }
+  if (msg.type === 'setOutfit') applyOutfit(msg);
   if (msg.type === 'stop') {
     if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
     goBaseIdle();
@@ -509,20 +782,22 @@ function frameFullBody(object) {
   object.updateMatrixWorld(true);
   const box2 = new THREE.Box3().setFromObject(object);
   const size2 = box2.getSize(new THREE.Vector3());
-  const midY = size2.y * 0.45;
+  const midY = size2.y * 0.42;
 
+  // CircleGeometry radius is 2.5 — scale so the pad matches the animal, not a huge fixed floor
+  const desiredR = Math.max(size2.x, size2.z, size2.y * 0.45) * 0.95 + 0.15;
   ground.position.y = 0.01;
-  ground.scale.setScalar(Math.max(size2.x, size2.z) * 0.9 + 1.2);
+  ground.scale.setScalar(desiredR / 2.5);
 
-  const fit = Math.max(size2.x, size2.y, size2.z, 0.5);
-  const dist = fit * 2.35;
-  camera.position.set(dist * 0.85, midY + fit * 0.35, dist * 1.05);
-  camera.near = fit / 100;
-  camera.far = fit * 100;
+  const fit = Math.max(size2.x, size2.y, size2.z, 0.35);
+  const dist = fit * 2.15;
+  camera.position.set(dist * 0.9, midY + fit * 0.28, dist * 1.05);
+  camera.near = Math.max(fit / 200, 0.01);
+  camera.far = Math.max(fit * 80, 20);
   camera.updateProjectionMatrix();
   controls.target.set(0, midY, 0);
-  controls.minDistance = fit * 0.8;
-  controls.maxDistance = fit * 8;
+  controls.minDistance = fit * 0.7;
+  controls.maxDistance = fit * 6;
   controls.update();
 }
 
@@ -531,8 +806,15 @@ loader.load(
   MODEL,
   (gltf) => {
     root = gltf.scene;
-    root.scale.setScalar(MODEL_SCALE);
+    // Normalize every GLB to ~same on-screen height (Fox / Flamingo / Horse differ wildly in raw units)
+    root.scale.setScalar(1);
     scene.add(root);
+    root.updateMatrixWorld(true);
+    const rawBox = new THREE.Box3().setFromObject(root);
+    const rawSize = rawBox.getSize(new THREE.Vector3());
+    const TARGET_H = 1.55;
+    const norm = TARGET_H / Math.max(rawSize.y, 1e-4);
+    root.scale.setScalar(norm * (MODEL_SCALE || 1));
 
     mixer = new THREE.AnimationMixer(root);
     actions = {};
@@ -542,21 +824,26 @@ loader.load(
       actions[clip.name] = mixer.clipAction(clip);
     });
 
+    indexBones(root);
     frameFullBody(root);
     baseQuat.copy(root.quaternion);
     basePos.copy(root.position);
 
     setExpression(expression);
+    applyOutfit(outfitState);
 
     if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready', clips: clipNames }));
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'ready',
+        clips: clipNames,
+        bones: Object.keys(boneByName),
+        hasSkeleton,
+      }));
     }
   },
   undefined,
   () => { hud.textContent = 'Could not load companion'; }
 );
-
-renderer.domElement.addEventListener('click', () => {});
 
 function onResize() {
   const w = window.innerWidth, h = Math.max(window.innerHeight, 1);
@@ -589,5 +876,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
   },
   web: { flex: 1, backgroundColor: 'transparent' },
-  empty: { backgroundColor: colors.sageWash },
+  empty: { backgroundColor: colors.mist },
 });

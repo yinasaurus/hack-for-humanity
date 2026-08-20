@@ -1,10 +1,13 @@
 /**
  * Shared appearance allowlists (kept in sync with mobile/src/pets.ts).
  * Cosmetics only — never body size / proportions.
+ *
+ * Animal choice (`petType`) and outfit (`hat` / `face` / `neck` / `held` / `scene`)
+ * are independent fields so any companion can wear any unlocked accessory.
  */
 
 export const ALLOWED = {
-  petType: ['bun', 'pup', 'kit', 'bean', 'fox', 'chick', 'panda', 'otter'],
+  petType: ['fox', 'horse', 'parrot', 'flamingo', 'stork'],
   petColor: [
     'peach',
     'honey',
@@ -48,9 +51,20 @@ export const ALLOWED = {
   accent: ['none', 'sparkles', 'warm_glow', 'tiny_hearts', 'petals'],
 };
 
+/** Map retired Bun/Pup ids → low-poly animals */
+const LEGACY_PET_TYPE = {
+  bun: 'flamingo',
+  pup: 'horse',
+  kit: 'fox',
+  bean: 'stork',
+  chick: 'parrot',
+  panda: 'horse',
+  otter: 'fox',
+};
+
 export const DEFAULT_APPEARANCE = {
   petName: 'Companion',
-  petType: 'bun',
+  petType: 'flamingo',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',
@@ -62,12 +76,16 @@ export const DEFAULT_APPEARANCE = {
   accent: 'none',
 };
 
+function normalizePetType(petType) {
+  if (ALLOWED.petType.includes(petType)) return petType;
+  if (LEGACY_PET_TYPE[petType]) return LEGACY_PET_TYPE[petType];
+  return DEFAULT_APPEARANCE.petType;
+}
+
 export function appearanceFromUser(user = {}) {
   return {
     petName: user.petName || DEFAULT_APPEARANCE.petName,
-    petType: ALLOWED.petType.includes(user.petType)
-      ? user.petType
-      : DEFAULT_APPEARANCE.petType,
+    petType: normalizePetType(user.petType),
     petColor: ALLOWED.petColor.includes(user.petColor)
       ? user.petColor
       : DEFAULT_APPEARANCE.petColor,
@@ -100,7 +118,15 @@ export function applyAppearancePatch(user, body = {}) {
     'accent',
   ];
   for (const key of fields) {
-    if (body[key] != null && ALLOWED[key].includes(body[key])) {
+    if (body[key] == null) continue;
+    if (key === 'petType') {
+      // Accept catalog + legacy Bun/Pup ids; ignore unknown (keep existing)
+      if (ALLOWED.petType.includes(body.petType) || LEGACY_PET_TYPE[body.petType]) {
+        user.petType = normalizePetType(body.petType);
+      }
+      continue;
+    }
+    if (ALLOWED[key].includes(body[key])) {
       user[key] = body[key];
     }
   }

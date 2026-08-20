@@ -16,7 +16,7 @@ import {
   shiftDay,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
-import { analyzeFoodPhoto, generateClinicianSummary } from './ai.js';
+import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider } from './ai.js';
 import { appearanceFromUser, applyAppearancePatch } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
@@ -95,6 +95,18 @@ export function toPatientCompanionState(userId) {
 }
 
 async function saveCheckInFromBuffer(user, buffer, mimeType) {
+  const analysis = await analyzeFoodPhoto({
+    imageBase64: buffer.toString('base64'),
+    mimeType: mimeType || 'image/jpeg',
+  });
+
+  if (isNotAMeal(analysis)) {
+    const err = new Error(NOT_A_MEAL_ERROR);
+    err.status = 400;
+    err.code = 'NOT_A_MEAL';
+    throw err;
+  }
+
   const checkInId = uuid();
   const ext = (mimeType || '').includes('png') ? 'png' : 'jpg';
   const filename = `${checkInId}.${ext}`;
@@ -112,14 +124,6 @@ async function saveCheckInFromBuffer(user, buffer, mimeType) {
 
   updateDb((d) => {
     d.checkIns.push(checkIn);
-  });
-
-  const analysis = await analyzeFoodPhoto({
-    imageBase64: buffer.toString('base64'),
-    mimeType: mimeType || 'image/jpeg',
-  });
-
-  updateDb((d) => {
     d.analyses[checkInId] = {
       checkInId,
       userId: user.id,
@@ -138,7 +142,8 @@ export function registerRoutes(app) {
   app.get('/api/health', (_req, res) => {
     res.json({
       ok: true,
-      aiStatus: process.env.OPENAI_API_KEY ? 'live' : 'mock',
+      aiStatus: hasLiveAi() ? 'live' : 'mock',
+      aiProvider: aiProvider(),
     });
   });
 
@@ -333,6 +338,18 @@ export function registerRoutes(app) {
         res.status(201).json(result);
       } catch (err) {
         console.error('check-in error:', err);
+        if (err?.code === 'NOT_A_MEAL' || err?.status === 400) {
+          return res.status(400).json({
+            error: err.message || NOT_A_MEAL_ERROR,
+            code: 'NOT_A_MEAL',
+          });
+        }
+        if (err?.code === 'VISION_UNAVAILABLE' || err?.status === 503) {
+          return res.status(503).json({
+            error: err.message || 'We couldn’t check that photo right now. Please try again in a moment.',
+            code: 'VISION_UNAVAILABLE',
+          });
+        }
         res.status(500).json({ error: 'Could not save check-in right now' });
       }
     }
@@ -341,11 +358,26 @@ export function registerRoutes(app) {
   // --- Standalone AI routes (easy to demo independently) ---
   app.post('/api/analyze-photo', requireAuth(['clinician']), upload.single('photo'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'photo required' });
-    const analysis = await analyzeFoodPhoto({
-      imageBase64: req.file.buffer.toString('base64'),
-      mimeType: req.file.mimetype || 'image/jpeg',
-    });
-    res.json({ analysis });
+    try {
+      const analysis = await analyzeFoodPhoto({
+        imageBase64: req.file.buffer.toString('base64'),
+        mimeType: req.file.mimetype || 'image/jpeg',
+      });
+      if (isNotAMeal(analysis)) {
+        return res.status(400).json({
+          error: 'Photo does not appear to be a meal. No estimate stored.',
+          code: 'NOT_A_MEAL',
+          analysis,
+        });
+      }
+      res.json({ analysis });
+    } catch (err) {
+      if (err?.code === 'VISION_UNAVAILABLE') {
+        return res.status(503).json({ error: err.message, code: 'VISION_UNAVAILABLE' });
+      }
+      console.error('analyze-photo error:', err);
+      res.status(500).json({ error: 'Could not analyze photo' });
+    }
   });
 
   app.post('/api/generate-summary', requireAuth(['clinician']), async (req, res) => {
@@ -457,7 +489,12 @@ export function registerRoutes(app) {
     }
 
     const calorieTrend = analyses
-      .filter((a) => a.confidence !== 'low' && a.estimatedCalories > 0)
+      .filter(
+        (a) =>
+          a.isMeal !== false &&
+          a.confidence !== 'low' &&
+          a.estimatedCalories > 0
+      )
       .slice(-14)
       .map((a) => ({
         date: (a.createdAt || '').slice(0, 10),
@@ -483,7 +520,8 @@ export function registerRoutes(app) {
       })),
       summary,
       alerts,
-      aiStatus: process.env.OPENAI_API_KEY ? 'live' : 'mock',
+      aiStatus: hasLiveAi() ? 'live' : 'mock',
+      aiProvider: aiProvider(),
     });
   });
 

@@ -53,21 +53,19 @@ type Props = Partial<PetAppearance> & {
 const PET_TYPE_IDS = new Set(PET_TYPES.map((p) => p.id));
 
 const PET_IMAGES: Record<PetTypeId, ImageSourcePropType> = {
-  bun: require('../../assets/pets/bun.png'),
-  pup: require('../../assets/pets/pup.png'),
-  kit: require('../../assets/pets/kit.png'),
-  bean: require('../../assets/pets/bean.png'),
+  // 2D keepsakes reuse nearby art; live Home uses the low-poly GLBs
   fox: require('../../assets/pets/fox.png'),
-  chick: require('../../assets/pets/chick.png'),
-  panda: require('../../assets/pets/panda.png'),
-  otter: require('../../assets/pets/otter.png'),
+  horse: require('../../assets/pets/pup.png'),
+  parrot: require('../../assets/pets/chick.png'),
+  flamingo: require('../../assets/pets/bun.png'),
+  stork: require('../../assets/pets/bean.png'),
 };
 
 const LINES = {
   hello: (n: string) => `Hi. I'm ${n}. I'm glad you're here.`,
   pet: (n: string) => `${n} likes your company.`,
   check: (n: string) => `${n} is here with you. No rush.`,
-  sleep: (n: string) => `${n} is resting quietly. A soft hello photo is welcome whenever you want.`,
+  sleep: (n: string) => `${n} is resting quietly. Talk or wave anytime — a meal photo is never required.`,
 };
 
 type IdleBeat = 'center' | 'lookLeft' | 'lookRight' | 'lean' | 'talk';
@@ -142,7 +140,7 @@ export function CompanionPet({
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
   const beatRef = useRef<IdleBeat>('center');
 
-  const type = (PET_TYPE_IDS.has(petType as PetTypeId) ? petType : 'bun') as PetTypeId;
+  const type = (PET_TYPE_IDS.has(petType as PetTypeId) ? petType : 'flamingo') as PetTypeId;
   const name = petName || 'Companion';
   const sceneMeta = resolveScene(scene as PetSceneId);
   const imgSize = size * 0.78;
@@ -486,22 +484,43 @@ export function CompanionPet({
             ]}
           >
             <Image
+              key={`pet-${type}`}
               source={PET_IMAGES[type]}
               style={{ width: imgSize, height: imgSize }}
               resizeMode="contain"
               accessibilityIgnoresInvertColors
             />
             {neckSrc ? (
-              <Image source={neckSrc} style={neckStyle(type, imgSize)} resizeMode="contain" />
+              <Image
+                key={`neck-${type}-${neck}`}
+                source={neckSrc}
+                style={neckStyle(type, imgSize)}
+                resizeMode="contain"
+              />
             ) : null}
             {hatSrc ? (
-              <Image source={hatSrc} style={hatStyle(type, imgSize)} resizeMode="contain" />
+              <Image
+                key={`hat-${type}-${hat}`}
+                source={hatSrc}
+                style={hatStyle(type, imgSize)}
+                resizeMode="contain"
+              />
             ) : null}
             {faceSrc ? (
-              <Image source={faceSrc} style={faceStyle(type, imgSize)} resizeMode="contain" />
+              <Image
+                key={`face-${type}-${face}`}
+                source={faceSrc}
+                style={faceStyle(type, imgSize)}
+                resizeMode="contain"
+              />
             ) : null}
             {heldSrc ? (
-              <Image source={heldSrc} style={heldStyle(type, imgSize)} resizeMode="contain" />
+              <Image
+                key={`held-${type}-${held}`}
+                source={heldSrc}
+                style={heldStyle(type, imgSize)}
+                resizeMode="contain"
+              />
             ) : null}
 
             {isSleepy ? (

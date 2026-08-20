@@ -4,14 +4,11 @@
  */
 
 export const PET_TYPES = [
-  { id: 'bun', label: 'Bun', blurb: 'Long soft ears' },
-  { id: 'pup', label: 'Pup', blurb: 'Floppy little friend' },
-  { id: 'kit', label: 'Kit', blurb: 'Pointy gentle ears' },
-  { id: 'bean', label: 'Bean', blurb: 'Round comfort blob' },
-  { id: 'fox', label: 'Fox', blurb: 'Curious soft snout' },
-  { id: 'chick', label: 'Chick', blurb: 'Tiny fluff friend' },
-  { id: 'panda', label: 'Panda', blurb: 'Calm round cheeks' },
-  { id: 'otter', label: 'Otter', blurb: 'River-side buddy' },
+  { id: 'fox', label: 'Fox', blurb: 'Low-poly · hats & scarves fit best' },
+  { id: 'horse', label: 'Horse', blurb: 'Low-poly gallop friend' },
+  { id: 'parrot', label: 'Parrot', blurb: 'Low-poly perched friend' },
+  { id: 'flamingo', label: 'Flamingo', blurb: 'Low-poly pink friend' },
+  { id: 'stork', label: 'Stork', blurb: 'Low-poly tall friend' },
 ] as const;
 
 export type PetTypeId = (typeof PET_TYPES)[number]['id'];
@@ -138,7 +135,7 @@ export type PetAppearance = {
 
 export const DEFAULT_APPEARANCE: PetAppearance = {
   petName: 'Companion',
-  petType: 'bun',
+  petType: 'flamingo',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',

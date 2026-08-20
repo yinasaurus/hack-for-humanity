@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   addClinicianNote,
   clinicLogin,
@@ -20,7 +20,17 @@ function pct(n: number) {
 
 function formatDate(iso?: string) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString();
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatDay(iso?: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function App() {
@@ -36,6 +46,7 @@ export default function App() {
   const [noteText, setNoteText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<'live' | 'mock' | 'unknown'>('unknown');
+  const [showTrend, setShowTrend] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +79,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedId || !authed) return;
+    setShowTrend(false);
     (async () => {
       try {
         const d = await fetchPatientDetail(selectedId);
@@ -117,7 +129,19 @@ export default function App() {
     }
   };
 
-  const selectedAlert = alerts.find((a) => a.patientId === selectedId);
+  const alertCountByPatient = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of alerts) {
+      map.set(a.patientId, (map.get(a.patientId) || 0) + 1);
+    }
+    return map;
+  }, [alerts]);
+
+  const patientAlerts = useMemo(
+    () => alerts.filter((a) => a.patientId === selectedId),
+    [alerts, selectedId]
+  );
+
   const liveAi = aiStatus === 'live' || detail?.aiStatus === 'live';
 
   if (!authed) {
@@ -126,7 +150,7 @@ export default function App() {
         <form className="login-card" onSubmit={onLogin} aria-label="Clinician sign in">
           <p className="eyebrow">Clinician access</p>
           <h1>KindPlate Clinic</h1>
-          <p className="muted">Signed sessions required. Demo: clinic@demo.local / demo</p>
+          <p className="muted">Demo: clinic@demo.local / demo</p>
           {error && (
             <div className="banner error" role="alert">
               {error}
@@ -162,337 +186,363 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <div>
-          <p className="eyebrow">Clinician dashboard</p>
+        <div className="header-brand">
           <h1>KindPlate Clinic</h1>
-          <p className="muted tiny">
-            Meal photos, logging patterns, AI observations, and your notes — you decide next
-            steps. AI mode:{' '}
-            <strong className={liveAi ? 'ai-live' : 'ai-mock'}>
-              {liveAi ? 'live OpenAI' : 'enriched mock (set OPENAI_API_KEY for live)'}
-            </strong>
-          </p>
+          <p className="header-tagline">Photos · patterns · notes — you decide</p>
         </div>
-        <nav className="header-actions" aria-label="Dashboard actions">
-          <button type="button" className="ghost" onClick={load} aria-label="Refresh patient list and alerts">
-            Refresh
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            aria-label="Sign out of clinician dashboard"
-            onClick={() => {
-              setClinicToken(null);
-              setAuthed(false);
-            }}
+        <div className="header-right">
+          <span
+            className={`ai-pill ${liveAi ? 'ai-pill-live' : 'ai-pill-mock'}`}
+            role="status"
+            aria-live="polite"
+            title={
+              liveAi
+                ? 'Live vision + summaries active (Gemini or OpenAI)'
+                : 'Set GEMINI_API_KEY in backend .env and restart for live AI'
+            }
           >
-            Sign out
-          </button>
-        </nav>
+            {liveAi ? 'Live AI' : 'Mock AI'}
+          </span>
+          <nav className="header-actions" aria-label="Dashboard actions">
+            <button
+              type="button"
+              className="ghost"
+              onClick={load}
+              aria-label="Refresh patient list and alerts"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              aria-label="Sign out of clinician dashboard"
+              onClick={() => {
+                setClinicToken(null);
+                setAuthed(false);
+              }}
+            >
+              Sign out
+            </button>
+          </nav>
+        </div>
       </header>
 
-      <div
-        className={`banner ai-status-banner ${liveAi ? 'ai-status-live' : 'ai-status-mock'}`}
-        role="status"
-        aria-live="polite"
-      >
-        {liveAi ? (
-          <>
-            <strong>Live AI</strong> — OpenAI vision + summaries are active for this session.
-          </>
-        ) : (
-          <>
-            <strong>Mock AI — no API key set</strong> — photo analysis and summaries are
-            enriched demo data, not live model output. Set <code>OPENAI_API_KEY</code> in
-            backend <code>.env</code> and restart for live AI.
-          </>
-        )}
-      </div>
-
-      <div className="banner ethics">
-        <strong>Ethics reminder:</strong> Estimates are observational. Patients never see
-        calories or scores. AI observes — clinicians decide.
-      </div>
+      <p className="ethics-line">
+        Patients never see calories or scores. AI observes — clinicians decide.
+        {!liveAi ? ' Mock mode: demo estimates, not live vision.' : ''}
+      </p>
 
       {error && (
         <div className="banner error" role="alert">
           {error}
         </div>
       )}
-      {loading && <p className="muted">Loading…</p>}
 
-      <section className="alerts" aria-labelledby="alerts-heading">
-        <h2 id="alerts-heading">Why these alerts fired</h2>
-        <p className="muted">
-          Each flag includes the rule that triggered it. Tap a patient to jump to their chart.
-          You decide any outreach.
-        </p>
-        {alerts.length === 0 ? (
-          <p className="empty">No active alerts.</p>
-        ) : (
-          <ul className="alert-list">
-            {alerts.map((a) => (
-              <li key={a.id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(a.patientId)}
-                  aria-label={`Open ${a.patientName}: ${a.reason}`}
-                >
-                  <div className="alert-top">
-                    <strong>{a.patientName}</strong>
-                    <span className={`sev sev-${a.severity || 'info'}`}>{a.severity || 'info'}</span>
-                  </div>
-                  <span className="alert-reason">{a.reason}</span>
-                  {a.detail ? <span className="alert-detail">{a.detail}</span> : null}
-                  {a.guidance ? <span className="alert-guide">{a.guidance}</span> : null}
-                </button>
-              </li>
-            ))}
+      <div className="clinic-shell">
+        <aside className="sidebar" aria-labelledby="patients-heading">
+          <div className="sidebar-head">
+            <h2 id="patients-heading">Patients</h2>
+            {loading ? <span className="muted tiny">Loading…</span> : null}
+          </div>
+          <p className="sidebar-hint">
+            % = days with a meal photo (not calories). Last = most recent check-in.
+          </p>
+
+          {alerts.length > 0 ? (
+            <div className="flag-strip" aria-label="Active alerts">
+              <span className="flag-strip-count">{alerts.length} flags</span>
+              <ul className="flag-strip-list">
+                {alerts.map((a) => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      className={a.patientId === selectedId ? 'on' : undefined}
+                      onClick={() => setSelectedId(a.patientId)}
+                      aria-label={`Open ${a.patientName}: ${a.reason}`}
+                    >
+                      <strong>{a.patientName}</strong>
+                      <span>{a.reason}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="empty-side">No active flags</p>
+          )}
+
+          <ul className="patient-list">
+            {patients.map((p) => {
+              const flags = alertCountByPatient.get(p.id) || 0;
+              const on = p.id === selectedId;
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    className={`patient-card ${on ? 'selected' : ''}`}
+                    onClick={() => setSelectedId(p.id)}
+                    aria-pressed={on}
+                    aria-label={`View patient ${p.name}`}
+                  >
+                    <div className="patient-card-top">
+                      <strong>{p.name}</strong>
+                      {flags > 0 ? (
+                        <span className="flag-badge">{flags} flag{flags === 1 ? '' : 's'}</span>
+                      ) : null}
+                    </div>
+                    <div className="patient-card-meta">
+                      <span>
+                        <em>Last 7 days</em> {Math.round(p.rate7 * 7)}/{7} days
+                      </span>
+                      <span>
+                        <em>Last 30 days</em> {Math.round(p.rate30 * 30)}/{30} days
+                      </span>
+                      <span>
+                        <em>Last photo</em>{' '}
+                        {p.lastCheckIn ? formatDay(p.lastCheckIn) : 'None yet'}
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
-        )}
-      </section>
+        </aside>
 
-      <div className="grid">
-        <section className="panel" aria-labelledby="patients-heading">
-          <h2 id="patients-heading">Patients</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>7-day</th>
-                <th>30-day</th>
-                <th>Last log</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map((p) => (
-                <tr
-                  key={p.id}
-                  className={p.id === selectedId ? 'selected' : undefined}
-                  onClick={() => setSelectedId(p.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedId(p.id);
-                    }
-                  }}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`View patient ${p.name}`}
-                  aria-pressed={p.id === selectedId}
-                >
-                  <td>{p.name}</td>
-                  <td>{pct(p.rate7)}</td>
-                  <td>{pct(p.rate30)}</td>
-                  <td>{p.lastCheckIn ? new Date(p.lastCheckIn).toLocaleDateString() : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section
-          className="panel detail"
+        <main
+          className="chart"
           aria-labelledby={detail ? 'patient-detail-heading' : undefined}
           aria-label={detail ? undefined : 'Patient detail'}
         >
           {!detail ? (
-            <p className="muted">Select a patient</p>
+            <p className="muted chart-empty">Select a patient</p>
           ) : (
             <>
-              <div className="detail-head">
+              <div className="chart-head">
                 <div>
                   <h2 id="patient-detail-heading">{detail.patient.name}</h2>
-                  <p className="muted">{detail.patient.email}</p>
+                  <p className="muted tiny">{detail.patient.email}</p>
                 </div>
                 <button
                   type="button"
+                  className="primary"
                   onClick={onGenerate}
                   disabled={summaryBusy}
                   aria-label={`Generate AI summary for ${detail.patient.name}`}
                 >
-                  {summaryBusy ? 'Generating…' : 'Generate AI summary'}
+                  {summaryBusy ? 'Generating…' : 'Generate summary'}
                 </button>
               </div>
 
-              {selectedAlert ? (
-                <div className="why-box" role="status" aria-label={`Alert for ${detail.patient.name}`}>
-                  <p className="why-label">Why this patient is flagged</p>
-                  <p className="why-reason">{selectedAlert.reason}</p>
-                  {selectedAlert.detail ? <p className="muted">{selectedAlert.detail}</p> : null}
-                  {selectedAlert.guidance ? (
-                    <p className="why-guide">{selectedAlert.guidance}</p>
-                  ) : null}
-                </div>
+              {patientAlerts.length > 0 ? (
+                <section className="block flags-block" aria-label="Why flagged">
+                  <h3>Why flagged</h3>
+                  <ul className="flag-detail-list">
+                    {patientAlerts.map((a) => (
+                      <li key={a.id}>
+                        <p className="flag-title">{a.reason}</p>
+                        {a.detail ? <p className="muted tiny">{a.detail}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="muted tiny">Observational only — you decide any outreach.</p>
+                </section>
               ) : (
-                <div className="why-box calm" role="status">
-                  <p className="why-label">No active alert</p>
-                  <p className="muted">
-                    Logging patterns are within rule thresholds right now. Still observational —
-                    you decide care.
-                  </p>
-                </div>
+                <section className="block flags-block calm" aria-label="No alert">
+                  <h3>No active flags</h3>
+                  <p className="muted tiny">Patterns are within thresholds. Still observational.</p>
+                </section>
               )}
 
-              <div className="metrics">
+              <section className="metrics" aria-label="Logging metrics">
                 <div>
                   <span className="label">Streak</span>
                   <strong>{detail.metrics.streak}</strong>
+                  <span className="metric-sub">days in a row</span>
                 </div>
                 <div>
                   <span className="label">Misses</span>
                   <strong>{detail.metrics.misses}</strong>
+                  <span className="metric-sub">days since last</span>
                 </div>
                 <div>
-                  <span className="label">7-day rate</span>
-                  <strong>{pct(detail.metrics.rate7)}</strong>
+                  <span className="label">Last 7 days</span>
+                  <strong>
+                    {Math.round(detail.metrics.rate7 * 7)}/{7}
+                  </strong>
+                  <span className="metric-sub">{pct(detail.metrics.rate7)} of days</span>
                 </div>
                 <div>
-                  <span className="label">30-day rate</span>
-                  <strong>{pct(detail.metrics.rate30)}</strong>
+                  <span className="label">Last 30 days</span>
+                  <strong>
+                    {Math.round(detail.metrics.rate30 * 30)}/{30}
+                  </strong>
+                  <span className="metric-sub">{pct(detail.metrics.rate30)} of days</span>
                 </div>
-              </div>
+              </section>
 
-              <h3>30-day logging map</h3>
-              <div className="heat" role="img" aria-label="30-day logging presence map">
-                {(detail.consistency30 || []).map(
-                  (d: { date: string; logged: boolean }) => (
+              <section className="block" aria-label="30-day logging map">
+                <h3>30-day presence</h3>
+                <div className="heat" role="img" aria-label="30-day logging presence map">
+                  {(detail.consistency30 || []).map((d: { date: string; logged: boolean }) => (
                     <span
                       key={d.date}
                       title={`${d.date}${d.logged ? ' — logged' : ' — no log'}`}
                       className={d.logged ? 'heat-on' : 'heat-off'}
                     />
-                  )
-                )}
-              </div>
+                  ))}
+                </div>
+              </section>
 
-              {detail.calorieTrend?.length > 0 && (
-                <>
-                  <h3>Estimated intake trend (clinician only)</h3>
-                  <p className="disclaimer">
-                    Estimate only — not a diagnosis or care decision. Confidence varies; treat
-                    low-confidence rows cautiously. Clinician decides.
-                  </p>
-                  <ul className="trend">
-                    {detail.calorieTrend.map(
-                      (t: {
-                        date: string;
-                        estimatedCalories: number;
-                        foodType: string;
-                        confidence: string;
-                      }) => (
-                        <li key={`${t.date}-${t.foodType}`}>
-                          {t.date}: ~{t.estimatedCalories} kcal · {t.foodType} · {t.confidence}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                </>
-              )}
-
-              <article className="summary">
+              <article className="block summary">
                 <h3>Pre-appointment summary</h3>
-                <p className="disclaimer">
-                  AI-generated observational notes for clinician interpretation — not a risk
-                  score and never shown as patient-facing nutrition numbers.
-                </p>
                 {detail.summary ? (
                   <>
                     <p>{detail.summary.summary}</p>
-                    <p className="muted tiny">
-                      Source: {detail.summary.source || 'ai'} · Observational only.
-                    </p>
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => navigator.clipboard.writeText(detail.summary.summary)}
-                      aria-label="Copy AI summary to clipboard"
-                    >
-                      Copy summary
-                    </button>
+                    <div className="summary-actions">
+                      <span className="muted tiny">
+                        {detail.summary.source || 'ai'} · observational
+                      </span>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => navigator.clipboard.writeText(detail.summary.summary)}
+                        aria-label="Copy AI summary to clipboard"
+                      >
+                        Copy
+                      </button>
+                    </div>
                   </>
                 ) : (
-                  <p className="muted">No summary yet. Generate one before an appointment.</p>
+                  <p className="muted">No summary yet — generate one before an appointment.</p>
                 )}
               </article>
 
-              <h3>Clinician notes</h3>
-              <div className="notes">
+              <section className="block notes">
+                <h3>Your notes</h3>
                 <textarea
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Appointment thoughts (stored for your team — not shown to patient)"
-                  rows={3}
+                  placeholder="For your team — not shown to patient"
+                  rows={2}
                   aria-label={`Clinician note for ${detail.patient.name}`}
                 />
                 <button
                   type="button"
+                  className="ghost"
                   onClick={onAddNote}
                   aria-label={`Save clinician note for ${detail.patient.name}`}
                 >
                   Save note
                 </button>
-                <ul>
-                  {(detail.clinicianNotes || []).map(
-                    (n: { id: string; text: string; createdAt: string }) => (
-                      <li key={n.id}>
-                        <strong>{formatDate(n.createdAt)}</strong>
-                        <p>{n.text}</p>
+                {(detail.clinicianNotes || []).length > 0 ? (
+                  <ul className="note-list">
+                    {(detail.clinicianNotes || []).map(
+                      (n: { id: string; text: string; createdAt: string }) => (
+                        <li key={n.id}>
+                          <time className="muted tiny">{formatDate(n.createdAt)}</time>
+                          <p>{n.text}</p>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : null}
+              </section>
+
+              <section className="block">
+                <h3>Recent check-ins</h3>
+                <p className="muted tiny">
+                  Latest 3 · clinic-only estimates. Patients never see these numbers.
+                </p>
+                <ul className="checkins">
+                  {detail.checkIns.slice(0, 3).map(
+                    (c: {
+                      id: string;
+                      createdAt: string;
+                      photoUrl?: string | null;
+                      analysis?: {
+                        foodType: string;
+                        estimatedCalories: number;
+                        confidence: string;
+                        notes: string;
+                      } | null;
+                    }) => (
+                      <li key={c.id} className="checkin-row">
+                        {c.photoUrl ? (
+                          <AuthenticatedMealImage
+                            className="meal-thumb"
+                            photoUrl={c.photoUrl}
+                            alt={`Meal check-in from ${formatDate(c.createdAt)}`}
+                          />
+                        ) : (
+                          <div className="meal-thumb placeholder">No photo</div>
+                        )}
+                        <div className="checkin-body">
+                          <strong>{formatDate(c.createdAt)}</strong>
+                          {c.analysis ? (
+                            <p>
+                              {c.analysis.isMeal === false ? (
+                                <>Not a meal photo · no estimate</>
+                              ) : (
+                                <>
+                                  {c.analysis.foodType}
+                                  <span className="kcal">
+                                    {' '}
+                                    · ~{c.analysis.estimatedCalories} kcal
+                                  </span>
+                                  <span className={`conf conf-${c.analysis.confidence}`}>
+                                    {' '}
+                                    · {c.analysis.confidence}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="muted">No analysis</p>
+                          )}
+                        </div>
                       </li>
                     )
                   )}
                 </ul>
-              </div>
+              </section>
 
-              <h3>Recent check-ins (photos + estimates)</h3>
-              <p className="disclaimer">
-                Photo estimates are approximate. Patients never see these numbers. Clinician
-                decides how to use them.
-              </p>
-              <ul className="checkins">
-                {detail.checkIns.slice(0, 10).map(
-                  (c: {
-                    id: string;
-                    createdAt: string;
-                    photoUrl?: string | null;
-                    analysis?: {
-                      foodType: string;
-                      estimatedCalories: number;
-                      confidence: string;
-                      notes: string;
-                    } | null;
-                  }) => (
-                    <li key={c.id} className="checkin-row">
-                      {c.photoUrl ? (
-                        <AuthenticatedMealImage
-                          className="meal-thumb"
-                          photoUrl={c.photoUrl}
-                          alt={`Meal check-in photo from ${formatDate(c.createdAt)}`}
-                        />
-                      ) : (
-                        <div className="meal-thumb placeholder">No photo</div>
-                      )}
-                      <div>
-                        <strong>{formatDate(c.createdAt)}</strong>
-                        {c.analysis ? (
-                          <p>
-                            {c.analysis.foodType} · ~{c.analysis.estimatedCalories} kcal ·
-                            confidence {c.analysis.confidence}
-                            {c.analysis.confidence === 'low'
-                              ? ' — treat estimate cautiously'
-                              : ''}
-                          </p>
-                        ) : (
-                          <p className="muted">No analysis stored</p>
+              {detail.calorieTrend?.length > 0 ? (
+                <section className="block">
+                  <button
+                    type="button"
+                    className="disclosure"
+                    aria-expanded={showTrend}
+                    onClick={() => setShowTrend((v) => !v)}
+                  >
+                    {showTrend ? 'Hide' : 'Show'} intake trend ({detail.calorieTrend.length} days)
+                  </button>
+                  {showTrend ? (
+                    <>
+                      <p className="muted tiny">Rough photo estimates — clinician only.</p>
+                      <ul className="trend">
+                        {detail.calorieTrend.map(
+                          (t: {
+                            date: string;
+                            estimatedCalories: number;
+                            foodType: string;
+                            confidence: string;
+                          }) => (
+                            <li key={`${t.date}-${t.estimatedCalories}`}>
+                              <span>{t.date}</span>
+                              <span>~{t.estimatedCalories} kcal</span>
+                              <span className="muted">{t.confidence}</span>
+                            </li>
+                          )
                         )}
-                      </div>
-                    </li>
-                  )
-                )}
-              </ul>
+                      </ul>
+                    </>
+                  ) : null}
+                </section>
+              ) : null}
             </>
           )}
-        </section>
+        </main>
       </div>
     </div>
   );

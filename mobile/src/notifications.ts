@@ -3,12 +3,16 @@ import { Platform } from 'react-native';
 import type { ReminderFrequency } from './SettingsContext';
 
 /**
- * Expo Go (SDK 53+) removed Android remote-push support from expo-notifications.
- * Importing/using that module at startup crashes the app in Expo Go.
- * Local scheduling works in a development/production build only.
+ * Prefer scheduling local notifications whenever possible.
+ * Expo Go on Android (SDK 53+) may still refuse — we catch and surface that.
  */
 export function areLocalRemindersAvailable() {
-  return Constants.appOwnership !== 'expo';
+  // Always attempt; enableGentleReminders reports scheduled:false if Expo Go blocks it.
+  return true;
+}
+
+export function isExpoGo() {
+  return Constants.appOwnership === 'expo';
 }
 
 export type ReminderSchedule = {
@@ -37,47 +41,49 @@ async function ensureHandler(Notifications: NotificationsModule) {
 
 /** Gentle copy only — never “you forgot to log.” */
 export async function enableGentleReminders(schedule: ReminderSchedule) {
-  if (!areLocalRemindersAvailable()) {
-    // Preference is still saved by Settings — OS schedule needs a dev build.
-    return { scheduled: false as const };
-  }
+  try {
+    const Notifications = await loadNotifications();
+    ensureHandler(Notifications);
 
-  const Notifications = await loadNotifications();
-  ensureHandler(Notifications);
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      throw new Error('Notifications permission is needed for gentle reminders');
+    }
 
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let finalStatus = existing;
-  if (existing !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') {
-    throw new Error('Notifications permission is needed for gentle reminders');
-  }
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('gentle', {
+        name: 'Gentle companion notes',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('gentle', {
-      name: 'Gentle companion notes',
-      importance: Notifications.AndroidImportance.DEFAULT,
+    await disableGentleReminders();
+
+    const hour = Math.min(23, Math.max(0, Math.round(schedule.hour)));
+    const channelId = Platform.OS === 'android' ? 'gentle' : undefined;
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: REMINDER_ID,
+      content: {
+        title: 'KindPlate',
+        body: 'Your companion would love a quiet hello when you have a moment.',
+        sound: false,
+      },
+      trigger: buildTrigger(Notifications, schedule.frequency, hour, channelId),
     });
+
+    return { scheduled: true as const };
+  } catch (e) {
+    if (isExpoGo() && Platform.OS === 'android') {
+      return { scheduled: false as const, reason: 'expo-go-android' as const };
+    }
+    throw e instanceof Error ? e : new Error('Could not schedule reminders');
   }
-
-  await disableGentleReminders();
-
-  const hour = Math.min(23, Math.max(0, Math.round(schedule.hour)));
-  const channelId = Platform.OS === 'android' ? 'gentle' : undefined;
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: REMINDER_ID,
-    content: {
-      title: 'KindPlate',
-      body: 'Your companion would love a quiet hello when you have a moment.',
-      sound: false,
-    },
-    trigger: buildTrigger(Notifications, schedule.frequency, hour, channelId),
-  });
-
-  return { scheduled: true as const };
 }
 
 function buildTrigger(
@@ -115,12 +121,11 @@ function buildTrigger(
 }
 
 export async function disableGentleReminders() {
-  if (!areLocalRemindersAvailable()) return;
   try {
     const Notifications = await loadNotifications();
     await Notifications.cancelScheduledNotificationAsync(REMINDER_ID);
   } catch {
-    // ignore
+    // ignore — Expo Go / missing module
   }
 }
 

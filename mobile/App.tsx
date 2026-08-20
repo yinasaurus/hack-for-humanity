@@ -20,7 +20,6 @@ import { CheckInScreen } from './src/screens/CheckInScreen';
 import { TogetherScreen } from './src/screens/TogetherScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
-import { CharacterScreen } from './src/screens/CharacterScreen';
 import { colors } from './src/theme';
 
 export type RootStackParamList = {
@@ -31,7 +30,6 @@ export type RootStackParamList = {
   Together: undefined;
   Customize: Partial<import('./src/api').CompanionState> | undefined;
   Settings: undefined;
-  Character: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -82,7 +80,6 @@ function RootNavigator() {
           <Stack.Screen name="Together" component={TogetherScreen} />
           <Stack.Screen name="Customize" component={CustomizeScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
-          <Stack.Screen name="Character" component={CharacterScreen} />
         </>
       )}
     </Stack.Navigator>

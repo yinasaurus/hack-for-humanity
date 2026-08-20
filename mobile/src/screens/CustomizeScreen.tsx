@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,11 +10,11 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CompanionPet } from '../components/CompanionPet';
 import { SupportChip } from '../components/SupportChip';
+import { AnimalWebView, characterForLiveCompanion } from '../characters';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
-import { fetchCompanion, updateAppearance, type CompanionState } from '../api';
+import { fetchCompanion, updateAppearance, type CompanionState, type Unlock } from '../api';
 import {
   DEFAULT_APPEARANCE,
   PET_FACES,
@@ -31,51 +31,86 @@ type Props = {
   route?: { params?: Partial<CompanionState> };
 };
 
-type TabId = 'friend' | 'wear' | 'hold' | 'place';
+/** Top-level categories: animal vs layered outfit (independent fields). */
+type TabId = 'companion' | 'outfit';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'friend', label: 'Friend' },
-  { id: 'wear', label: 'Wear' },
-  { id: 'hold', label: 'Hold' },
-  { id: 'place', label: 'Place' },
+  { id: 'companion', label: 'Companion' },
+  { id: 'outfit', label: 'Outfit' },
 ];
 
-/** Hats that have real 3D prop layers (not emoji). */
 const WEAR_HATS = PET_HATS.filter((h) =>
   ['none', 'bow', 'flower', 'beanie', 'crown_soft'].includes(h.id)
 );
-
 const WEAR_FACES = PET_FACES.filter((f) => ['none', 'glasses'].includes(f.id));
-
 const WEAR_NECKS = PET_NECKS.filter((n) =>
   ['none', 'scarf', 'ribbon'].includes(n.id)
 );
-
 const HOLD_ITEMS = PET_HELD.filter((h) =>
   ['none', 'star', 'heart', 'flower_stem'].includes(h.id)
 );
+
+/** Milestone unlock id → appearance field it relates to (decorative only). */
+const UNLOCK_TO_COSMETIC: Record<string, { field: keyof PetAppearance; value: string }> = {
+  soft_scarf: { field: 'neck', value: 'scarf' },
+  sunny_meadow: { field: 'scene', value: 'sunny_meadow' },
+  flower_crown: { field: 'hat', value: 'flower' },
+  cozy_nook: { field: 'scene', value: 'cozy_nook' },
+  star_pendant: { field: 'held', value: 'star' },
+  quiet_garden: { field: 'scene', value: 'quiet_garden' },
+};
+
+function appearanceFromPartial(
+  p?: Partial<CompanionState> | null
+): PetAppearance {
+  const hat = p?.hat || DEFAULT_APPEARANCE.hat;
+  const face = p?.face || DEFAULT_APPEARANCE.face;
+  const neck = p?.neck || DEFAULT_APPEARANCE.neck;
+  const held = p?.held || DEFAULT_APPEARANCE.held;
+  return {
+    petName: p?.petName || DEFAULT_APPEARANCE.petName,
+    petType: p?.petType || DEFAULT_APPEARANCE.petType,
+    petColor: p?.petColor || DEFAULT_APPEARANCE.petColor,
+    pattern: p?.pattern || DEFAULT_APPEARANCE.pattern,
+    eyes: p?.eyes || DEFAULT_APPEARANCE.eyes,
+    hat: WEAR_HATS.some((h) => h.id === hat) ? hat : 'none',
+    face: WEAR_FACES.some((f) => f.id === face) ? face : 'none',
+    neck: WEAR_NECKS.some((n) => n.id === neck) ? neck : 'none',
+    held: HOLD_ITEMS.some((h) => h.id === held) ? held : 'none',
+    scene: p?.scene || DEFAULT_APPEARANCE.scene,
+    accent: p?.accent || DEFAULT_APPEARANCE.accent,
+  };
+}
 
 function ChipRow<T extends string>({
   options,
   value,
   onChange,
+  unlockedIds,
 }: {
   options: readonly { id: T; label: string; blurb?: string }[];
   value: T;
   onChange: (id: T) => void;
+  /** Cosmetic ids unlocked via keepsakes — informational, never punishment-gated */
+  unlockedIds?: Set<string>;
 }) {
   return (
     <View style={styles.chipWrap}>
       {options.map((o) => {
         const on = o.id === value;
+        const keepsake = unlockedIds?.has(o.id);
         return (
           <Pressable
             key={o.id}
             onPress={() => onChange(o.id)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={`${o.label}${keepsake ? ', unlocked keepsake' : ''}`}
             style={[styles.chip, on && styles.chipOn]}
           >
             <Text style={[styles.chipTitle, on && styles.chipTitleOn]}>{o.label}</Text>
             {o.blurb ? <Text style={styles.chipBlurb}>{o.blurb}</Text> : null}
+            {keepsake ? <Text style={styles.keepsakeTag}>Keepsake</Text> : null}
           </Pressable>
         );
       })}
@@ -86,63 +121,72 @@ function ChipRow<T extends string>({
 export function CustomizeScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const initial = useMemo<PetAppearance>(() => {
-    const p = route?.params;
-    const hat = p?.hat || DEFAULT_APPEARANCE.hat;
-    const face = p?.face || DEFAULT_APPEARANCE.face;
-    const neck = p?.neck || DEFAULT_APPEARANCE.neck;
-    const held = p?.held || DEFAULT_APPEARANCE.held;
-    return {
-      petName: p?.petName || DEFAULT_APPEARANCE.petName,
-      petType: p?.petType || DEFAULT_APPEARANCE.petType,
-      petColor: p?.petColor || DEFAULT_APPEARANCE.petColor,
-      pattern: p?.pattern || DEFAULT_APPEARANCE.pattern,
-      eyes: p?.eyes || DEFAULT_APPEARANCE.eyes,
-      hat: WEAR_HATS.some((h) => h.id === hat) ? hat : 'none',
-      face: WEAR_FACES.some((f) => f.id === face) ? face : 'none',
-      neck: WEAR_NECKS.some((n) => n.id === neck) ? neck : 'none',
-      held: HOLD_ITEMS.some((h) => h.id === held) ? held : 'none',
-      scene: p?.scene || DEFAULT_APPEARANCE.scene,
-      accent: p?.accent || DEFAULT_APPEARANCE.accent,
-    };
-  }, [route?.params]);
-
-  const [a, setA] = useState<PetAppearance>(initial);
-  const [tab, setTab] = useState<TabId>('friend');
+  const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
+  const [unlocks, setUnlocks] = useState<Unlock[]>([]);
+  const [tab, setTab] = useState<TabId>('companion');
   const [busy, setBusy] = useState(false);
+  const [loadingLook, setLoadingLook] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Once the user edits, never let a late fetch overwrite their choice. */
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
-    if (!user || route?.params?.petType) return;
+    if (!user) {
+      setLoadingLook(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
         const c = await fetchCompanion(user.id);
         if (cancelled) return;
-        setA({
-          petName: c.petName || DEFAULT_APPEARANCE.petName,
-          petType: c.petType || DEFAULT_APPEARANCE.petType,
-          petColor: c.petColor || DEFAULT_APPEARANCE.petColor,
-          pattern: c.pattern || DEFAULT_APPEARANCE.pattern,
-          eyes: c.eyes || DEFAULT_APPEARANCE.eyes,
-          hat: WEAR_HATS.some((h) => h.id === c.hat) ? c.hat : 'none',
-          face: WEAR_FACES.some((f) => f.id === c.face) ? c.face : 'none',
-          neck: WEAR_NECKS.some((n) => n.id === c.neck) ? c.neck : 'none',
-          held: HOLD_ITEMS.some((h) => h.id === c.held) ? c.held : 'none',
-          scene: c.scene || DEFAULT_APPEARANCE.scene,
-          accent: c.accent || DEFAULT_APPEARANCE.accent,
-        });
+        setUnlocks(c.unlocks || []);
+        // Only hydrate from server if the user hasn't started editing
+        if (!dirtyRef.current) {
+          const next = appearanceFromPartial(c);
+          setA(next);
+          if (__DEV__) {
+            // eslint-disable-next-line no-console
+            console.log('[Customize] loaded appearance', {
+              petType: next.petType,
+              hat: next.hat,
+              neck: next.neck,
+              scene: next.scene,
+            });
+          }
+        }
       } catch {
-        /* keep defaults */
+        /* keep route/defaults */
+      } finally {
+        if (!cancelled) setLoadingLook(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user, route?.params?.petType]);
+  }, [user]);
+
+  const unlockedCosmeticIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const u of unlocks) {
+      const map = UNLOCK_TO_COSMETIC[u.id];
+      if (map) ids.add(map.value);
+      // Also treat unlock id itself as a tag when it matches a scene/accessory id
+      ids.add(u.id);
+    }
+    return ids;
+  }, [unlocks]);
 
   const patch = <K extends keyof PetAppearance>(key: K, value: PetAppearance[K]) => {
-    setA((prev) => ({ ...prev, [key]: value }));
+    dirtyRef.current = true;
+    setA((prev) => {
+      const next = { ...prev, [key]: value };
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[Customize] patch', key, value, '→ petType=', next.petType);
+      }
+      return next;
+    });
   };
 
   const save = async () => {
@@ -150,10 +194,20 @@ export function CustomizeScreen({ navigation, route }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await updateAppearance(user.id, {
+      const companion = await updateAppearance(user.id, {
         ...a,
         petName: a.petName.trim() || 'Companion',
       });
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[Customize] saved', {
+          petType: companion.petType,
+          hat: companion.hat,
+          neck: companion.neck,
+          scene: companion.scene,
+        });
+      }
+      dirtyRef.current = false;
       navigation.goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save right now');
@@ -162,37 +216,56 @@ export function CustomizeScreen({ navigation, route }: Props) {
     }
   };
 
+  const liveCharacter = useMemo(() => characterForLiveCompanion(a.petType), [a.petType]);
+
   return (
     <LinearGradient colors={[...gradients.customize]} style={styles.root}>
+      <View
+        style={[
+          styles.previewFixed,
+          { paddingTop: Math.max(insets.top, 8) + 4 },
+        ]}
+      >
+        <Text style={styles.title}>Style your companion</Text>
+        <Text style={styles.sub}>
+          Live low-poly animal (Fox, Horse, Parrot, Flamingo, Stork). Cosmetics only — never
+          body size. Hats fit best on Fox.
+        </Text>
+        {loadingLook ? (
+          <ActivityIndicator color={colors.sageDeep} style={{ marginVertical: 24 }} />
+        ) : (
+          <>
+            <AnimalWebView
+              key={`live-${liveCharacter.modelPath}`}
+              character={liveCharacter}
+              expression="happy"
+              muted
+              style={styles.preview3d}
+              accessibilityLabel={`${a.petName || 'Companion'} 3D preview`}
+              outfit={{
+                hat: a.hat,
+                face: a.face,
+                neck: a.neck,
+                held: a.held,
+                scene: a.scene,
+              }}
+            />
+            <Text style={styles.previewName} accessibilityLiveRegion="polite">
+              {a.petName.trim() || 'Companion'} ·{' '}
+              {PET_TYPES.find((p) => p.id === a.petType)?.label || a.petType}
+              {a.hat !== 'none' ? ` · ${a.hat}` : ''}
+              {a.neck !== 'none' ? ` · ${a.neck}` : ''}
+            </Text>
+          </>
+        )}
+      </View>
+
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          {
-            paddingTop: Math.max(insets.top, 8) + 8,
-            paddingBottom: Math.max(insets.bottom, 16) + 72,
-          },
+          { paddingBottom: Math.max(insets.bottom, 16) + 72 },
         ]}
-        stickyHeaderIndices={[1]}
       >
-        <View>
-          <Text style={styles.title}>Style your companion</Text>
-          <Text style={styles.sub}>
-            Optional dress-up layers for your companion — leave anytime without saving.
-          </Text>
-        </View>
-
-        <View style={styles.previewSticky}>
-          <CompanionPet
-            key={`${a.petType}-${a.hat}-${a.face}-${a.neck}-${a.held}-${a.scene}`}
-            mood="happy"
-            size={230}
-            showCaption={false}
-            muted
-            {...a}
-          />
-          <Text style={styles.previewName}>{a.petName.trim() || 'Companion'}</Text>
-        </View>
-
         <Text style={styles.section}>Name</Text>
         <TextInput
           value={a.petName}
@@ -209,17 +282,20 @@ export function CustomizeScreen({ navigation, route }: Props) {
               key={t.id}
               onPress={() => setTab(t.id)}
               style={[styles.tab, tab === t.id && styles.tabOn]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === t.id }}
             >
               <Text style={[styles.tabText, tab === t.id && styles.tabTextOn]}>{t.label}</Text>
             </Pressable>
           ))}
         </ScrollView>
 
-        {tab === 'friend' && (
+        {tab === 'companion' && (
           <>
-            <Text style={styles.section}>Choose your pet</Text>
+            <Text style={styles.section}>Choose your friend</Text>
             <Text style={styles.colorHint}>
-              Each friend is a soft 3D companion. Extras clip on top — they never change body size.
+              Pick a low-poly animal. Fox can wear hats and scarves on the body; other
+              friends still animate — accessories may float until a matching rig exists.
             </Text>
             <ChipRow
               options={PET_TYPES}
@@ -229,38 +305,55 @@ export function CustomizeScreen({ navigation, route }: Props) {
           </>
         )}
 
-        {tab === 'wear' && (
+        {tab === 'outfit' && (
           <>
             <Text style={styles.section}>Hat</Text>
-            <ChipRow options={WEAR_HATS} value={a.hat} onChange={(id) => patch('hat', id)} />
+            <ChipRow
+              options={WEAR_HATS}
+              value={a.hat}
+              onChange={(id) => patch('hat', id)}
+              unlockedIds={unlockedCosmeticIds}
+            />
             <Text style={styles.section}>Face</Text>
-            <ChipRow options={WEAR_FACES} value={a.face} onChange={(id) => patch('face', id)} />
+            <ChipRow
+              options={WEAR_FACES}
+              value={a.face}
+              onChange={(id) => patch('face', id)}
+              unlockedIds={unlockedCosmeticIds}
+            />
             <Text style={styles.section}>Neck</Text>
-            <ChipRow options={WEAR_NECKS} value={a.neck} onChange={(id) => patch('neck', id)} />
-          </>
-        )}
-
-        {tab === 'hold' && (
-          <>
+            <Text style={styles.colorHint}>
+              Soft scarf unlocks as a keepsake after gentle check-in milestones — still never a
+              score.
+            </Text>
+            <ChipRow
+              options={WEAR_NECKS}
+              value={a.neck}
+              onChange={(id) => patch('neck', id)}
+              unlockedIds={unlockedCosmeticIds}
+            />
             <Text style={styles.section}>Held item</Text>
-            <Text style={styles.colorHint}>A little toy clipped into their paws.</Text>
-            <ChipRow options={HOLD_ITEMS} value={a.held} onChange={(id) => patch('held', id)} />
-          </>
-        )}
-
-        {tab === 'place' && (
-          <>
+            <ChipRow
+              options={HOLD_ITEMS}
+              value={a.held}
+              onChange={(id) => patch('held', id)}
+              unlockedIds={unlockedCosmeticIds}
+            />
             <Text style={styles.section}>Scene</Text>
             <View style={styles.swatches}>
               {PET_SCENES.map((s) => {
                 const on = s.id === a.scene;
+                const keepsake = unlockedCosmeticIds.has(s.id);
                 return (
                   <Pressable
                     key={s.id}
                     onPress={() => patch('scene', s.id)}
                     style={[styles.swatchWide, { backgroundColor: s.fill }, on && styles.swatchOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
                   >
                     <Text style={styles.swatchLabel}>{s.label}</Text>
+                    {keepsake ? <Text style={styles.keepsakeTag}>Keepsake</Text> : null}
                   </Pressable>
                 );
               })}
@@ -270,7 +363,13 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable style={styles.cta} onPress={save} disabled={busy}>
+        <Pressable
+          style={styles.cta}
+          onPress={save}
+          disabled={busy || loadingLook}
+          accessibilityRole="button"
+          accessibilityLabel="Save companion look"
+        >
           {busy ? (
             <ActivityIndicator color={colors.white} />
           ) : (
@@ -293,146 +392,136 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: spacing.lg },
+  previewFixed: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: 'rgba(255,248,242,0.96)',
+  },
+  preview3d: {
+    width: '100%',
+    height: 240,
+    borderRadius: 20,
+    marginTop: 4,
+  },
+  content: { paddingHorizontal: spacing.lg, paddingTop: 12 },
   title: {
     fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 28,
+    fontSize: 26,
     color: colors.ink,
+    alignSelf: 'flex-start',
   },
   sub: {
     fontFamily: 'Nunito_400Regular',
-    fontSize: 15,
+    fontSize: 14,
     color: colors.inkSoft,
-    marginTop: 6,
-    marginBottom: spacing.md,
-    lineHeight: 22,
-  },
-  previewSticky: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,248,242,0.94)',
-    paddingVertical: 8,
-    marginBottom: 4,
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 20,
+    alignSelf: 'flex-start',
   },
   previewName: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 16,
-    color: colors.ink,
     marginTop: 4,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
+    color: colors.sageDeep,
+    textAlign: 'center',
   },
   section: {
     fontFamily: 'Nunito_700Bold',
     fontSize: 15,
     color: colors.ink,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
+    marginTop: 14,
+    marginBottom: 8,
   },
   colorHint: {
     fontFamily: 'Nunito_400Regular',
     fontSize: 13,
     color: colors.inkSoft,
-    marginBottom: 10,
+    marginBottom: 8,
     lineHeight: 18,
-    marginTop: -4,
   },
   input: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: 'Nunito_600SemiBold',
     fontSize: 16,
     color: colors.ink,
-    borderWidth: 1.5,
-    borderColor: colors.sand,
+    backgroundColor: colors.white,
+    minHeight: tapTarget.min,
   },
-  tabs: { marginTop: spacing.md, marginBottom: 4 },
+  tabs: { marginTop: 12, marginBottom: 4, flexGrow: 0 },
   tab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.sageWash,
     marginRight: 8,
+    minHeight: tapTarget.min,
+    justifyContent: 'center',
   },
   tabOn: { backgroundColor: colors.sageDeep },
-  tabText: {
-    fontFamily: 'Nunito_700Bold',
-    color: colors.inkSoft,
-    fontSize: 13,
-  },
+  tabText: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.inkSoft },
   tabTextOn: { color: colors.white },
-  chipWrap: { gap: 8 },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     backgroundColor: colors.card,
-    borderRadius: 16,
-    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    minHeight: tapTarget.min,
+    justifyContent: 'center',
+  },
+  chipOn: { borderColor: colors.sageDeep, backgroundColor: colors.mist },
+  chipTitle: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.ink },
+  chipTitleOn: { color: colors.sageDeep },
+  chipBlurb: { fontFamily: 'Nunito_400Regular', fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  keepsakeTag: {
+    marginTop: 4,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 11,
+    color: colors.teal,
+  },
+  swatches: { gap: 8 },
+  swatchWide: {
+    borderRadius: 14,
+    paddingVertical: 14,
     paddingHorizontal: 14,
     borderWidth: 1.5,
     borderColor: 'transparent',
+    minHeight: tapTarget.min,
+    justifyContent: 'center',
   },
-  chipOn: {
-    borderColor: colors.sageDeep,
-    backgroundColor: colors.white,
-  },
-  chipTitle: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 15,
-    color: colors.ink,
-  },
-  chipTitleOn: { color: colors.sageDeep },
-  chipBlurb: {
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 12,
-    color: colors.inkSoft,
-    marginTop: 2,
-  },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  swatch: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  swatchWide: {
-    width: '47%',
-    minWidth: 140,
-    height: 56,
+  swatchOn: { borderColor: colors.sageDeep },
+  swatchLabel: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.ink },
+  cta: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.sageDeep,
     borderRadius: 16,
+    minHeight: tapTarget.min,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    paddingVertical: 14,
   },
-  swatchOn: { borderColor: colors.ink },
-  swatchLabel: {
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 11,
-    color: colors.ink,
-  },
-  cta: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.sageDeep,
-    borderRadius: 22,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  ctaText: {
-    fontFamily: 'Nunito_700Bold',
-    color: colors.white,
-    fontSize: 17,
-  },
+  ctaText: { fontFamily: 'Nunito_700Bold', color: colors.white, fontSize: 16 },
   back: {
-    fontFamily: 'Nunito_600SemiBold',
+    marginTop: 12,
     textAlign: 'center',
-    marginTop: spacing.md,
+    fontFamily: 'Nunito_600SemiBold',
     color: colors.inkSoft,
+    fontSize: 15,
   },
   error: {
+    marginTop: 12,
     fontFamily: 'Nunito_600SemiBold',
-    color: colors.teal,
-    marginTop: spacing.md,
+    color: '#A65D5D',
+    fontSize: 14,
   },
 });

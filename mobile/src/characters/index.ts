@@ -8,4 +8,4 @@ export {
 } from './characterCatalog';
 export { AnimalStage } from './AnimalStage';
 export { AnimalWebView } from './AnimalWebView';
-export { characterForPetType } from './petToCharacter';
+export { characterForPetType, characterForLiveCompanion, liveCompanionSupportsBoneOutfits } from './petToCharacter';

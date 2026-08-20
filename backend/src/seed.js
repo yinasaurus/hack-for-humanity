@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { writeDb } from './db.js';
+import { mockAnalyze } from './ai.js';
 import { shiftDay, toDateKey } from './streaks.js';
 
 /**
@@ -109,19 +110,15 @@ samCheckIns.push({
 });
 
 const analyses = {};
+let i = 0;
 for (const c of [...mayaCheckIns, ...jordanCheckIns, ...samCheckIns]) {
+  const meal = mockAnalyze(`${c.userId}:${c.id}:${i++}`);
   analyses[c.id] = {
     checkInId: c.id,
     userId: c.userId,
     createdAt: c.createdAt,
-    foodType: 'Demo meal',
-    estimatedCalories: 400 + Math.floor(Math.random() * 200),
-    estimatedProteinG: 15,
-    estimatedCarbsG: 45,
-    estimatedFatG: 12,
-    confidence: Math.random() > 0.85 ? 'low' : 'medium',
-    notes: 'Seeded demo analysis',
-    error: false,
+    ...meal,
+    notes: 'Seeded demo analysis (varied mock meals — not live vision)',
   };
 }
 

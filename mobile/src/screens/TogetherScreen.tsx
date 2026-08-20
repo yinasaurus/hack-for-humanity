@@ -3,7 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import { useAudioPlayer } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CompanionPet } from '../components/CompanionPet';
+import { AnimalWebView, characterForLiveCompanion } from '../characters';
 import { SupportChip } from '../components/SupportChip';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
@@ -104,22 +104,20 @@ export function TogetherScreen({ navigation }: Props) {
         leave whenever you like.
       </Text>
 
-      <CompanionPet
-        mood="happy"
-        size={260}
+      <AnimalWebView
+        key={`together-${companion?.petType || 'flamingo'}`}
+        character={characterForLiveCompanion(companion?.petType)}
+        expression="happy"
         muted={settings.companionMuted}
-        petName={companion?.petName}
-        petType={companion?.petType}
-        petColor={companion?.petColor}
-        pattern={companion?.pattern}
-        eyes={companion?.eyes}
-        hat={companion?.hat}
-        face={companion?.face}
-        neck={companion?.neck}
-        held={companion?.held}
-        scene={companion?.scene || 'cozy_nook'}
-        accent={companion?.accent}
-        unlocks={companion?.unlocks}
+        style={styles.hero3d}
+        accessibilityLabel={`${name} companion`}
+        outfit={{
+          hat: companion?.hat,
+          face: companion?.face,
+          neck: companion?.neck,
+          held: companion?.held,
+          scene: companion?.scene || 'cozy_nook',
+        }}
       />
 
       {!reducedMotion ? (
@@ -191,6 +189,13 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     alignSelf: 'flex-start',
     lineHeight: 22,
+  },
+  hero3d: {
+    width: '100%',
+    height: 320,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
   },
   trail: {
     marginTop: spacing.lg,

@@ -18,10 +18,10 @@ import {
   type ReminderFrequency,
 } from '../SettingsContext';
 import {
-  areLocalRemindersAvailable,
   describeReminderSchedule,
   disableGentleReminders,
   enableGentleReminders,
+  isExpoGo,
 } from '../notifications';
 import { SupportChip } from '../components/SupportChip';
 import * as Speech from 'expo-speech';
@@ -64,7 +64,9 @@ export function SettingsScreen({ navigation }: Props) {
         const result = await enableGentleReminders({ frequency, hour });
         if (result.scheduled === false) {
           setNote(
-            `Preference saved (${describeReminderSchedule({ frequency, hour })}). Expo Go on Android can’t schedule notifications — works in a real build.`
+            isExpoGo()
+              ? `Preference saved (${describeReminderSchedule({ frequency, hour })}). Expo Go on Android often blocks local notifications — a development build can schedule them for real.`
+              : `Preference saved (${describeReminderSchedule({ frequency, hour })}), but the OS could not schedule a notification.`
           );
         } else {
           setNote(
@@ -185,10 +187,11 @@ export function SettingsScreen({ navigation }: Props) {
         {/* Reminders */}
         <Text style={styles.section}>Gentle reminders</Text>
         <View style={styles.card}>
-          {!areLocalRemindersAvailable() ? (
+          {isExpoGo() ? (
             <Text style={styles.expoGoNote}>
-              Expo Go can’t fire Android notifications (SDK 53+). You can still set the
-              preference for the demo; a development build would schedule them for real.
+              Running in Expo Go: we still try to schedule a gentle local reminder. On some
+              Android Expo Go builds it may only save the preference until you use a
+              development build.
             </Text>
           ) : null}
           <View style={styles.row}>
