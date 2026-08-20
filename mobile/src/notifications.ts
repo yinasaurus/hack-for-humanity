@@ -21,6 +21,7 @@ export type ReminderSchedule = {
 };
 
 const REMINDER_ID = 'kindplate-gentle-reminder';
+const CLINICIAN_REMINDER_ID = 'kindplate-clinician-reminder';
 
 type NotificationsModule = typeof import('expo-notifications');
 
@@ -86,6 +87,66 @@ export async function enableGentleReminders(schedule: ReminderSchedule) {
   }
 }
 
+/**
+ * Clinician-scheduled reminder — uses the clinician's note + frequency.
+ * Separate from Settings gentle hellos; not AI-generated scheduling.
+ */
+export async function enableClinicianScheduledReminder(opts: {
+  note: string;
+  frequency: ReminderFrequency;
+  hour?: number;
+}) {
+  const note = String(opts.note || '').trim();
+  if (!note) {
+    await disableClinicianScheduledReminder();
+    return { scheduled: false as const, reason: 'empty' as const };
+  }
+
+  try {
+    const Notifications = await loadNotifications();
+    ensureHandler(Notifications);
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      throw new Error('Notifications permission is needed for care-team reminders');
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('gentle', {
+        name: 'Gentle companion notes',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
+    await disableClinicianScheduledReminder();
+
+    const hour = Math.min(23, Math.max(0, Math.round(opts.hour ?? 12)));
+    const channelId = Platform.OS === 'android' ? 'gentle' : undefined;
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: CLINICIAN_REMINDER_ID,
+      content: {
+        title: 'A gentle note from your care team',
+        body: note,
+        sound: false,
+      },
+      trigger: buildTrigger(Notifications, opts.frequency, hour, channelId),
+    });
+
+    return { scheduled: true as const };
+  } catch (e) {
+    if (isExpoGo() && Platform.OS === 'android') {
+      return { scheduled: false as const, reason: 'expo-go-android' as const };
+    }
+    throw e instanceof Error ? e : new Error('Could not schedule care-team reminder');
+  }
+}
+
 function buildTrigger(
   Notifications: NotificationsModule,
   frequency: ReminderFrequency,
@@ -124,6 +185,15 @@ export async function disableGentleReminders() {
   try {
     const Notifications = await loadNotifications();
     await Notifications.cancelScheduledNotificationAsync(REMINDER_ID);
+  } catch {
+    // ignore — Expo Go / missing module
+  }
+}
+
+export async function disableClinicianScheduledReminder() {
+  try {
+    const Notifications = await loadNotifications();
+    await Notifications.cancelScheduledNotificationAsync(CLINICIAN_REMINDER_ID);
   } catch {
     // ignore — Expo Go / missing module
   }

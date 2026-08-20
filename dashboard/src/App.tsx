@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   addClinicianNote,
   celebrateCheckup,
+  clearClinicianReminder,
   clinicLogin,
   fetchAlerts,
   fetchAiStatus,
@@ -10,6 +11,7 @@ import {
   generateSummary,
   getClinicToken,
   setClinicToken,
+  setClinicianReminder,
 } from './api';
 import type { AlertRow, PatientRow } from './api';
 import './App.css';
@@ -61,6 +63,12 @@ export default function App() {
   const [celebrateNote, setCelebrateNote] = useState('');
   const [celebrateBusy, setCelebrateBusy] = useState(false);
   const [celebrateOk, setCelebrateOk] = useState<string | null>(null);
+  const [reminderNote, setReminderNote] = useState('');
+  const [reminderFrequency, setReminderFrequency] = useState<
+    'daily' | 'weekly' | 'every_2_days' | 'every_3_days'
+  >('weekly');
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const [reminderOk, setReminderOk] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -98,10 +106,21 @@ export default function App() {
     setCelebrateDate(todayDateInput());
     setCelebrateNote('');
     setCelebrateOk(null);
+    setReminderNote('');
+    setReminderFrequency('weekly');
+    setReminderOk(null);
     (async () => {
       try {
         const d = await fetchPatientDetail(selectedId);
         setDetail(d);
+        const existing = d.clinicianReminder as
+          | { note?: string; frequency?: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days' }
+          | null
+          | undefined;
+        if (existing?.note) {
+          setReminderNote(existing.note);
+          if (existing.frequency) setReminderFrequency(existing.frequency);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load patient');
       }
@@ -166,6 +185,45 @@ export default function App() {
       setError(err instanceof Error ? err.message : 'Could not celebrate checkup');
     } finally {
       setCelebrateBusy(false);
+    }
+  };
+
+  const onSaveReminder = async () => {
+    if (!selectedId || !reminderNote.trim()) return;
+    setReminderBusy(true);
+    setReminderOk(null);
+    setError(null);
+    try {
+      await setClinicianReminder(selectedId, {
+        note: reminderNote.trim(),
+        frequency: reminderFrequency,
+      });
+      setReminderOk('Clinician-scheduled reminder saved — patient companion will surface it gently.');
+      const d = await fetchPatientDetail(selectedId);
+      setDetail(d);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save reminder');
+    } finally {
+      setReminderBusy(false);
+    }
+  };
+
+  const onClearReminder = async () => {
+    if (!selectedId) return;
+    setReminderBusy(true);
+    setReminderOk(null);
+    setError(null);
+    try {
+      await clearClinicianReminder(selectedId);
+      setReminderNote('');
+      setReminderFrequency('weekly');
+      setReminderOk('Reminder cleared.');
+      const d = await fetchPatientDetail(selectedId);
+      setDetail(d);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not clear reminder');
+    } finally {
+      setReminderBusy(false);
     }
   };
 
@@ -542,6 +600,77 @@ export default function App() {
                       )
                     )}
                   </ul>
+                ) : null}
+              </section>
+
+              <section className="block clinician-reminder">
+                <h3>Clinician-scheduled reminder</h3>
+                <p className="muted tiny">
+                  You choose the note and frequency — not AI scheduling. The patient sees this
+                  gently via their companion and local notifications.
+                </p>
+                <form
+                  className="celebrate-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void onSaveReminder();
+                  }}
+                >
+                  <label className="field">
+                    <span>Reminder note (shown to patient)</span>
+                    <textarea
+                      value={reminderNote}
+                      onChange={(e) => setReminderNote(e.target.value)}
+                      placeholder='e.g. "eat 2 apples each week"'
+                      rows={2}
+                      maxLength={280}
+                      required
+                      aria-label={`Clinician-scheduled reminder for ${detail.patient.name}`}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Frequency</span>
+                    <select
+                      value={reminderFrequency}
+                      onChange={(e) =>
+                        setReminderFrequency(
+                          e.target.value as 'daily' | 'weekly' | 'every_2_days' | 'every_3_days'
+                        )
+                      }
+                      aria-label="Reminder frequency"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="every_2_days">Custom — every 2 days</option>
+                      <option value="every_3_days">Custom — every 3 days</option>
+                    </select>
+                  </label>
+                  <div className="celebrate-actions">
+                    <button
+                      type="submit"
+                      className="primary"
+                      disabled={reminderBusy || !reminderNote.trim()}
+                    >
+                      {reminderBusy ? 'Saving…' : 'Save reminder'}
+                    </button>
+                    {detail.clinicianReminder ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={reminderBusy}
+                        onClick={() => void onClearReminder()}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+                {reminderOk ? <p className="ok tiny">{reminderOk}</p> : null}
+                {detail.clinicianReminder ? (
+                  <p className="muted tiny">
+                    Active: {detail.clinicianReminder.frequency.replace(/_/g, ' ')} ·{' '}
+                    {detail.clinicianReminder.note}
+                  </p>
                 ) : null}
               </section>
 

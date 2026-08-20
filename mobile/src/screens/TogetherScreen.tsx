@@ -105,7 +105,7 @@ export function TogetherScreen({ navigation }: Props) {
       </Text>
 
       <AnimalWebView
-        key={`together-${companion?.petType || 'flamingo'}`}
+        key={`together-${companion?.petType || 'fox'}`}
         character={characterForLiveCompanion(companion?.petType)}
         expression="happy"
         muted={settings.companionMuted}

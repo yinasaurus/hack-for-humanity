@@ -35,6 +35,13 @@ export type CheckupCelebrationPending = {
   message: string;
 };
 
+export type ClinicianReminder = {
+  id: string;
+  note: string;
+  frequency: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days';
+  hour: number;
+};
+
 export type CompanionState = {
   mood: 'happy' | 'resting';
   walksAvailable: boolean;
@@ -44,6 +51,8 @@ export type CompanionState = {
   helloDays?: string[];
   /** One-time clinician checkup celebration, if waiting to be shown. */
   checkupCelebration?: CheckupCelebrationPending | null;
+  /** Clinician-scheduled reminder (note + frequency; not AI). */
+  clinicianReminder?: ClinicianReminder | null;
 } & PetAppearance;
 
 export type AuthResult = { user: User; token: string };

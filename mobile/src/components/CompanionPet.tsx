@@ -140,7 +140,7 @@ export function CompanionPet({
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
   const beatRef = useRef<IdleBeat>('center');
 
-  const type = (PET_TYPE_IDS.has(petType as PetTypeId) ? petType : 'flamingo') as PetTypeId;
+  const type = (PET_TYPE_IDS.has(petType as PetTypeId) ? petType : 'fox') as PetTypeId;
   const name = petName || 'Companion';
   const sceneMeta = resolveScene(scene as PetSceneId);
   const imgSize = size * 0.78;

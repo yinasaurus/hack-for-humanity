@@ -64,7 +64,7 @@ const LEGACY_PET_TYPE = {
 
 export const DEFAULT_APPEARANCE = {
   petName: 'Companion',
-  petType: 'flamingo',
+  petType: 'fox',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',

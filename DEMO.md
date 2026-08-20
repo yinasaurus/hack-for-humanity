@@ -43,7 +43,7 @@ Memorize these three lines:
 | :20–:40 | Check-in → live camera → capture → celebration / keepsake if unlocked |
 | :40–:55 | Optional: Customize accessories, or quiet-time Together; resting card if quiet hours |
 | :55–:75 | Laptop clinic: `clinic@demo.local` / `demo` → **Jordan** alert → read **Why this alert** |
-| :75–:90 | Select Maya or Sam → **Generate AI summary** → point at **Mock/Live AI banner** + disclaimer |
+| :75–:90 | Select Maya or Sam → **Generate AI summary** → point at **Mock/Live AI banner** + disclaimer; optional: set a **clinician-scheduled reminder** (note + frequency — not AI scheduling) |
 
 Backup if camera fails: show existing Maya check-ins on clinic + Jordan alert + ethics lines.
 

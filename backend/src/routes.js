@@ -17,7 +17,7 @@ import {
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider } from './ai.js';
-import { appearanceFromUser, applyAppearancePatch } from './appearance.js';
+import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
 import {
@@ -37,6 +37,13 @@ import {
   pendingCelebrationForPatient,
   toPatientPendingCelebration,
 } from './checkupCelebration.js';
+import {
+  getClinicianReminder,
+  normalizeReminderFrequency,
+  normalizeReminderHour,
+  normalizeReminderNote,
+  toPatientClinicianReminder,
+} from './clinicianReminder.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -90,6 +97,7 @@ export function toPatientCompanionState(userId) {
   const allUnlocks = [...unlocks, ...newUnlocks];
   const appearance = appearanceFromUser(user);
   const pendingCheckup = pendingCelebrationForPatient(db, userId);
+  const clinicianReminder = toPatientClinicianReminder(getClinicianReminder(db, userId));
 
   return {
     mood,
@@ -98,6 +106,7 @@ export function toPatientCompanionState(userId) {
     newlyUnlocked: newUnlocks,
     helloDays: uniqueSortedDays(checkIns),
     checkupCelebration: toPatientPendingCelebration(pendingCheckup),
+    clinicianReminder,
     ...appearance,
     // No calories, macros, scores, streak counts, or days-since metrics
   };
@@ -179,6 +188,8 @@ export function registerRoutes(app) {
       role: 'patient',
       clinicId: DEFAULT_CLINIC_ID,
       onboarded: false,
+      ...DEFAULT_APPEARANCE,
+      petType: 'fox',
       passwordHash,
       createdAt: new Date().toISOString(),
     };
@@ -560,6 +571,7 @@ export function registerRoutes(app) {
         createdAt: c.createdAt,
         acknowledgedAt: c.acknowledgedAt || null,
       })),
+      clinicianReminder: getClinicianReminder(db, patient.id),
       checkIns: checkIns.map((c) => ({
         ...toPatientSafeCheckIn(c),
         analysis: db.analyses[c.id] || null,
@@ -570,6 +582,72 @@ export function registerRoutes(app) {
       aiProvider: aiProvider(),
     });
   });
+
+  /**
+   * Clinician-scheduled reminder — note + frequency set manually (not AI-parsed).
+   */
+  app.post(
+    '/api/clinician/patients/:id/reminder',
+    requireAuth(['clinician']),
+    (req, res) => {
+      const db = readDb();
+      const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+      if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+      const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+      if (!patient) return res.status(404).json({ error: 'not found' });
+      if (!clinicianCanAccessPatient(clinician, patient)) {
+        return res.status(403).json({ error: 'Not allowed for this clinic' });
+      }
+
+      const note = normalizeReminderNote(req.body?.note);
+      const frequency = normalizeReminderFrequency(req.body?.frequency);
+      if (!note) return res.status(400).json({ error: 'reminder note required' });
+      if (!frequency) {
+        return res.status(400).json({
+          error: 'frequency must be daily, weekly, every_2_days, or every_3_days',
+        });
+      }
+
+      const reminder = {
+        id: uuid(),
+        note,
+        frequency,
+        hour: normalizeReminderHour(req.body?.hour),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: clinician.id,
+      };
+
+      updateDb((d) => {
+        if (!d.clinicianReminders) d.clinicianReminders = {};
+        d.clinicianReminders[patient.id] = reminder;
+      });
+
+      res.status(201).json({ reminder });
+    }
+  );
+
+  app.delete(
+    '/api/clinician/patients/:id/reminder',
+    requireAuth(['clinician']),
+    (req, res) => {
+      const db = readDb();
+      const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+      if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+      const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+      if (!patient) return res.status(404).json({ error: 'not found' });
+      if (!clinicianCanAccessPatient(clinician, patient)) {
+        return res.status(403).json({ error: 'Not allowed for this clinic' });
+      }
+
+      updateDb((d) => {
+        if (!d.clinicianReminders) d.clinicianReminders = {};
+        delete d.clinicianReminders[patient.id];
+      });
+
+      res.json({ ok: true });
+    }
+  );
 
   /**
    * Clinician manually logs that a checkup was attended.

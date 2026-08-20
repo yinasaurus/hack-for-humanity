@@ -2,9 +2,11 @@ import { v4 as uuid } from 'uuid';
 import { writeDb } from './db.js';
 import { mockAnalyze } from './ai.js';
 import { shiftDay, toDateKey } from './streaks.js';
+import { DEFAULT_APPEARANCE } from './appearance.js';
 
 /**
  * Seed demo patients for clinician dashboard demos.
+ * Default companion is fox (only model with full bone-attached accessories).
  */
 const today = toDateKey(new Date());
 
@@ -20,6 +22,9 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    ...DEFAULT_APPEARANCE,
+    petName: 'Maple',
+    petType: 'fox',
     // password: demo
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
@@ -31,6 +36,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    ...DEFAULT_APPEARANCE,
+    petType: 'fox',
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
   },
@@ -41,6 +48,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    ...DEFAULT_APPEARANCE,
+    petType: 'fox',
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
   },
@@ -52,6 +61,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-other',
     onboarded: true,
+    ...DEFAULT_APPEARANCE,
+    petType: 'fox',
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
   },
@@ -147,6 +158,10 @@ writeDb({
   summaries: {},
   alerts: [],
   clinicianNotes: {},
+  checkupCelebrations: {},
+  clinicianReminders: {},
 });
 
-console.log('Seeded demo data: Maya (steady), Jordan (misses), Sam (drop), clinic@demo.local');
+console.log(
+  'Seeded demo data: Maya (steady), Jordan (misses), Sam (drop), clinic@demo.local — default companion = fox'
+);

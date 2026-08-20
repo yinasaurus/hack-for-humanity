@@ -29,6 +29,12 @@ describe('appearance independence', () => {
     assert.equal(a.neck, 'scarf');
   });
 
+  it('defaults unset petType to fox (bone-attached accessories)', () => {
+    assert.equal(DEFAULT_APPEARANCE.petType, 'fox');
+    const a = appearanceFromUser({});
+    assert.equal(a.petType, 'fox');
+  });
+
   it('maps legacy Bun/Pup ids to low-poly animals', () => {
     const a = appearanceFromUser({ petType: 'bun', hat: 'bow' });
     assert.equal(a.petType, 'flamingo');

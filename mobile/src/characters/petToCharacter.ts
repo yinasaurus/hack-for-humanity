@@ -16,9 +16,9 @@ const LEGACY_PET_TO_CHARACTER: Record<string, string> = {
  * petType is now the low-poly animal id (fox, horse, parrot, flamingo, stork).
  */
 export function characterForPetType(petType?: string): CharacterDef {
-  const raw = petType || 'flamingo';
+  const raw = petType || 'fox';
   const id = LEGACY_PET_TO_CHARACTER[raw] || raw;
-  return getCharacter(id) || getCharacter('flamingo') || CHARACTER_CATALOG[0];
+  return getCharacter(id) || getCharacter('fox') || CHARACTER_CATALOG[0];
 }
 
 export function characterForLiveCompanion(petType?: string): CharacterDef {

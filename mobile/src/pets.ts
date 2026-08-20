@@ -135,7 +135,7 @@ export type PetAppearance = {
 
 export const DEFAULT_APPEARANCE: PetAppearance = {
   petName: 'Companion',
-  petType: 'flamingo',
+  petType: 'fox',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',

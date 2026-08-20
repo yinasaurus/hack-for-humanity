@@ -11,6 +11,8 @@
 7. Clinician dashboard: login, **Why this alert** detail/guidance, heat map, calorie trend with **estimate disclaimer**, notes, photos, AI summary, live/mock AI badge
 8. AI: live OpenAI when `OPENAI_API_KEY` set; otherwise enriched observational mocks
 9. Tighter signup (min 6 chars + confirm); seeded demo passwords = `demo`
+10. **Clinician-scheduled reminders** (manual note + frequency → companion + local notifications — not AI scheduling)
+11. Checkup celebration (attendance-only, no body metrics)
 
 ## Auth note
 

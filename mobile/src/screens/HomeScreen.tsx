@@ -30,12 +30,36 @@ import {
   type CheckupCelebrationPending,
 } from '../api';
 import {
+  disableClinicianScheduledReminder,
+  enableClinicianScheduledReminder,
+} from '../notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
   expressionCaption,
   nextAmbientIdle,
   nextQuietIdle,
   type CompanionExpression,
   type CompanionPresence,
 } from '../companionMood';
+
+const CLINICIAN_REMINDER_SYNC_KEY = 'kindplate.clinicianReminderSyncId';
+
+async function syncClinicianReminder(reminder: CompanionState['clinicianReminder']) {
+  if (!reminder?.note) {
+    await disableClinicianScheduledReminder();
+    await AsyncStorage.removeItem(CLINICIAN_REMINDER_SYNC_KEY);
+    return;
+  }
+  const prev = await AsyncStorage.getItem(CLINICIAN_REMINDER_SYNC_KEY);
+  const stamp = `${reminder.id}:${reminder.frequency}:${reminder.hour}:${reminder.note}`;
+  if (prev === stamp) return;
+  await enableClinicianScheduledReminder({
+    note: reminder.note,
+    frequency: reminder.frequency,
+    hour: reminder.hour,
+  });
+  await AsyncStorage.setItem(CLINICIAN_REMINDER_SYNC_KEY, stamp);
+}
 
 type Props = {
   navigation: {
@@ -100,6 +124,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     try {
       const data = await fetchCompanion(user.id);
       setCompanion(data);
+      void syncClinicianReminder(data.clinicianReminder).catch(() => {
+        /* Expo Go / permission — in-app card still shows */
+      });
       if (__DEV__) {
         // eslint-disable-next-line no-console
         console.log('[Home] companion appearance', {
@@ -342,6 +369,16 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
               {' · Drag gently to look around · Customize in Settings'}
             </Text>
 
+            {companion.clinicianReminder?.note ? (
+              <View style={styles.careNote} accessibilityRole="summary">
+                <Text style={styles.careNoteEyebrow}>From your care team</Text>
+                <Text style={styles.careNoteBody}>{companion.clinicianReminder.note}</Text>
+                <Text style={styles.careNoteSoft}>
+                  A gentle clinician-scheduled reminder — nothing to score.
+                </Text>
+              </View>
+            ) : null}
+
             <View style={styles.petActions}>
               <Pressable
                 style={styles.petBtn}
@@ -559,6 +596,37 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     textAlign: 'center',
     paddingHorizontal: 12,
+  },
+  careNote: {
+    marginTop: 14,
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  careNoteEyebrow: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 11,
+    color: colors.teal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  careNoteBody: {
+    marginTop: 6,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.ink,
+  },
+  careNoteSoft: {
+    marginTop: 6,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.inkSoft,
   },
   petActions: {
     flexDirection: 'row',

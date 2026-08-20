@@ -131,3 +131,32 @@ export async function celebrateCheckup(
   if (!res.ok) throw new Error(data.error || 'Could not celebrate checkup');
   return data.celebration;
 }
+
+/** Clinician-scheduled reminder — note + frequency (not AI-parsed). */
+export async function setClinicianReminder(
+  patientId: string,
+  payload: {
+    note: string;
+    frequency: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days';
+    hour?: number;
+  }
+) {
+  const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/reminder`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not save reminder');
+  return data.reminder;
+}
+
+export async function clearClinicianReminder(patientId: string) {
+  const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/reminder`, {
+    method: 'DELETE',
+    headers: authHeaders(false),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not clear reminder');
+  return data;
+}

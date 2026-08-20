@@ -16,6 +16,8 @@ const defaultDb = () => ({
   clinicianNotes: {},
   /** Clinician-logged checkup attendance celebrations (date + optional note only). */
   checkupCelebrations: {},
+  /** Clinician-scheduled patient reminders (note + frequency; not AI-parsed). */
+  clinicianReminders: {},
 });
 
 function ensureStore() {
