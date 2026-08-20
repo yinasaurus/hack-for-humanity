@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
+  type AppStateStatus,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -28,6 +30,12 @@ import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../SettingsContext';
 import { CompanionState, Unlock, fetchCompanion } from '../api';
+import {
+  expressionCaption,
+  nextQuietIdle,
+  type CompanionExpression,
+  type CompanionPresence,
+} from '../companionMood';
 
 type Props = {
   navigation: {
@@ -50,9 +58,50 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const [animal, setAnimal] = useState<CharacterDef>(() => characterForPetType('fox'));
   const [napping, setNapping] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  /** Server presence band — happy | resting only */
+  const [presence, setPresence] = useState<CompanionPresence>('happy');
+  /** Client presentation — may include waving / excited / curious / sleepy */
+  const [expression, setExpression] = useState<CompanionExpression>('happy');
   const animalRef = useRef<AnimalWebHandle | null>(null);
+  const expressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appState = useRef(AppState.currentState);
+  const presenceRef = useRef<CompanionPresence>('happy');
+  const nappingRef = useRef(false);
+  presenceRef.current = presence;
+  nappingRef.current = napping;
 
   const muted = settings.companionMuted;
+
+  const clearExpressionTimer = () => {
+    if (expressionTimer.current) {
+      clearTimeout(expressionTimer.current);
+      expressionTimer.current = null;
+    }
+  };
+
+  /** Return to presence band (or sleepy if user asked for a nap) */
+  const settleToPresence = useCallback(
+    (band: CompanionPresence, nap: boolean) => {
+      if (nap || band === 'resting') {
+        setExpression('sleepy');
+      } else {
+        setExpression('happy');
+      }
+    },
+    []
+  );
+
+  /** Greeting wave — App open / foreground only (not check-in logic) */
+  const playGreetingWave = useCallback(
+    (band: CompanionPresence, nap: boolean) => {
+      clearExpressionTimer();
+      setExpression('waving');
+      expressionTimer.current = setTimeout(() => {
+        settleToPresence(band, nap);
+      }, 2600);
+    },
+    [settleToPresence]
+  );
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -88,8 +137,47 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   useEffect(() => {
     if (!companion) return;
     setAnimal(characterForPetType(companion.petType));
-    setNapping(companion.mood === 'resting');
+    const band = companion.mood === 'resting' ? 'resting' : 'happy';
+    setPresence(band);
+    setNapping(band === 'resting');
+    // Don't clobber an in-flight greeting/celebration
+    setExpression((prev) =>
+      prev === 'waving' || prev === 'excited' ? prev : band === 'resting' ? 'sleepy' : 'happy'
+    );
   }, [companion?.petType, companion?.mood]);
+
+  // Milestone → excited (visual only; no numeric streak callout)
+  useEffect(() => {
+    if (!showMilestone) return;
+    clearExpressionTimer();
+    setExpression('excited');
+  }, [showMilestone]);
+
+  // App foreground → waving greeting (not tied to check-ins)
+  useEffect(() => {
+    playGreetingWave(presenceRef.current, nappingRef.current);
+    const onChange = (next: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && next === 'active') {
+        playGreetingWave(presenceRef.current, nappingRef.current);
+      }
+      appState.current = next;
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => {
+      sub.remove();
+      clearExpressionTimer();
+    };
+  }, [playGreetingWave]);
+
+  // Quiet-band idle rotation: resting ↔ sleepy ↔ curious (never static / never needy)
+  useEffect(() => {
+    if (presence !== 'resting' && !napping) return;
+    if (expression === 'waving' || expression === 'excited') return;
+    const id = setInterval(() => {
+      setExpression((prev) => nextQuietIdle(prev));
+    }, 14000);
+    return () => clearInterval(id);
+  }, [presence, napping, expression]);
 
   const stopVoice = () => {
     try {
@@ -110,7 +198,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     );
   }
 
-  const resting = companion?.mood === 'resting' || napping;
+  const resting = presence === 'resting' || napping;
   const gradient = resting ? gradients.homeResting : gradients.home;
 
   return (
@@ -123,6 +211,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           setShowMilestone(false);
           setPendingUnlocks([]);
           navigation.setParams?.({ newUnlocks: undefined });
+          settleToPresence(presence, napping);
         }}
       />
 
@@ -181,10 +270,10 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
               }}
             />
             <AnimalWebView
-              key={`${animal.id}-${companion.mood}`}
+              key={animal.id}
               ref={animalRef}
               character={animal}
-              mood={resting ? 'resting' : 'happy'}
+              expression={expression}
               muted={muted}
               style={styles.animal3d}
               accessibilityLabel={`${companion.petName}, ${animal.label} companion`}
@@ -194,9 +283,10 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             />
             <Text style={styles.petName}>{companion.petName}</Text>
             <Text style={styles.petCaption}>
+              {expressionCaption(companion.petName, expression)}
               {resting
-                ? `${companion.petName} is resting — Wake anytime, or say hello with a meal photo when you want`
-                : `Drag gently to look around · buttons below when you feel like it`}
+                ? ' · Wake anytime, or say hello with a meal photo when you want'
+                : ' · Drag gently to look around'}
             </Text>
 
             <CompanionMuteBar
@@ -237,27 +327,41 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                   <Pressable
                     style={styles.petBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Wave"
-                    onPress={() => animalRef.current?.wave()}
+                    accessibilityLabel="Wave hello"
+                    onPress={() => {
+                      clearExpressionTimer();
+                      setExpression('waving');
+                      expressionTimer.current = setTimeout(() => {
+                        settleToPresence(presence, napping);
+                      }, 2600);
+                    }}
                   >
                     <Text style={styles.petBtnText}>Wave</Text>
                   </Pressable>
                   <Pressable
                     style={styles.petBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Gentle play motion"
-                    onPress={() => animalRef.current?.react()}
+                    accessibilityLabel="Gentle curious play"
+                    onPress={() => {
+                      clearExpressionTimer();
+                      setExpression('curious');
+                      animalRef.current?.react();
+                      expressionTimer.current = setTimeout(() => {
+                        settleToPresence(presence, napping);
+                      }, 3200);
+                    }}
                   >
                     <Text style={styles.petBtnText}>Play</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.petBtn, styles.petBtnSleep]}
                     accessibilityRole="button"
-                    accessibilityLabel="Let companion rest"
+                    accessibilityLabel="Let companion rest cozily"
                     onPress={() => {
                       stopVoice();
                       setNapping(true);
-                      animalRef.current?.sleep();
+                      clearExpressionTimer();
+                      setExpression('sleepy');
                     }}
                   >
                     <Text style={styles.petBtnText}>Sleep</Text>
@@ -270,7 +374,13 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                   accessibilityLabel="Wake companion"
                   onPress={() => {
                     setNapping(false);
-                    animalRef.current?.wake();
+                    clearExpressionTimer();
+                    if (companion?.mood === 'resting') {
+                      setExpression('waving');
+                      expressionTimer.current = setTimeout(() => setExpression('sleepy'), 2400);
+                    } else {
+                      setExpression('happy');
+                    }
                   }}
                 >
                   <Text style={styles.petBtnText}>Wake</Text>

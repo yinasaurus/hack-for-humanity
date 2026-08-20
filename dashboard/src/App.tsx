@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  API_BASE,
   addClinicianNote,
   clinicLogin,
   fetchAlerts,
@@ -13,6 +12,7 @@ import {
 } from './api';
 import type { AlertRow, PatientRow } from './api';
 import './App.css';
+import { AuthenticatedMealImage } from './AuthenticatedMealImage';
 
 function pct(n: number) {
   return `${Math.round(n * 100)}%`;
@@ -399,9 +399,9 @@ export default function App() {
                   }) => (
                     <li key={c.id} className="checkin-row">
                       {c.photoUrl ? (
-                        <img
+                        <AuthenticatedMealImage
                           className="meal-thumb"
-                          src={`${API_BASE}${c.photoUrl}`}
+                          photoUrl={c.photoUrl}
                           alt="Meal check-in"
                         />
                       ) : (

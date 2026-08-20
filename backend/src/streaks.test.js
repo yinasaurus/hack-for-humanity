@@ -53,6 +53,15 @@ describe('petMood', () => {
   it('is resting after longer gap — never a suffering label', () => {
     assert.equal(petMood([ci(3)], today), 'resting');
   });
+
+  it('only returns happy or resting presence (no negative moods)', () => {
+    const allowed = new Set(['happy', 'resting']);
+    for (const daysAgo of [0, 1, 2, 7, 30]) {
+      const m = petMood([ci(daysAgo)], today);
+      assert.ok(allowed.has(m), `unexpected mood ${m}`);
+    }
+    assert.equal(petMood([], today), 'resting');
+  });
 });
 
 describe('milestonesReached', () => {

@@ -53,7 +53,10 @@ export function daysSinceLastCheckIn(checkIns, todayKey = toDateKey(new Date()))
   return Math.round((b - a) / (24 * 60 * 60 * 1000));
 }
 
-/** Pet mood: happy if checked in today or yesterday; otherwise resting (never "sick"/suffering). */
+/**
+ * Pet presence from check-ins: happy | resting only.
+ * Client may overlay waving / excited / curious / sleepy — never sadness, hunger, or neediness.
+ */
 export function petMood(checkIns, todayKey = toDateKey(new Date())) {
   const days = uniqueSortedDays(checkIns);
   if (days.length === 0) return 'resting';

@@ -15,17 +15,27 @@ import { CompanionMuteBar } from '../components/CompanionMuteBar';
 import { SupportChip } from '../components/SupportChip';
 import { useSettings } from '../SettingsContext';
 import { colors, gradients, spacing, tapTarget } from '../theme';
+import type { CompanionExpression } from '../companionMood';
 
 type Props = {
   navigation: { goBack: () => void };
 };
+
+const EXPR_CHIPS: { id: CompanionExpression; label: string }[] = [
+  { id: 'happy', label: 'Happy' },
+  { id: 'waving', label: 'Wave' },
+  { id: 'excited', label: 'Excited' },
+  { id: 'curious', label: 'Curious' },
+  { id: 'sleepy', label: 'Sleepy' },
+  { id: 'resting', label: 'Resting' },
+];
 
 export function CharacterScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { settings, updateSettings } = useSettings();
   const ready = useMemo(() => listReadyCharacters(), []);
   const [selected, setSelected] = useState<CharacterDef>(() => ready[0] || CHARACTER_CATALOG[0]);
-  const [napping, setNapping] = useState(false);
+  const [expression, setExpression] = useState<CompanionExpression>('happy');
   const [speaking, setSpeaking] = useState(false);
   const handleRef = useRef<AnimalWebHandle | null>(null);
   const muted = settings.companionMuted;
@@ -67,7 +77,7 @@ export function CharacterScreen({ navigation }: Props) {
         Companion playground
       </Text>
       <Text style={styles.sub}>
-        Optional space to try animals and gentle motions. Leave anytime — nothing is required.
+        Try soft expressions (positive to neutral only). Leave anytime — nothing is required.
       </Text>
 
       <CharacterSelector
@@ -76,15 +86,33 @@ export function CharacterScreen({ navigation }: Props) {
         onSelect={(c) => {
           stopVoice();
           setSelected(c);
-          setNapping(false);
+          setExpression('happy');
         }}
       />
+
+      <View style={styles.exprRow}>
+        {EXPR_CHIPS.map((chip) => {
+          const on = expression === chip.id;
+          return (
+            <Pressable
+              key={chip.id}
+              onPress={() => setExpression(chip.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${chip.label} expression`}
+              style={[styles.exprChip, on && styles.exprChipOn]}
+            >
+              <Text style={[styles.exprText, on && styles.exprTextOn]}>{chip.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <View style={styles.stage}>
         <AnimalWebView
           key={selected.id}
           character={selected}
-          mood={napping ? 'resting' : 'happy'}
+          expression={expression}
           muted={muted}
           style={styles.web}
           accessibilityLabel={`${selected.label} companion`}
@@ -124,48 +152,6 @@ export function CharacterScreen({ navigation }: Props) {
         >
           <Text style={styles.btnText}>Talk</Text>
         </Pressable>
-        <Pressable
-          style={styles.btn}
-          accessibilityRole="button"
-          accessibilityLabel="Wave"
-          onPress={() => handleRef.current?.wave()}
-        >
-          <Text style={styles.btnText}>Wave</Text>
-        </Pressable>
-        <Pressable
-          style={styles.btn}
-          accessibilityRole="button"
-          accessibilityLabel="Gentle play"
-          onPress={() => handleRef.current?.react()}
-        >
-          <Text style={styles.btnText}>Play</Text>
-        </Pressable>
-        {napping ? (
-          <Pressable
-            style={styles.btn}
-            accessibilityRole="button"
-            accessibilityLabel="Wake"
-            onPress={() => {
-              setNapping(false);
-              handleRef.current?.wake();
-            }}
-          >
-            <Text style={styles.btnText}>Wake</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.btn, styles.btnMuted]}
-            accessibilityRole="button"
-            accessibilityLabel="Sleep"
-            onPress={() => {
-              stopVoice();
-              setNapping(true);
-              handleRef.current?.sleep();
-            }}
-          >
-            <Text style={styles.btnText}>Sleep</Text>
-          </Pressable>
-        )}
       </View>
       <SupportChip />
     </LinearGradient>
@@ -185,12 +171,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     lineHeight: 20,
   },
-  stage: { flex: 1, minHeight: 340, marginTop: 4 },
+  exprRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  exprChip: {
+    minHeight: tapTarget.min,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exprChipOn: { backgroundColor: colors.sageDeep, borderColor: colors.sageDeep },
+  exprText: { fontFamily: 'Nunito_700Bold', fontSize: 13, color: colors.ink },
+  exprTextOn: { color: colors.white },
+  stage: { flex: 1, minHeight: 300, marginTop: 4 },
   web: { flex: 1, height: '100%', borderRadius: 24 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   btn: {
     flexGrow: 1,
-    minWidth: '22%',
     minHeight: tapTarget.min,
     backgroundColor: colors.sageDeep,
     borderRadius: 14,
@@ -198,6 +197,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnMuted: { backgroundColor: colors.teal },
   btnText: { fontFamily: 'Nunito_700Bold', color: colors.white, fontSize: 14 },
 });

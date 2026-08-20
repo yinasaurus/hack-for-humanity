@@ -32,16 +32,21 @@ import {
   type PetTypeId,
 } from '../pets';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import {
+  expressionCaption,
+  isQuietBand,
+  type CompanionExpression,
+} from '../companionMood';
 
 type Props = Partial<PetAppearance> & {
-  mood: 'happy' | 'resting';
+  /** Positive–neutral only: happy | resting | waving | excited | curious | sleepy */
+  mood: CompanionExpression;
   unlocks?: Unlock[];
   celebrate?: boolean;
   size?: number;
   showCaption?: boolean;
   flashy?: boolean;
   interactive?: boolean;
-  /** Block Speech.speak — default true (no auto voice) */
   muted?: boolean;
 };
 
@@ -67,8 +72,41 @@ const LINES = {
 
 type IdleBeat = 'center' | 'lookLeft' | 'lookRight' | 'lean' | 'talk';
 
+function stageFill(mood: CompanionExpression, sceneFill: string) {
+  switch (mood) {
+    case 'excited':
+      return colors.happyGlow;
+    case 'curious':
+      return '#EEF2F0';
+    case 'waving':
+      return sceneFill;
+    case 'sleepy':
+    case 'resting':
+      return '#E4EBF2';
+    default:
+      return sceneFill;
+  }
+}
+
+function badgeFor(mood: CompanionExpression): string | null {
+  switch (mood) {
+    case 'waving':
+      return 'hello';
+    case 'excited':
+      return 'celebrating';
+    case 'curious':
+      return 'curious';
+    case 'sleepy':
+      return '☾ cozy sleepy';
+    case 'resting':
+      return '☾ resting';
+    default:
+      return null;
+  }
+}
+
 /**
- * 2D companion — gentle breathing idle; voice only on explicit Talk when unmuted.
+ * 2D companion — expanded positive–neutral expressions; never guilt-coded.
  */
 export function CompanionPet({
   mood,
@@ -86,7 +124,11 @@ export function CompanionPet({
   muted = true,
 }: Props) {
   const reducedMotion = useReducedMotion();
-  const isSleep = mood === 'resting';
+  const quiet = isQuietBand(mood);
+  const isSleepy = mood === 'sleepy' || mood === 'resting';
+  const isCurious = mood === 'curious';
+  const isExcited = mood === 'excited' || celebrate;
+  const isWaving = mood === 'waving';
   const [talking, setTalking] = useState(false);
   const [bubble, setBubble] = useState<string | null>(null);
 
@@ -96,6 +138,7 @@ export function CompanionPet({
   const breath = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const zzz = useRef(new Animated.Value(0)).current;
+  const wave = useRef(new Animated.Value(0)).current;
   const bubbleOpacity = useRef(new Animated.Value(0)).current;
   const beatRef = useRef<IdleBeat>('center');
 
@@ -131,18 +174,19 @@ export function CompanionPet({
     }
   };
 
-  const reactSoft = () => {
+  const reactSoft = (bigger = false) => {
     if (reducedMotion) return;
+    const peak = bigger ? 1.045 : 1.02;
     Animated.sequence([
       Animated.timing(scale, {
-        toValue: 1.02,
-        duration: 320,
+        toValue: peak,
+        duration: bigger ? 380 : 320,
         easing: Easing.inOut(Easing.sin),
         useNativeDriver: true,
       }),
       Animated.timing(scale, {
         toValue: 1,
-        duration: 420,
+        duration: bigger ? 480 : 420,
         easing: Easing.inOut(Easing.sin),
         useNativeDriver: true,
       }),
@@ -150,13 +194,13 @@ export function CompanionPet({
   };
 
   const talk = (line?: string) => {
-    if (isSleep) {
+    if (isSleepy && !isCurious) {
       showSpeech(LINES.sleep(name), true);
       return;
     }
     setTalking(true);
     beatRef.current = 'talk';
-    reactSoft();
+    reactSoft(isExcited);
     showSpeech(line || LINES.hello(name));
     setTimeout(() => {
       setTalking(false);
@@ -166,20 +210,21 @@ export function CompanionPet({
 
   const onTapPet = () => {
     if (!interactive) return;
-    if (isSleep) {
+    if (isSleepy && !isCurious) {
       showSpeech(LINES.sleep(name), true);
       return;
     }
     talk(LINES.pet(name));
   };
 
-  // Soft breathing (sleep = slower). Reduced motion → still.
+  // Soft breathing — speed by expression
   useEffect(() => {
     if (reducedMotion) {
       breath.setValue(0);
       return;
     }
-    const half = isSleep ? 3600 : 2800;
+    const half =
+      mood === 'sleepy' ? 3800 : mood === 'excited' ? 2200 : quiet ? 3200 : 2800;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breath, {
@@ -199,11 +244,11 @@ export function CompanionPet({
     breath.setValue(0);
     loop.start();
     return () => loop.stop();
-  }, [isSleep, breath, reducedMotion]);
+  }, [mood, quiet, breath, reducedMotion]);
 
-  // Sleep tip + zzz
+  // Quiet pose + zzz for sleepy/resting
   useEffect(() => {
-    if (!isSleep) {
+    if (!isSleepy) {
       Animated.timing(tilt, {
         toValue: 0,
         duration: reducedMotion ? 0 : 600,
@@ -214,7 +259,7 @@ export function CompanionPet({
       return;
     }
     Animated.timing(tilt, {
-      toValue: 1,
+      toValue: mood === 'sleepy' ? 1.15 : 1,
       duration: reducedMotion ? 0 : 900,
       easing: Easing.inOut(Easing.quad),
       useNativeDriver: true,
@@ -228,20 +273,59 @@ export function CompanionPet({
     );
     loop.start();
     return () => loop.stop();
-  }, [isSleep, tilt, zzz, reducedMotion]);
+  }, [isSleepy, mood, tilt, zzz, reducedMotion]);
 
-  // Idle look-around when awake — slow, infrequent (skipped if reduced motion)
+  // Waving greeting sway
   useEffect(() => {
-    if (isSleep || reducedMotion) {
+    if (!isWaving || reducedMotion) {
+      wave.setValue(0);
+      return;
+    }
+    const loop = Animated.sequence([
+      Animated.timing(wave, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wave, {
+        toValue: -1,
+        duration: 900,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      }),
+      Animated.timing(wave, {
+        toValue: 0,
+        duration: 700,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: true,
+      }),
+    ]);
+    loop.start();
+    return () => wave.setValue(0);
+  }, [isWaving, wave, reducedMotion]);
+
+  // Excited warm pulse
+  useEffect(() => {
+    if (!isExcited || reducedMotion) return;
+    reactSoft(true);
+  }, [isExcited]);
+
+  // Idle look-around — curious is more active; quiet bands still gentle
+  useEffect(() => {
+    if (isSleepy && !isCurious) {
       Animated.parallel([
         Animated.timing(lookX, { toValue: 0, duration: 500, useNativeDriver: true }),
         Animated.timing(lookY, { toValue: 0, duration: 500, useNativeDriver: true }),
       ]).start();
       return;
     }
+    if (reducedMotion) return;
 
     let cancelled = false;
-    const beats: IdleBeat[] = ['lookLeft', 'center', 'lookRight', 'center', 'lean', 'center'];
+    const beats: IdleBeat[] = isCurious
+      ? ['lookLeft', 'lookRight', 'lean', 'lookLeft', 'center']
+      : ['lookLeft', 'center', 'lookRight', 'center', 'lean', 'center'];
     let i = 0;
 
     const runBeat = () => {
@@ -253,27 +337,28 @@ export function CompanionPet({
       i += 1;
       beatRef.current = beat;
 
+      const amp = isCurious ? 0.85 : 0.55;
       const tx =
-        beat === 'lookLeft' ? -0.55 : beat === 'lookRight' ? 0.55 : beat === 'lean' ? 0.2 : 0;
-      const ty = beat === 'lean' ? 0.25 : beat === 'center' ? 0 : -0.08;
-      const rot = beat === 'lookLeft' ? -0.45 : beat === 'lookRight' ? 0.45 : beat === 'lean' ? 0.3 : 0;
+        beat === 'lookLeft' ? -amp : beat === 'lookRight' ? amp : beat === 'lean' ? 0.25 : 0;
+      const ty = beat === 'lean' ? 0.35 : beat === 'center' ? 0 : -0.1;
+      const rot = beat === 'lookLeft' ? -0.55 : beat === 'lookRight' ? 0.55 : beat === 'lean' ? 0.35 : 0;
 
       Animated.parallel([
         Animated.timing(lookX, {
           toValue: tx,
-          duration: 1400,
+          duration: isCurious ? 1100 : 1400,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(lookY, {
           toValue: ty,
-          duration: 1400,
+          duration: isCurious ? 1100 : 1400,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(tilt, {
           toValue: rot,
-          duration: 1400,
+          duration: isCurious ? 1100 : 1400,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
@@ -283,41 +368,41 @@ export function CompanionPet({
     };
 
     const schedule = () => {
-      const delay = talking ? 1600 : 2800 + Math.random() * 1600;
+      const delay = talking ? 1600 : isCurious ? 1600 + Math.random() * 800 : 2800 + Math.random() * 1600;
       timer = setTimeout(runBeat, delay);
     };
 
-    let timer = setTimeout(runBeat, 1200);
+    let timer = setTimeout(runBeat, isCurious ? 400 : 1200);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [isSleep, talking, lookX, lookY, tilt, reducedMotion]);
+  }, [isSleepy, isCurious, talking, lookX, lookY, tilt, reducedMotion]);
 
-  // Celebrate: bubble only — never auto-speak
   useEffect(() => {
-    if (!celebrate || isSleep) return;
+    if (!celebrate) return;
     showSpeech(`${name} is glad you stopped by.`, false);
+    reactSoft(true);
   }, [celebrate]);
 
-  const translateX = lookX.interpolate({
-    inputRange: [-1, 1],
-    outputRange: [-10, 10],
-  });
+  const translateX = Animated.add(
+    lookX.interpolate({ inputRange: [-1, 1], outputRange: [-10, 10] }),
+    wave.interpolate({ inputRange: [-1, 1], outputRange: [-8, 8] })
+  );
   const translateY = Animated.add(
     lookY.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }),
     breath.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, isSleep ? -2 : -4],
+      outputRange: [0, isSleepy ? -2 : isExcited ? -5 : -4],
     })
   );
   const rotate = tilt.interpolate({
     inputRange: [-1, 0, 1],
-    outputRange: isSleep ? ['-2deg', '-6deg', '-10deg'] : ['-5deg', '0deg', '5deg'],
+    outputRange: isSleepy ? ['-2deg', '-7deg', '-12deg'] : ['-5deg', '0deg', '5deg'],
   });
   const breathScale = breath.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, isSleep ? 1.01 : 1.018],
+    outputRange: [1, mood === 'sleepy' ? 1.012 : isExcited ? 1.028 : quiet ? 1.014 : 1.018],
   });
   const shadowScale = breath.interpolate({
     inputRange: [0, 1],
@@ -330,6 +415,7 @@ export function CompanionPet({
   const faceSrc = face && face !== 'none' ? FACE_IMAGES[face] : null;
   const neckSrc = neck && neck !== 'none' ? NECK_IMAGES[neck] : null;
   const heldSrc = held && held !== 'none' ? HELD_IMAGES[held] : null;
+  const badge = badgeFor(mood);
 
   return (
     <View style={styles.wrap}>
@@ -339,28 +425,26 @@ export function CompanionPet({
           {
             width: size,
             height: size * 0.92,
-            backgroundColor: isSleep ? '#E4EBF2' : sceneMeta.fill,
+            backgroundColor: stageFill(mood, sceneMeta.fill),
           },
         ]}
         accessible
-        accessibilityLabel={
-          isSleep
-            ? `${name} is resting quietly`
-            : `${name}, your companion${interactive ? '. Double tap to say hello' : ''}`
-        }
+        accessibilityLabel={expressionCaption(name, mood)}
         accessibilityRole="image"
       >
         <LinearGradient
           pointerEvents="none"
           colors={
-            isSleep
-              ? ['rgba(255,255,255,0.2)', 'rgba(160,180,200,0.32)']
-              : ['rgba(255,255,255,0.7)', 'rgba(255,220,190,0.18)']
+            quiet
+              ? ['rgba(255,255,255,0.2)', 'rgba(160,180,200,0.28)']
+              : isExcited
+                ? ['rgba(255,255,255,0.75)', 'rgba(232,228,216,0.45)']
+                : ['rgba(255,255,255,0.7)', 'rgba(255,220,190,0.18)']
           }
           style={StyleSheet.absoluteFill}
         />
 
-        {isSleep ? <Text style={styles.sleepBadge}>☾ resting</Text> : null}
+        {badge ? <Text style={styles.sleepBadge}>{badge}</Text> : null}
 
         {bubble ? (
           <Animated.View
@@ -391,7 +475,7 @@ export function CompanionPet({
               {
                 width: imgSize,
                 height: imgSize,
-                opacity: isSleep ? 0.92 : 1,
+                opacity: quiet ? 0.94 : 1,
                 transform: [
                   { translateX },
                   { translateY },
@@ -420,19 +504,19 @@ export function CompanionPet({
               <Image source={heldSrc} style={heldStyle(type, imgSize)} resizeMode="contain" />
             ) : null}
 
-            {isSleep ? (
+            {isSleepy ? (
               <Animated.Text
                 style={[styles.zzz, { opacity: zzzOp, transform: [{ translateY: zzzY }] }]}
                 accessibilityElementsHidden
               >
-                zzz
+                {mood === 'sleepy' ? '✧' : 'zzz'}
               </Animated.Text>
             ) : null}
           </Animated.View>
         </Pressable>
       </View>
 
-      {interactive && !isSleep ? (
+      {interactive && !isSleepy ? (
         <View style={styles.actions}>
           <Pressable
             style={styles.actionBtn}
@@ -470,13 +554,7 @@ export function CompanionPet({
       {showCaption ? (
         <View style={styles.captionBlock}>
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.caption}>
-            {isSleep
-              ? `${name} is resting — a meal hello is welcome when you are ready`
-              : interactive
-                ? `${name} is here · Talk when you like`
-                : `${name} is glad you are here`}
-          </Text>
+          <Text style={styles.caption}>{expressionCaption(name, mood)}</Text>
         </View>
       ) : null}
     </View>

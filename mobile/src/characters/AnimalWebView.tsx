@@ -4,13 +4,20 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { AnimalCharacterHandle, CharacterDef } from './types';
 import { colors } from '../theme';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import {
+  expressionA11yLabel,
+  isQuietBand,
+  type CompanionExpression,
+} from '../companionMood';
 
 type Props = {
   character: CharacterDef;
-  mood?: 'happy' | 'resting';
+  /** Presentation expression (positive–neutral only) */
+  expression?: CompanionExpression;
+  /** @deprecated prefer expression — maps happy|resting */
+  mood?: CompanionExpression;
   style?: ViewStyle;
   onReady?: (handle: AnimalWebHandle) => void;
-  /** When true, companion voice clips inside the WebView stay silent */
   muted?: boolean;
   accessibilityLabel?: string;
 };
@@ -19,15 +26,17 @@ export type AnimalWebHandle = AnimalCharacterHandle & {
   sleep: () => void;
   wake: () => void;
   wave: () => void;
+  setExpression: (expression: CompanionExpression) => void;
 };
 
 /**
- * Expo Go–friendly 3D GLB viewer (WebView + Three r152).
- * Calm pacing by default; respects reduced motion; no auto-play audio.
+ * Expo Go–friendly 3D viewer. Expressions: happy, resting, waving, excited, curious, sleepy.
+ * Never sadness / hunger / neediness.
  */
 export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalWebView(
   {
     character,
+    expression,
     mood = 'happy',
     style,
     onReady,
@@ -38,9 +47,11 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
 ) {
   const webRef = useRef<WebView>(null);
   const reducedMotion = useReducedMotion();
+  const active: CompanionExpression = expression || mood;
+  const startQuiet = isQuietBand(active);
 
   const html = useMemo(
-    () => buildHtml(character, mood === 'resting', reducedMotion),
+    () => buildHtml(character, startQuiet, reducedMotion),
     [
       character.id,
       character.modelPath,
@@ -48,7 +59,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       character.clips.talk,
       character.clips.react,
       character.scale,
-      mood,
+      // Remount only when character changes — expressions inject via postMessage
       reducedMotion,
     ]
   );
@@ -70,9 +81,10 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       },
       stopSpeaking: () => post('stop'),
       react: () => post(reducedMotion ? 'reactGentle' : 'react'),
-      sleep: () => post('sleep'),
-      wake: () => post('wake'),
-      wave: () => post(reducedMotion ? 'reactGentle' : 'wave'),
+      sleep: () => post('setExpression', { expression: 'sleepy' }),
+      wake: () => post('setExpression', { expression: 'happy' }),
+      wave: () => post('setExpression', { expression: 'waving' }),
+      setExpression: (next: CompanionExpression) => post('setExpression', { expression: next }),
     }),
     [muted, reducedMotion]
   );
@@ -91,6 +103,10 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     post('setReducedMotion', { on: Boolean(reducedMotion) });
   }, [reducedMotion, character.id]);
 
+  useEffect(() => {
+    post('setExpression', { expression: active });
+  }, [active, character.id]);
+
   const onMessage = (_e: WebViewMessageEvent) => {};
 
   if (!character.modelPath) {
@@ -107,11 +123,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     <View
       style={[styles.wrap, style]}
       accessible
-      accessibilityLabel={
-        mood === 'resting'
-          ? `${accessibilityLabel}, resting quietly`
-          : `${accessibilityLabel}. Use Talk, Wave, or Play buttons to interact.`
-      }
+      accessibilityLabel={expressionA11yLabel(accessibilityLabel, active)}
       accessibilityRole="image"
     >
       <WebView
@@ -134,7 +146,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   );
 });
 
-function buildHtml(character: CharacterDef, startSleeping: boolean, reducedMotion: boolean) {
+function buildHtml(character: CharacterDef, startQuiet: boolean, reducedMotion: boolean) {
   const modelPath = JSON.stringify(character.modelPath);
   const idle = JSON.stringify(character.clips.idle);
   const talk = JSON.stringify(character.clips.talk);
@@ -142,6 +154,8 @@ function buildHtml(character: CharacterDef, startSleeping: boolean, reducedMotio
   const scale = character.scale ?? 1;
   const bgAwake = '#F7F4EF';
   const bgSleep = '#E4EBF2';
+  const bgExcited = '#E8E4D8';
+  const bgCurious = '#EEF2F0';
 
   return `<!DOCTYPE html>
 <html>
@@ -149,9 +163,9 @@ function buildHtml(character: CharacterDef, startSleeping: boolean, reducedMotio
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <style>
-  html,body{margin:0;height:100%;background:${startSleeping ? bgSleep : bgAwake};overflow:hidden;touch-action:none}
+  html,body{margin:0;height:100%;background:${startQuiet ? bgSleep : bgAwake};overflow:hidden;touch-action:none}
   canvas{display:block;width:100%;height:100%}
-  #hud{position:absolute;left:10px;top:8px;right:10px;font:500 11px/1.35 system-ui,sans-serif;color:#4F5B57;z-index:2;pointer-events:none;opacity:0.55}
+  #hud{position:absolute;left:10px;top:8px;right:10px;font:500 11px/1.35 system-ui,sans-serif;color:#4F5B57;z-index:2;pointer-events:none;opacity:0.45}
 </style>
 <script type="importmap">
 {
@@ -174,13 +188,24 @@ const WANT_IDLE = ${idle};
 const WANT_TALK = ${talk};
 const WANT_REACT = ${react};
 const MODEL_SCALE = ${scale};
-let sleeping = ${startSleeping ? 'true' : 'false'};
+let expression = ${startQuiet ? "'resting'" : "'happy'"};
+let quiet = ${startQuiet ? 'true' : 'false'};
 let reducedMotion = ${reducedMotion ? 'true' : 'false'};
 let muted = true;
+let animToken = 0;
 const hud = document.getElementById('hud');
 
+const BG = {
+  happy: '${bgAwake}',
+  resting: '${bgSleep}',
+  sleepy: '${bgSleep}',
+  curious: '${bgCurious}',
+  waving: '${bgAwake}',
+  excited: '${bgExcited}',
+};
+
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(sleeping ? '${bgSleep}' : '${bgAwake}');
+scene.background = new THREE.Color(BG[expression] || '${bgAwake}');
 
 const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -220,9 +245,14 @@ let modelSize = new THREE.Vector3(1, 1, 1);
 const clock = new THREE.Clock();
 let clipNames = [];
 let baseQuat = new THREE.Quaternion();
+let basePos = new THREE.Vector3();
 
 function easeSoft(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function isQuietExpr(e) {
+  return e === 'resting' || e === 'sleepy' || e === 'curious';
 }
 
 function resolveName(wanted) {
@@ -263,100 +293,170 @@ function playClip(wanted, { loop = true, fade = 0.55, speed = 1 } = {}) {
   next.clampWhenFinished = !loop;
   next.fadeIn(fade).play();
   current = next;
-  hud.textContent = sleeping ? 'resting' : '';
   return next;
 }
 
 function idleSpeed() {
   if (reducedMotion) return 0;
-  return sleeping ? 0.28 : 0.48;
+  if (expression === 'sleepy') return 0.22;
+  if (expression === 'curious') return 0.38;
+  if (expression === 'excited') return 0.55;
+  if (quiet) return 0.28;
+  return 0.48;
 }
 
-function goIdle() {
+function setBackground(e) {
+  const c = BG[e] || BG.happy;
+  scene.background = new THREE.Color(c);
+  document.body.style.background = c;
+}
+
+function applyQuietPose(on, cozy = false) {
+  if (!root) return;
+  root.quaternion.copy(baseQuat);
+  if (on) {
+    root.rotateZ(cozy ? -0.48 : -0.4);
+    root.rotateX(cozy ? 0.14 : 0.1);
+  }
+}
+
+function goBaseIdle() {
   talking = false;
+  quiet = isQuietExpr(expression);
+  setBackground(expression);
+  applyQuietPose(quiet, expression === 'sleepy');
   if (reducedMotion) {
-    if (current) {
-      current.paused = true;
-      current.setEffectiveTimeScale(0);
-    } else {
-      playClip(WANT_IDLE, { loop: true, speed: 0, fade: 0.8 });
-      if (current) {
-        current.paused = true;
-        current.setEffectiveTimeScale(0);
-      }
-    }
-    applySleepPose(sleeping);
+    playClip(WANT_IDLE, { loop: true, speed: 0, fade: 0.8 });
+    if (current) { current.paused = true; current.setEffectiveTimeScale(0); }
     return;
   }
   playClip(WANT_IDLE, { loop: true, speed: idleSpeed(), fade: 0.7 });
-  applySleepPose(sleeping);
 }
 
-function applySleepPose(on) {
+function softBob({ amp = 0.035, dur = 1600, yaw = 0, scalePulse = 0 } = {}) {
   if (!root) return;
-  if (on) {
-    root.quaternion.copy(baseQuat);
-    root.rotateZ(-0.4);
-    root.rotateX(0.1);
-    scene.background = new THREE.Color('${bgSleep}');
-    document.body.style.background = '${bgSleep}';
-  } else {
-    root.quaternion.copy(baseQuat);
-    scene.background = new THREE.Color('${bgAwake}');
-    document.body.style.background = '${bgAwake}';
-  }
-}
-
-function doReact() {
-  if (talking || sleeping || reducedMotion) return doReactGentle();
-  const a = playClip(WANT_REACT, { loop: false, speed: 0.62, fade: 0.6 });
-  if (!a || !mixer) return goIdle();
-  const onFin = (e) => {
-    if (e.action !== a) return;
-    mixer.removeEventListener('finished', onFin);
-    goIdle();
-  };
-  mixer.addEventListener('finished', onFin);
-}
-
-function doReactGentle() {
-  if (!root || sleeping) return;
+  const token = ++animToken;
   const start = performance.now();
   const startY = root.position.y;
-  const dur = 1600;
+  const startYaw = root.rotation.y;
+  const startScale = root.scale.x;
   function step(now) {
+    if (token !== animToken || !root) return;
     const t = Math.min(1, (now - start) / dur);
     const e = easeSoft(t);
-    root.position.y = startY + Math.sin(e * Math.PI) * 0.035;
+    root.position.y = startY + Math.sin(e * Math.PI) * amp;
+    if (yaw) root.rotation.y = startYaw + Math.sin(e * Math.PI * 2) * yaw;
+    if (scalePulse) {
+      const s = startScale * (1 + Math.sin(e * Math.PI) * scalePulse);
+      root.scale.setScalar(s);
+    }
     if (t < 1) requestAnimationFrame(step);
-    else root.position.y = startY;
+    else {
+      root.position.y = startY;
+      root.rotation.y = startYaw;
+      root.scale.setScalar(startScale);
+    }
   }
   requestAnimationFrame(step);
 }
 
-function doWave() {
-  if (sleeping) return;
+function doReactGentle() {
+  softBob({ amp: quiet ? 0.02 : 0.035, dur: 1600 });
+}
+
+function doWaveGreeting() {
+  // Greeting overlay — never guilt-coded; works in quiet band as a soft sway
   if (reducedMotion) return doReactGentle();
-  playClip(WANT_TALK, { loop: false, speed: 0.55, fade: 0.65 });
-  const startY = root ? root.rotation.y : 0;
-  const start = performance.now();
-  const dur = 1800;
-  function bob(now) {
-    if (!root) return;
-    const t = Math.min(1, (now - start) / dur);
-    const e = easeSoft(t);
-    root.rotation.y = startY + Math.sin(e * Math.PI * 2) * 0.22;
-    if (t < 1) requestAnimationFrame(bob);
-    else {
-      root.rotation.y = startY;
-      goIdle();
-    }
-  }
-  requestAnimationFrame(bob);
+  playClip(WANT_TALK, { loop: false, speed: 0.5, fade: 0.65 });
+  softBob({ amp: 0.04, dur: 2000, yaw: quiet ? 0.14 : 0.24 });
+  setTimeout(() => {
+    if (expression === 'waving') goBaseIdle();
+  }, 2100);
+}
+
+function doExcited() {
+  quiet = false;
+  applyQuietPose(false);
+  setBackground('excited');
+  if (reducedMotion) return softBob({ amp: 0.03, dur: 1800, scalePulse: 0.02 });
+  const a = playClip(WANT_REACT, { loop: false, speed: 0.68, fade: 0.5 });
+  softBob({ amp: 0.055, dur: 2200, scalePulse: 0.035 });
+  if (!a || !mixer) return;
+  const onFin = (e) => {
+    if (e.action !== a) return;
+    mixer.removeEventListener('finished', onFin);
+    if (expression === 'excited') goBaseIdle();
+  };
+  mixer.addEventListener('finished', onFin);
+}
+
+function doCurious() {
+  quiet = true;
+  applyQuietPose(true, false);
+  setBackground('curious');
+  if (reducedMotion) return;
+  // Soft look-around / "paw at something" — survey clip or talk at slow speed
+  playClip(WANT_TALK, { loop: true, speed: 0.4, fade: 0.7 });
+  softBob({ amp: 0.025, dur: 2800, yaw: 0.32 });
+  setTimeout(() => {
+    if (expression === 'curious') playClip(WANT_IDLE, { loop: true, speed: idleSpeed(), fade: 0.7 });
+  }, 3000);
+}
+
+function doSleepy() {
+  quiet = true;
+  talking = false;
+  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
+  applyQuietPose(true, true);
+  setBackground('sleepy');
+  playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.8 });
+  // Soft yawn: gentle scale pulse, cozy not needy
+  softBob({ amp: 0.018, dur: 2400, scalePulse: 0.025 });
+}
+
+function doResting() {
+  quiet = true;
+  talking = false;
+  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
+  applyQuietPose(true, false);
+  setBackground('resting');
+  playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.28, fade: 0.8 });
+}
+
+function doHappy() {
+  quiet = false;
+  applyQuietPose(false);
+  setBackground('happy');
+  goBaseIdle();
+}
+
+function setExpression(next) {
+  const allowed = ['happy','resting','waving','excited','curious','sleepy'];
+  if (!allowed.includes(next)) return;
+  expression = next;
+  hud.textContent = '';
+  if (next === 'waving') return doWaveGreeting();
+  if (next === 'excited') return doExcited();
+  if (next === 'curious') return doCurious();
+  if (next === 'sleepy') return doSleepy();
+  if (next === 'resting') return doResting();
+  return doHappy();
+}
+
+function doReact() {
+  if (talking || quiet || reducedMotion) return doReactGentle();
+  const a = playClip(WANT_REACT, { loop: false, speed: 0.62, fade: 0.6 });
+  if (!a || !mixer) return goBaseIdle();
+  const onFin = (e) => {
+    if (e.action !== a) return;
+    mixer.removeEventListener('finished', onFin);
+    goBaseIdle();
+  };
+  mixer.addEventListener('finished', onFin);
 }
 
 function doSpeak(url) {
-  if (sleeping) return;
+  if (quiet) return;
   if (muted) {
     doReactGentle();
     return;
@@ -367,45 +467,31 @@ function doSpeak(url) {
     if (audioEl) { audioEl.pause(); audioEl = null; }
     if (url) {
       audioEl = new Audio(url);
-      audioEl.onended = () => { audioEl = null; goIdle(); };
-      audioEl.onerror = () => { audioEl = null; setTimeout(goIdle, 1800); };
-      audioEl.play().catch(() => setTimeout(goIdle, 1800));
-    } else setTimeout(goIdle, 2600);
-  } catch { setTimeout(goIdle, 2600); }
-}
-
-function doSleep() {
-  sleeping = true;
-  talking = false;
-  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
-  playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.25, fade: 0.8 });
-  applySleepPose(true);
-  hud.textContent = 'resting';
-}
-
-function doWake() {
-  sleeping = false;
-  applySleepPose(false);
-  goIdle();
+      audioEl.onended = () => { audioEl = null; goBaseIdle(); };
+      audioEl.onerror = () => { audioEl = null; setTimeout(goBaseIdle, 1800); };
+      audioEl.play().catch(() => setTimeout(goBaseIdle, 1800));
+    } else setTimeout(goBaseIdle, 2600);
+  } catch { setTimeout(goBaseIdle, 2600); }
 }
 
 window.__kpCmd = (msg) => {
   if (!msg || !msg.type) return;
   if (msg.type === 'react') doReact();
   if (msg.type === 'reactGentle') doReactGentle();
-  if (msg.type === 'wave') doWave();
+  if (msg.type === 'wave') setExpression('waving');
   if (msg.type === 'speak') doSpeak(msg.audioUrl || '');
-  if (msg.type === 'sleep') doSleep();
-  if (msg.type === 'wake') doWake();
+  if (msg.type === 'sleep') setExpression('sleepy');
+  if (msg.type === 'wake') setExpression('happy');
+  if (msg.type === 'setExpression') setExpression(msg.expression || 'happy');
   if (msg.type === 'setMuted') muted = Boolean(msg.muted);
   if (msg.type === 'setReducedMotion') {
     reducedMotion = Boolean(msg.on);
     controls.enableZoom = !reducedMotion;
-    goIdle();
+    goBaseIdle();
   }
   if (msg.type === 'stop') {
     if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
-    goIdle();
+    goBaseIdle();
   }
 };
 
@@ -458,11 +544,9 @@ loader.load(
 
     frameFullBody(root);
     baseQuat.copy(root.quaternion);
+    basePos.copy(root.position);
 
-    if (sleeping) doSleep();
-    else goIdle();
-
-    if (!current && clipNames[0]) playClip(clipNames[0], { loop: true, speed: idleSpeed() });
+    setExpression(expression);
 
     if (window.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready', clips: clipNames }));
@@ -472,7 +556,6 @@ loader.load(
   () => { hud.textContent = 'Could not load companion'; }
 );
 
-// Explicit buttons drive interaction — canvas tap does not surprise-trigger motion
 renderer.domElement.addEventListener('click', () => {});
 
 function onResize() {

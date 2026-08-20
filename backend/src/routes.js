@@ -20,6 +20,7 @@ import { evaluateAlerts } from './alerts.js';
 import { analyzeFoodPhoto, generateClinicianSummary } from './ai.js';
 import { appearanceFromUser, applyAppearancePatch } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
+import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -493,9 +494,19 @@ export function registerRoutes(app) {
     res.json({ alerts: live });
   });
 
-  // Static uploads
-  app.get('/uploads/:file', (req, res) => {
-    const filePath = path.join(UPLOADS, path.basename(req.params.file));
+  // Meal photos — JWT required; owner or clinician only (no public URL leaks)
+  app.get('/uploads/:file', requireAuth(), (req, res) => {
+    const filename = path.basename(req.params.file);
+    const db = readDb();
+    const checkIn = findCheckInByUploadFile(db, filename);
+    const decision = decideUploadAccess(req.auth, checkIn);
+
+    if (!decision.ok) {
+      if (decision.status === 404) return res.status(404).end();
+      return res.status(decision.status).json({ error: decision.error || 'Not allowed' });
+    }
+
+    const filePath = path.join(UPLOADS, filename);
     if (!fs.existsSync(filePath)) return res.status(404).end();
     res.sendFile(filePath);
   });
