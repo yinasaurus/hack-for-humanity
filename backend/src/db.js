@@ -14,6 +14,8 @@ const defaultDb = () => ({
   summaries: {},
   alerts: [],
   clinicianNotes: {},
+  /** Clinician-logged checkup attendance celebrations (date + optional note only). */
+  checkupCelebrations: {},
 });
 
 function ensureStore() {

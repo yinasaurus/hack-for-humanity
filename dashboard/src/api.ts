@@ -113,3 +113,21 @@ export async function addClinicianNote(patientId: string, text: string) {
   if (!res.ok) throw new Error(data.error || 'Could not save note');
   return data.note;
 }
+
+/** Clinician logs checkup attendance — date + optional note only (no body metrics). */
+export async function celebrateCheckup(
+  patientId: string,
+  payload: { attendedOn: string; note?: string }
+) {
+  const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/checkup-celebration`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      attendedOn: payload.attendedOn,
+      note: payload.note?.trim() || undefined,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not celebrate checkup');
+  return data.celebration;
+}

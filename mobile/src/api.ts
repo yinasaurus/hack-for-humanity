@@ -29,6 +29,12 @@ export type Unlock = {
   unlockedAt: string;
 };
 
+export type CheckupCelebrationPending = {
+  id: string;
+  attendedOn: string;
+  message: string;
+};
+
 export type CompanionState = {
   mood: 'happy' | 'resting';
   walksAvailable: boolean;
@@ -36,6 +42,8 @@ export type CompanionState = {
   newlyUnlocked: Unlock[];
   /** YYYY-MM-DD days with a check-in (for soft presence dots). */
   helloDays?: string[];
+  /** One-time clinician checkup celebration, if waiting to be shown. */
+  checkupCelebration?: CheckupCelebrationPending | null;
 } & PetAppearance;
 
 export type AuthResult = { user: User; token: string };
@@ -114,6 +122,23 @@ export async function fetchCompanion(userId: string): Promise<CompanionState> {
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not load companion');
+  return data;
+}
+
+/** Mark checkup celebration as seen so it does not repeat. */
+export async function acknowledgeCheckupCelebration(
+  userId: string,
+  celebrationId: string
+): Promise<CompanionState> {
+  const res = await fetch(
+    `${API_BASE}/api/patient/${userId}/checkup-celebration/${celebrationId}/ack`,
+    {
+      method: 'POST',
+      headers: await authHeaders(),
+    }
+  );
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not acknowledge celebration');
   return data;
 }
 

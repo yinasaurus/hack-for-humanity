@@ -30,6 +30,13 @@ import {
   patientsInClinic,
   DEFAULT_CLINIC_ID,
 } from './clinicAccess.js';
+import {
+  listCelebrationsForPatient,
+  normalizeAttendedOn,
+  normalizeEncouragementNote,
+  pendingCelebrationForPatient,
+  toPatientPendingCelebration,
+} from './checkupCelebration.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -82,6 +89,7 @@ export function toPatientCompanionState(userId) {
 
   const allUnlocks = [...unlocks, ...newUnlocks];
   const appearance = appearanceFromUser(user);
+  const pendingCheckup = pendingCelebrationForPatient(db, userId);
 
   return {
     mood,
@@ -89,6 +97,7 @@ export function toPatientCompanionState(userId) {
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
     helloDays: uniqueSortedDays(checkIns),
+    checkupCelebration: toPatientPendingCelebration(pendingCheckup),
     ...appearance,
     // No calories, macros, scores, streak counts, or days-since metrics
   };
@@ -294,6 +303,36 @@ export function registerRoutes(app) {
     }
     res.json(toPatientCompanionState(user.id));
   });
+
+  /** Patient acknowledges a checkup celebration (one-time; does not repeat). */
+  app.post(
+    '/api/patient/:userId/checkup-celebration/:celebrationId/ack',
+    requireAuth(['patient']),
+    (req, res) => {
+      if (req.auth.sub !== req.params.userId) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+      const user = readDb().users.find((u) => u.id === req.params.userId);
+      if (!user || user.role !== 'patient') {
+        return res.status(404).json({ error: 'patient not found' });
+      }
+
+      let found = false;
+      updateDb((d) => {
+        if (!d.checkupCelebrations) d.checkupCelebrations = {};
+        const list = d.checkupCelebrations[user.id] || [];
+        const record = list.find((c) => c.id === req.params.celebrationId);
+        if (!record) return;
+        found = true;
+        if (!record.acknowledgedAt) {
+          record.acknowledgedAt = new Date().toISOString();
+        }
+      });
+
+      if (!found) return res.status(404).json({ error: 'celebration not found' });
+      res.json(toPatientCompanionState(user.id));
+    }
+  );
 
   app.get('/api/patient/:userId/check-ins', requireAuth(['patient']), (req, res) => {
     if (req.auth.sub !== req.params.userId) {
@@ -514,6 +553,13 @@ export function registerRoutes(app) {
       consistency30,
       calorieTrend,
       clinicianNotes: db.clinicianNotes?.[patient.id] || [],
+      checkupCelebrations: listCelebrationsForPatient(db, patient.id).map((c) => ({
+        id: c.id,
+        attendedOn: c.attendedOn,
+        note: c.note || null,
+        createdAt: c.createdAt,
+        acknowledgedAt: c.acknowledgedAt || null,
+      })),
       checkIns: checkIns.map((c) => ({
         ...toPatientSafeCheckIn(c),
         analysis: db.analyses[c.id] || null,
@@ -524,6 +570,42 @@ export function registerRoutes(app) {
       aiProvider: aiProvider(),
     });
   });
+
+  /**
+   * Clinician manually logs that a checkup was attended.
+   * Fields: attendedOn (date) + optional free-text note only — no body metrics.
+   */
+  app.post(
+    '/api/clinician/patients/:id/checkup-celebration',
+    requireAuth(['clinician']),
+    (req, res) => {
+      const db = readDb();
+      const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+      if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+      const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+      if (!patient) return res.status(404).json({ error: 'not found' });
+      if (!clinicianCanAccessPatient(clinician, patient)) {
+        return res.status(403).json({ error: 'Not allowed for this clinic' });
+      }
+
+      const celebration = {
+        id: uuid(),
+        attendedOn: normalizeAttendedOn(req.body?.attendedOn),
+        note: normalizeEncouragementNote(req.body?.note),
+        createdAt: new Date().toISOString(),
+        createdBy: clinician.id,
+        acknowledgedAt: null,
+      };
+
+      updateDb((d) => {
+        if (!d.checkupCelebrations) d.checkupCelebrations = {};
+        if (!d.checkupCelebrations[patient.id]) d.checkupCelebrations[patient.id] = [];
+        d.checkupCelebrations[patient.id].unshift(celebration);
+      });
+
+      res.status(201).json({ celebration });
+    }
+  );
 
   app.post('/api/clinician/patients/:id/notes', requireAuth(['clinician']), (req, res) => {
     const text = String(req.body?.text || '').trim().slice(0, 2000);

@@ -16,12 +16,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
 import { HelloCalendar } from '../components/HelloCalendar';
 import { MilestoneCelebration } from '../components/MilestoneCelebration';
+import { CheckupCelebration } from '../components/CheckupCelebration';
 import { SupportChip } from '../components/SupportChip';
 import { AnimalWebView, characterForLiveCompanion } from '../characters';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../SettingsContext';
-import { CompanionState, Unlock, fetchCompanion } from '../api';
+import {
+  CompanionState,
+  Unlock,
+  acknowledgeCheckupCelebration,
+  fetchCompanion,
+  type CheckupCelebrationPending,
+} from '../api';
 import {
   expressionCaption,
   nextAmbientIdle,
@@ -48,6 +55,8 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showMilestone, setShowMilestone] = useState(false);
   const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
+  const [checkupMoment, setCheckupMoment] = useState<CheckupCelebrationPending | null>(null);
+  const [showCheckup, setShowCheckup] = useState(false);
   const [napping, setNapping] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   /** Server presence band — happy | resting only (quiet hours, not a miss penalty) */
@@ -104,6 +113,12 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
       if (data.newlyUnlocked?.length && !newUnlocks.length) {
         setPendingUnlocks(data.newlyUnlocked);
         setShowMilestone(true);
+      } else if (data.checkupCelebration?.id) {
+        setCheckupMoment(data.checkupCelebration);
+        setShowCheckup(true);
+        setNapping(false);
+        clearExpressionTimer();
+        setExpression('excited');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load companion');
@@ -147,6 +162,13 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     clearExpressionTimer();
     setExpression('excited');
   }, [showMilestone]);
+
+  // Checkup celebration → excited companion (attendance acknowledgment only)
+  useEffect(() => {
+    if (!showCheckup) return;
+    clearExpressionTimer();
+    setExpression('excited');
+  }, [showCheckup]);
 
   // App foreground → waving greeting (not tied to check-ins)
   useEffect(() => {
@@ -220,6 +242,37 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           setPendingUnlocks([]);
           navigation.setParams?.({ newUnlocks: undefined });
           settleAfterGesture(napping);
+          if (companion?.checkupCelebration?.id && !checkupMoment) {
+            setCheckupMoment(companion.checkupCelebration);
+            setShowCheckup(true);
+            setNapping(false);
+            clearExpressionTimer();
+            setExpression('excited');
+          }
+        }}
+      />
+
+      <CheckupCelebration
+        visible={showCheckup && Boolean(checkupMoment)}
+        petName={companion?.petName}
+        message={
+          checkupMoment?.message ||
+          'Your clinician wanted you to know they are proud of you for being here today.'
+        }
+        onClose={() => {
+          const id = checkupMoment?.id;
+          setShowCheckup(false);
+          setCheckupMoment(null);
+          settleAfterGesture(false);
+          if (user && id) {
+            void acknowledgeCheckupCelebration(user.id, id)
+              .then((next) => {
+                setCompanion(next);
+              })
+              .catch(() => {
+                /* still dismiss locally so it does not loop in-session */
+              });
+          }
         }}
       />
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   addClinicianNote,
+  celebrateCheckup,
   clinicLogin,
   fetchAlerts,
   fetchAiStatus,
@@ -33,6 +34,14 @@ function formatDay(iso?: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function todayDateInput() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(Boolean(getClinicToken()));
   const [email, setEmail] = useState('clinic@demo.local');
@@ -47,6 +56,11 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<'live' | 'mock' | 'unknown'>('unknown');
   const [showTrend, setShowTrend] = useState(false);
+  const [showCelebrateForm, setShowCelebrateForm] = useState(false);
+  const [celebrateDate, setCelebrateDate] = useState(todayDateInput);
+  const [celebrateNote, setCelebrateNote] = useState('');
+  const [celebrateBusy, setCelebrateBusy] = useState(false);
+  const [celebrateOk, setCelebrateOk] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -80,6 +94,10 @@ export default function App() {
   useEffect(() => {
     if (!selectedId || !authed) return;
     setShowTrend(false);
+    setShowCelebrateForm(false);
+    setCelebrateDate(todayDateInput());
+    setCelebrateNote('');
+    setCelebrateOk(null);
     (async () => {
       try {
         const d = await fetchPatientDetail(selectedId);
@@ -126,6 +144,28 @@ export default function App() {
       setDetail(d);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save note');
+    }
+  };
+
+  const onCelebrateCheckup = async () => {
+    if (!selectedId) return;
+    setCelebrateBusy(true);
+    setCelebrateOk(null);
+    setError(null);
+    try {
+      await celebrateCheckup(selectedId, {
+        attendedOn: celebrateDate || todayDateInput(),
+        note: celebrateNote.trim() || undefined,
+      });
+      setCelebrateOk('Celebration sent — the patient will see a one-time warm hello from their companion.');
+      setCelebrateNote('');
+      setShowCelebrateForm(false);
+      const d = await fetchPatientDetail(selectedId);
+      setDetail(d);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not celebrate checkup');
+    } finally {
+      setCelebrateBusy(false);
     }
   };
 
@@ -417,6 +457,93 @@ export default function App() {
                   <p className="muted">No summary yet — generate one before an appointment.</p>
                 )}
               </article>
+
+              <section className="block celebrate-checkup">
+                <h3>Celebrate checkup</h3>
+                <p className="muted tiny">
+                  Manual only — marks that they attended. No body metrics, scores, or inferred
+                  outcomes.
+                </p>
+                {!showCelebrateForm ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      setCelebrateOk(null);
+                      setCelebrateDate(todayDateInput());
+                      setCelebrateNote('');
+                      setShowCelebrateForm(true);
+                    }}
+                    aria-label={`Celebrate checkup for ${detail.patient.name}`}
+                  >
+                    Celebrate checkup
+                  </button>
+                ) : (
+                  <form
+                    className="celebrate-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void onCelebrateCheckup();
+                    }}
+                  >
+                    <label className="field">
+                      <span>Checkup date</span>
+                      <input
+                        type="date"
+                        value={celebrateDate}
+                        onChange={(e) => setCelebrateDate(e.target.value)}
+                        required
+                        aria-label="Checkup attended date"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Optional encouragement (shown to patient)</span>
+                      <textarea
+                        value={celebrateNote}
+                        onChange={(e) => setCelebrateNote(e.target.value)}
+                        placeholder='e.g. "great session today"'
+                        rows={2}
+                        maxLength={280}
+                        aria-label="Optional encouragement note for patient"
+                      />
+                    </label>
+                    <div className="celebrate-actions">
+                      <button type="submit" className="primary" disabled={celebrateBusy}>
+                        {celebrateBusy ? 'Sending…' : 'Send celebration'}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={celebrateBusy}
+                        onClick={() => setShowCelebrateForm(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {celebrateOk ? <p className="ok tiny">{celebrateOk}</p> : null}
+                {(detail.checkupCelebrations || []).length > 0 ? (
+                  <ul className="note-list">
+                    {(detail.checkupCelebrations || []).slice(0, 5).map(
+                      (c: {
+                        id: string;
+                        attendedOn: string;
+                        note?: string | null;
+                        acknowledgedAt?: string | null;
+                      }) => (
+                        <li key={c.id}>
+                          <time className="muted tiny">
+                            Attended {c.attendedOn}
+                            {c.acknowledgedAt ? ' · seen by patient' : ' · waiting for patient'}
+                          </time>
+                          <p>{c.note || 'Warm default message'}</p>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : null}
+              </section>
 
               <section className="block notes">
                 <h3>Your notes</h3>
