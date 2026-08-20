@@ -42,25 +42,45 @@ describe('currentStreak', () => {
 });
 
 describe('petMood', () => {
-  it('is happy after today check-in', () => {
-    assert.equal(petMood([ci(0)], today), 'happy');
+  it('is happy during daytime hours', () => {
+    const afternoon = new Date(`${today}T15:00:00`);
+    assert.equal(petMood([], today, afternoon), 'happy');
   });
 
-  it('is happy after yesterday check-in', () => {
-    assert.equal(petMood([ci(1)], today), 'happy');
+  it('is resting during quiet hours (cozy default, not a miss penalty)', () => {
+    const late = new Date(`${today}T22:30:00`);
+    assert.equal(petMood([], today, late), 'resting');
+    const early = new Date(`${today}T05:00:00`);
+    assert.equal(petMood([], today, early), 'resting');
   });
 
-  it('is resting after longer gap — never a suffering label', () => {
-    assert.equal(petMood([ci(3)], today), 'resting');
+  it('does not vary based on days-since-last-check-in', () => {
+    const afternoon = new Date(`${today}T14:00:00`);
+    const a = petMood([ci(0)], today, afternoon);
+    const b = petMood([ci(3)], today, afternoon);
+    const c = petMood([ci(30)], today, afternoon);
+    const d = petMood([], today, afternoon);
+    assert.equal(a, 'happy');
+    assert.equal(b, a);
+    assert.equal(c, a);
+    assert.equal(d, a);
+
+    const night = new Date(`${today}T23:00:00`);
+    const n0 = petMood([ci(0)], today, night);
+    const n3 = petMood([ci(3)], today, night);
+    const nEmpty = petMood([], today, night);
+    assert.equal(n0, 'resting');
+    assert.equal(n3, n0);
+    assert.equal(nEmpty, n0);
   });
 
   it('only returns happy or resting presence (no negative moods)', () => {
     const allowed = new Set(['happy', 'resting']);
+    const afternoon = new Date(`${today}T12:00:00`);
     for (const daysAgo of [0, 1, 2, 7, 30]) {
-      const m = petMood([ci(daysAgo)], today);
+      const m = petMood([ci(daysAgo)], today, afternoon);
       assert.ok(allowed.has(m), `unexpected mood ${m}`);
     }
-    assert.equal(petMood([], today), 'resting');
   });
 });
 

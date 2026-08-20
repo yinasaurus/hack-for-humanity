@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 import { readDb, updateDb, DATA_DIR } from './db.js';
 import {
   currentStreak,
-  daysSinceLastCheckIn,
   milestonesReached,
   petMood,
   rewardForMilestone,
@@ -21,6 +20,16 @@ import { analyzeFoodPhoto, generateClinicianSummary } from './ai.js';
 import { appearanceFromUser, applyAppearancePatch } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
+import {
+  canDeleteCheckInPhoto,
+  purgeCheckInPhoto,
+} from './deletePhoto.js';
+import {
+  clinicIdOf,
+  clinicianCanAccessPatient,
+  patientsInClinic,
+  DEFAULT_CLINIC_ID,
+} from './clinicAccess.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -46,6 +55,7 @@ export function toPatientCompanionState(userId) {
   const db = readDb();
   const user = db.users.find((u) => u.id === userId);
   const checkIns = db.checkIns.filter((c) => c.userId === userId);
+  // Compute streaks/milestones server-side; do not expose counts to patients.
   const streak = currentStreak(checkIns);
   const totalDays = uniqueSortedDays(checkIns).length;
   const mood = petMood(checkIns);
@@ -75,15 +85,12 @@ export function toPatientCompanionState(userId) {
 
   return {
     mood,
-    streakDays: streak,
-    totalCheckInDays: totalDays,
-    daysSinceLastCheckIn: daysSinceLastCheckIn(checkIns),
     walksAvailable: walksUnlocked(checkIns),
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
     helloDays: uniqueSortedDays(checkIns),
     ...appearance,
-    // No calories, macros, scores
+    // No calories, macros, scores, streak counts, or days-since metrics
   };
 }
 
@@ -156,6 +163,7 @@ export function registerRoutes(app) {
       email: normalized,
       name: (name && String(name).trim()) || normalized.split('@')[0],
       role: 'patient',
+      clinicId: DEFAULT_CLINIC_ID,
       onboarded: false,
       passwordHash,
       createdAt: new Date().toISOString(),
@@ -187,6 +195,7 @@ export function registerRoutes(app) {
         email: normalized,
         name: normalized.split('@')[0],
         role: 'clinician',
+        clinicId: DEFAULT_CLINIC_ID,
         onboarded: true,
         createdAt: new Date().toISOString(),
       };
@@ -344,8 +353,13 @@ export function registerRoutes(app) {
     if (!patientId) return res.status(400).json({ error: 'patientId required' });
 
     const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
     const patient = db.users.find((u) => u.id === patientId && u.role === 'patient');
     if (!patient) return res.status(404).json({ error: 'patient not found' });
+    if (!clinicianCanAccessPatient(clinician, patient)) {
+      return res.status(403).json({ error: 'Not allowed for this clinic' });
+    }
 
     const checkIns = db.checkIns.filter((c) => c.userId === patientId);
     const analyses = Object.values(db.analyses).filter((a) => a.userId === patientId);
@@ -392,32 +406,39 @@ export function registerRoutes(app) {
     res.json({ summary: summaryRecord, alerts: readDb().alerts.filter((a) => a.patientId === patientId) });
   });
 
-  // --- Clinician endpoints ---
-  app.get('/api/clinician/patients', requireAuth(['clinician']), (_req, res) => {
+  // --- Clinician endpoints (scoped to clinician's clinicId) ---
+  app.get('/api/clinician/patients', requireAuth(['clinician']), (req, res) => {
     const db = readDb();
-    const patients = db.users
-      .filter((u) => u.role === 'patient')
-      .map((p) => {
-        const checkIns = db.checkIns.filter((c) => c.userId === p.id);
-        return {
-          id: p.id,
-          name: p.name,
-          email: p.email,
-          rate7: checkInRate(checkIns, 7),
-          rate30: checkInRate(checkIns, 30),
-          streak: currentStreak(checkIns),
-          lastCheckIn: checkIns.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-            ?.createdAt,
-          totalDays: uniqueSortedDays(checkIns).length,
-        };
-      });
-    res.json({ patients });
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+    const clinicId = clinicIdOf(clinician);
+    const patients = patientsInClinic(db, clinicId).map((p) => {
+      const checkIns = db.checkIns.filter((c) => c.userId === p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        clinicId: clinicIdOf(p),
+        rate7: checkInRate(checkIns, 7),
+        rate30: checkInRate(checkIns, 30),
+        streak: currentStreak(checkIns),
+        lastCheckIn: checkIns.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+          ?.createdAt,
+        totalDays: uniqueSortedDays(checkIns).length,
+      };
+    });
+    res.json({ patients, clinicId });
   });
 
   app.get('/api/clinician/patients/:id', requireAuth(['clinician']), (req, res) => {
     const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
     const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
     if (!patient) return res.status(404).json({ error: 'not found' });
+    if (!clinicianCanAccessPatient(clinician, patient)) {
+      return res.status(403).json({ error: 'Not allowed for this clinic' });
+    }
 
     const checkIns = db.checkIns
       .filter((c) => c.userId === patient.id)
@@ -446,7 +467,12 @@ export function registerRoutes(app) {
       }));
 
     res.json({
-      patient: { id: patient.id, name: patient.name, email: patient.email },
+      patient: {
+        id: patient.id,
+        name: patient.name,
+        email: patient.email,
+        clinicId: clinicIdOf(patient),
+      },
       metrics,
       consistency30,
       calorieTrend,
@@ -465,8 +491,13 @@ export function registerRoutes(app) {
     const text = String(req.body?.text || '').trim().slice(0, 2000);
     if (!text) return res.status(400).json({ error: 'note text required' });
     const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
     const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
     if (!patient) return res.status(404).json({ error: 'not found' });
+    if (!clinicianCanAccessPatient(clinician, patient)) {
+      return res.status(403).json({ error: 'Not allowed for this clinic' });
+    }
 
     const note = {
       id: uuid(),
@@ -482,10 +513,12 @@ export function registerRoutes(app) {
     res.status(201).json({ note });
   });
 
-  app.get('/api/clinician/alerts', requireAuth(['clinician']), (_req, res) => {
+  app.get('/api/clinician/alerts', requireAuth(['clinician']), (req, res) => {
     const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
     const live = [];
-    for (const p of db.users.filter((u) => u.role === 'patient')) {
+    for (const p of patientsInClinic(db, clinicIdOf(clinician))) {
       const checkIns = db.checkIns.filter((c) => c.userId === p.id);
       const analyses = Object.values(db.analyses).filter((a) => a.userId === p.id);
       const { alerts } = evaluateAlerts(p, checkIns, analyses);
@@ -494,12 +527,22 @@ export function registerRoutes(app) {
     res.json({ alerts: live });
   });
 
-  // Meal photos — JWT required; owner or clinician only (no public URL leaks)
+  // Meal photos — JWT required; owner or same-clinic clinician only
   app.get('/uploads/:file', requireAuth(), (req, res) => {
     const filename = path.basename(req.params.file);
     const db = readDb();
     const checkIn = findCheckInByUploadFile(db, filename);
-    const decision = decideUploadAccess(req.auth, checkIn);
+    const patientUser = checkIn
+      ? db.users.find((u) => u.id === checkIn.userId)
+      : null;
+    const clinicianUser =
+      req.auth.role === 'clinician'
+        ? db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician')
+        : null;
+    const decision = decideUploadAccess(req.auth, checkIn, {
+      clinicianUser,
+      patientUser,
+    });
 
     if (!decision.ok) {
       if (decision.status === 404) return res.status(404).end();
@@ -509,5 +552,36 @@ export function registerRoutes(app) {
     const filePath = path.join(UPLOADS, filename);
     if (!fs.existsSync(filePath)) return res.status(404).end();
     res.sendFile(filePath);
+  });
+
+  /**
+   * Delete a check-in meal photo: removes uploads/ file + store.json check-in/analysis.
+   * Patient (owner) or same-clinic clinician.
+   */
+  app.delete('/api/check-ins/:id/photo', requireAuth(), (req, res) => {
+    const db = readDb();
+    const checkIn = db.checkIns.find((c) => c.id === req.params.id);
+    if (!checkIn) return res.status(404).json({ error: 'not found' });
+
+    const patientUser = db.users.find((u) => u.id === checkIn.userId);
+    const clinicianUser =
+      req.auth.role === 'clinician'
+        ? db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician')
+        : null;
+
+    if (!canDeleteCheckInPhoto(req.auth, checkIn, { clinicianUser, patientUser })) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    let result = { deletedFile: false, hadRecord: false };
+    updateDb((d) => {
+      result = purgeCheckInPhoto(d, UPLOADS, checkIn.id);
+    });
+
+    res.json({
+      ok: true,
+      checkInId: checkIn.id,
+      deletedFile: result.deletedFile,
+    });
   });
 }

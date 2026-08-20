@@ -123,14 +123,23 @@ export default function App() {
   if (!authed) {
     return (
       <div className="app login-wrap">
-        <form className="login-card" onSubmit={onLogin}>
+        <form className="login-card" onSubmit={onLogin} aria-label="Clinician sign in">
           <p className="eyebrow">Clinician access</p>
           <h1>KindPlate Clinic</h1>
           <p className="muted">Signed sessions required. Demo: clinic@demo.local / demo</p>
-          {error && <div className="banner error">{error}</div>}
+          {error && (
+            <div className="banner error" role="alert">
+              {error}
+            </div>
+          )}
           <label>
             Email
-            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              aria-label="Clinician email"
+            />
           </label>
           <label>
             Password
@@ -138,9 +147,13 @@ export default function App() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              aria-label="Clinician password"
             />
           </label>
-          <button type="submit">Sign in</button>
+          <button type="submit" aria-label="Sign in to clinician dashboard">
+            Sign in
+          </button>
         </form>
       </div>
     );
@@ -160,13 +173,14 @@ export default function App() {
             </strong>
           </p>
         </div>
-        <div className="header-actions">
-          <button type="button" className="ghost" onClick={load}>
+        <nav className="header-actions" aria-label="Dashboard actions">
+          <button type="button" className="ghost" onClick={load} aria-label="Refresh patient list and alerts">
             Refresh
           </button>
           <button
             type="button"
             className="ghost"
+            aria-label="Sign out of clinician dashboard"
             onClick={() => {
               setClinicToken(null);
               setAuthed(false);
@@ -174,19 +188,41 @@ export default function App() {
           >
             Sign out
           </button>
-        </div>
+        </nav>
       </header>
+
+      <div
+        className={`banner ai-status-banner ${liveAi ? 'ai-status-live' : 'ai-status-mock'}`}
+        role="status"
+        aria-live="polite"
+      >
+        {liveAi ? (
+          <>
+            <strong>Live AI</strong> — OpenAI vision + summaries are active for this session.
+          </>
+        ) : (
+          <>
+            <strong>Mock AI — no API key set</strong> — photo analysis and summaries are
+            enriched demo data, not live model output. Set <code>OPENAI_API_KEY</code> in
+            backend <code>.env</code> and restart for live AI.
+          </>
+        )}
+      </div>
 
       <div className="banner ethics">
         <strong>Ethics reminder:</strong> Estimates are observational. Patients never see
         calories or scores. AI observes — clinicians decide.
       </div>
 
-      {error && <div className="banner error">{error}</div>}
+      {error && (
+        <div className="banner error" role="alert">
+          {error}
+        </div>
+      )}
       {loading && <p className="muted">Loading…</p>}
 
-      <section className="alerts">
-        <h2>Why these alerts fired</h2>
+      <section className="alerts" aria-labelledby="alerts-heading">
+        <h2 id="alerts-heading">Why these alerts fired</h2>
         <p className="muted">
           Each flag includes the rule that triggered it. Tap a patient to jump to their chart.
           You decide any outreach.
@@ -197,7 +233,11 @@ export default function App() {
           <ul className="alert-list">
             {alerts.map((a) => (
               <li key={a.id}>
-                <button type="button" onClick={() => setSelectedId(a.patientId)}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(a.patientId)}
+                  aria-label={`Open ${a.patientName}: ${a.reason}`}
+                >
                   <div className="alert-top">
                     <strong>{a.patientName}</strong>
                     <span className={`sev sev-${a.severity || 'info'}`}>{a.severity || 'info'}</span>
@@ -213,8 +253,8 @@ export default function App() {
       </section>
 
       <div className="grid">
-        <section className="panel">
-          <h2>Patients</h2>
+        <section className="panel" aria-labelledby="patients-heading">
+          <h2 id="patients-heading">Patients</h2>
           <table>
             <thead>
               <tr>
@@ -230,6 +270,16 @@ export default function App() {
                   key={p.id}
                   className={p.id === selectedId ? 'selected' : undefined}
                   onClick={() => setSelectedId(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedId(p.id);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`View patient ${p.name}`}
+                  aria-pressed={p.id === selectedId}
                 >
                   <td>{p.name}</td>
                   <td>{pct(p.rate7)}</td>
@@ -241,23 +291,32 @@ export default function App() {
           </table>
         </section>
 
-        <section className="panel detail">
+        <section
+          className="panel detail"
+          aria-labelledby={detail ? 'patient-detail-heading' : undefined}
+          aria-label={detail ? undefined : 'Patient detail'}
+        >
           {!detail ? (
             <p className="muted">Select a patient</p>
           ) : (
             <>
               <div className="detail-head">
                 <div>
-                  <h2>{detail.patient.name}</h2>
+                  <h2 id="patient-detail-heading">{detail.patient.name}</h2>
                   <p className="muted">{detail.patient.email}</p>
                 </div>
-                <button type="button" onClick={onGenerate} disabled={summaryBusy}>
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  disabled={summaryBusy}
+                  aria-label={`Generate AI summary for ${detail.patient.name}`}
+                >
                   {summaryBusy ? 'Generating…' : 'Generate AI summary'}
                 </button>
               </div>
 
               {selectedAlert ? (
-                <div className="why-box">
+                <div className="why-box" role="status" aria-label={`Alert for ${detail.patient.name}`}>
                   <p className="why-label">Why this patient is flagged</p>
                   <p className="why-reason">{selectedAlert.reason}</p>
                   {selectedAlert.detail ? <p className="muted">{selectedAlert.detail}</p> : null}
@@ -266,7 +325,7 @@ export default function App() {
                   ) : null}
                 </div>
               ) : (
-                <div className="why-box calm">
+                <div className="why-box calm" role="status">
                   <p className="why-label">No active alert</p>
                   <p className="muted">
                     Logging patterns are within rule thresholds right now. Still observational —
@@ -295,7 +354,7 @@ export default function App() {
               </div>
 
               <h3>30-day logging map</h3>
-              <div className="heat">
+              <div className="heat" role="img" aria-label="30-day logging presence map">
                 {(detail.consistency30 || []).map(
                   (d: { date: string; logged: boolean }) => (
                     <span
@@ -347,6 +406,7 @@ export default function App() {
                       type="button"
                       className="ghost"
                       onClick={() => navigator.clipboard.writeText(detail.summary.summary)}
+                      aria-label="Copy AI summary to clipboard"
                     >
                       Copy summary
                     </button>
@@ -363,8 +423,13 @@ export default function App() {
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Appointment thoughts (stored for your team — not shown to patient)"
                   rows={3}
+                  aria-label={`Clinician note for ${detail.patient.name}`}
                 />
-                <button type="button" onClick={onAddNote}>
+                <button
+                  type="button"
+                  onClick={onAddNote}
+                  aria-label={`Save clinician note for ${detail.patient.name}`}
+                >
                   Save note
                 </button>
                 <ul>
@@ -402,7 +467,7 @@ export default function App() {
                         <AuthenticatedMealImage
                           className="meal-thumb"
                           photoUrl={c.photoUrl}
-                          alt="Meal check-in"
+                          alt={`Meal check-in photo from ${formatDate(c.createdAt)}`}
                         />
                       ) : (
                         <div className="meal-thumb placeholder">No photo</div>

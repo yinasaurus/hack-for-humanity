@@ -17,6 +17,7 @@ const patients = [
     email: 'maya@demo.local',
     name: 'Maya',
     role: 'patient',
+    clinicId: 'clinic-demo',
     onboarded: true,
     // password: demo
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
@@ -27,6 +28,7 @@ const patients = [
     email: 'jordan@demo.local',
     name: 'Jordan',
     role: 'patient',
+    clinicId: 'clinic-demo',
     onboarded: true,
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
@@ -36,6 +38,18 @@ const patients = [
     email: 'sam@demo.local',
     name: 'Sam',
     role: 'patient',
+    clinicId: 'clinic-demo',
+    onboarded: true,
+    passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
+    createdAt: daysAgo(40),
+  },
+  // Other-clinic patient — must not appear for clinic@demo.local
+  {
+    id: 'patient-alex-other',
+    email: 'alex@other.local',
+    name: 'Alex (other clinic)',
+    role: 'patient',
+    clinicId: 'clinic-other',
     onboarded: true,
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
@@ -47,6 +61,7 @@ const clinician = {
   email: 'clinic@demo.local',
   name: 'Dr. Lee',
   role: 'clinician',
+  clinicId: 'clinic-demo',
   onboarded: true,
   // password: demo (bcrypt hash for "demo")
   passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',

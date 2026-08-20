@@ -3,19 +3,36 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SECRET = process.env.JWT_SECRET || 'kindplate-hackathon-dev-secret-change-me';
 const EXPIRES = process.env.JWT_EXPIRES || '7d';
+
+/**
+ * JWT_SECRET must be set in the environment — no silent default.
+ * Call at process startup (index.js) so misconfigured demos fail loudly.
+ */
+export function assertJwtSecretConfigured() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !String(secret).trim()) {
+    throw new Error(
+      'JWT_SECRET is required. Copy backend/.env.example to backend/.env and set JWT_SECRET to a long random string.'
+    );
+  }
+  return secret;
+}
+
+function secret() {
+  return assertJwtSecretConfigured();
+}
 
 export function signToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, email: user.email },
-    SECRET,
+    secret(),
     { expiresIn: EXPIRES }
   );
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, SECRET);
+  return jwt.verify(token, secret());
 }
 
 /** Express middleware — requires Bearer token */

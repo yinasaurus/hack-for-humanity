@@ -1,8 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, spacing } from '../theme';
-
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function toKey(d: Date) {
   const y = d.getFullYear();
@@ -11,117 +9,72 @@ function toKey(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function monthLabel(d: Date) {
-  return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+function shiftDays(from: Date, delta: number) {
+  const d = new Date(from);
+  d.setDate(d.getDate() + delta);
+  return d;
 }
 
 type Props = {
   helloDays: string[];
-  streakDays: number;
-  totalCheckInDays: number;
 };
 
+const WINDOW = 14;
+
 /**
- * Soft calendar of hello days — companionship presence, not a competitive scoreboard.
+ * Soft presence strip — filled dots for recent hellos.
+ * No streak counts, totals, or "N days" scoring language.
  */
-export function HelloCalendar({ helloDays, streakDays, totalCheckInDays }: Props) {
+export function HelloCalendar({ helloDays }: Props) {
   const helloSet = useMemo(() => new Set(helloDays), [helloDays]);
-  const [cursor, setCursor] = useState(() => {
-    const n = new Date();
-    return new Date(n.getFullYear(), n.getMonth(), 1);
-  });
 
-  const cells = useMemo(() => {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const firstDow = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const todayKey = toKey(new Date());
-    const out: {
-      key: string;
-      label: string;
-      inMonth: boolean;
-      hello: boolean;
-      today: boolean;
-    }[] = [];
-
-    for (let i = 0; i < firstDow; i++) {
-      out.push({ key: `pad-${i}`, label: '', inMonth: false, hello: false, today: false });
-    }
-    for (let day = 1; day <= daysInMonth; day++) {
-      const key = toKey(new Date(year, month, day));
+  const dots = useMemo(() => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const out: { key: string; hello: boolean; isToday: boolean }[] = [];
+    for (let i = WINDOW - 1; i >= 0; i--) {
+      const d = shiftDays(today, -i);
+      const key = toKey(d);
       out.push({
         key,
-        label: String(day),
-        inMonth: true,
         hello: helloSet.has(key),
-        today: key === todayKey,
+        isToday: i === 0,
       });
     }
     return out;
-  }, [cursor, helloSet]);
-
-  const shiftMonth = (delta: number) => {
-    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
-  };
+  }, [helloSet]);
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>Hello days</Text>
+    <View
+      style={styles.card}
+      accessible
+      accessibilityLabel="Recent hello days shown as soft dots. Filled means you said hello that day."
+    >
+      <Text style={styles.title}>Recent hellos</Text>
       <Text style={styles.sub}>
-        Days you said hello — a soft calendar, not a scoreboard.
+        Soft presence only — a filled dot means you said hello that day. No scores.
       </Text>
 
-      <View style={styles.stats}>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Gentle streak</Text>
-          <Text style={styles.statValue}>
-            {streakDays} day{streakDays === 1 ? '' : 's'}
-          </Text>
-        </View>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Hellos</Text>
-          <Text style={styles.statValue}>{totalCheckInDays}</Text>
-        </View>
-      </View>
-
-      <View style={styles.monthRow}>
-        <Pressable onPress={() => shiftMonth(-1)} hitSlop={10}>
-          <Text style={styles.nav}>‹</Text>
-        </Pressable>
-        <Text style={styles.month}>{monthLabel(cursor)}</Text>
-        <Pressable onPress={() => shiftMonth(1)} hitSlop={10}>
-          <Text style={styles.nav}>›</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.weekRow}>
-        {WEEKDAYS.map((d, i) => (
-          <Text key={`${d}-${i}`} style={styles.weekday}>
-            {d}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.grid}>
-        {cells.map((c) => (
+      <View style={styles.dotRow}>
+        {dots.map((d) => (
           <View
-            key={c.key}
+            key={d.key}
             style={[
-              styles.cell,
-              c.hello && styles.cellHello,
-              c.today && styles.cellToday,
-              !c.inMonth && styles.cellEmpty,
+              styles.dot,
+              d.hello ? styles.dotFilled : styles.dotEmpty,
+              d.isToday && styles.dotToday,
             ]}
-          >
-            {c.inMonth ? (
-              <Text style={[styles.cellText, c.hello && styles.cellTextHello]}>{c.label}</Text>
-            ) : null}
-          </View>
+            accessibilityElementsHidden
+          />
         ))}
       </View>
 
-      <Text style={styles.legend}>Filled days = a meal hello that day</Text>
+      <View style={styles.legendRow}>
+        <View style={[styles.legendSwatch, styles.dotFilled]} />
+        <Text style={styles.legend}>Hello</Text>
+        <View style={[styles.legendSwatch, styles.dotEmpty]} />
+        <Text style={styles.legend}>Quiet day</Text>
+      </View>
     </View>
   );
 }
@@ -147,88 +100,48 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.inkSoft,
   },
-  stats: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  stat: {
-    flex: 1,
-    backgroundColor: colors.sageWash,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  dotRow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
   },
-  statLabel: {
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 12,
-    color: colors.inkSoft,
+  dot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
   },
-  statValue: {
-    marginTop: 2,
-    fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 20,
-    color: colors.ink,
+  dotFilled: {
+    backgroundColor: colors.sageDeep,
   },
-  monthRow: {
+  dotEmpty: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  dotToday: {
+    shadowColor: colors.sageDeep,
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  legendRow: {
     marginTop: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  month: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 15,
-    color: colors.ink,
-  },
-  nav: {
-    fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 26,
-    color: colors.sageDeep,
-    paddingHorizontal: 8,
-  },
-  weekRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-  },
-  weekday: {
-    width: '14.28%',
-    textAlign: 'center',
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 12,
-    color: colors.inkSoft,
-  },
-  grid: {
-    marginTop: 6,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  cell: {
-    width: '14.28%',
-    aspectRatio: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    marginBottom: 2,
+    gap: 6,
   },
-  cellEmpty: { opacity: 0 },
-  cellHello: {
-    backgroundColor: 'rgba(143,163,150,0.4)',
-  },
-  cellToday: {
-    borderWidth: 1.5,
-    borderColor: colors.sageDeep,
-  },
-  cellText: {
-    fontFamily: 'Nunito_600SemiBold',
-    fontSize: 13,
-    color: colors.ink,
-  },
-  cellTextHello: {
-    fontFamily: 'Nunito_800ExtraBold',
-    color: colors.sageDeep,
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legend: {
-    marginTop: 8,
     fontFamily: 'Nunito_400Regular',
     fontSize: 12,
     color: colors.inkSoft,
-    textAlign: 'center',
+    marginRight: 10,
   },
 });

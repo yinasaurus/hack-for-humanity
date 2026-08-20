@@ -186,6 +186,34 @@ h3 {
   font-size: 0.92rem;
 }
 
+.banner.ai-status-banner {
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  font-size: 1rem;
+  line-height: 1.45;
+  border: 2px solid;
+}
+
+.banner.ai-status-mock {
+  background: #fff6e8;
+  color: #6b4a1a;
+  border-color: #d4a056;
+}
+
+.banner.ai-status-live {
+  background: #e8f5ef;
+  color: #2f5a45;
+  border-color: #5F7A6B;
+}
+
+.banner.ai-status-banner code {
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 .ai-live {
   color: #5F7A6B;
 }

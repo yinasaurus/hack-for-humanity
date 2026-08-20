@@ -11,14 +11,13 @@ import {
   type AnimalWebHandle,
   type CharacterDef,
 } from '../characters';
-import { CompanionMuteBar } from '../components/CompanionMuteBar';
 import { SupportChip } from '../components/SupportChip';
 import { useSettings } from '../SettingsContext';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import type { CompanionExpression } from '../companionMood';
 
 type Props = {
-  navigation: { goBack: () => void };
+  navigation: { goBack: () => void; navigate: (screen: string) => void };
 };
 
 const EXPR_CHIPS: { id: CompanionExpression; label: string }[] = [
@@ -32,7 +31,7 @@ const EXPR_CHIPS: { id: CompanionExpression; label: string }[] = [
 
 export function CharacterScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const ready = useMemo(() => listReadyCharacters(), []);
   const [selected, setSelected] = useState<CharacterDef>(() => ready[0] || CHARACTER_CATALOG[0]);
   const [expression, setExpression] = useState<CompanionExpression>('happy');
@@ -71,13 +70,13 @@ export function CharacterScreen({ navigation }: Props) {
         accessibilityLabel="Go back"
         style={styles.backHit}
       >
-        <Text style={styles.back}>← Back</Text>
+        <Text style={styles.back}>â† Back</Text>
       </Pressable>
       <Text style={styles.title} accessibilityRole="header">
         Companion playground
       </Text>
       <Text style={styles.sub}>
-        Try soft expressions (positive to neutral only). Leave anytime — nothing is required.
+        Try soft expressions (positive to neutral only). Leave anytime â€” nothing is required.
       </Text>
 
       <CharacterSelector
@@ -122,15 +121,9 @@ export function CharacterScreen({ navigation }: Props) {
         />
       </View>
 
-      <CompanionMuteBar
-        muted={muted}
-        speaking={speaking}
-        onToggleMute={() => {
-          if (!muted) stopVoice();
-          updateSettings({ companionMuted: !muted });
-        }}
-        onStop={stopVoice}
-      />
+      <Text style={styles.muteHint}>
+        Voice mute lives in Settings (gear on Home). Talk never starts on its own.
+      </Text>
 
       <View style={styles.actions}>
         <Pressable
@@ -151,6 +144,24 @@ export function CharacterScreen({ navigation }: Props) {
           }}
         >
           <Text style={styles.btnText}>Talk</Text>
+        </Pressable>
+        {speaking ? (
+          <Pressable
+            style={styles.btn}
+            accessibilityRole="button"
+            accessibilityLabel="Stop speaking"
+            onPress={stopVoice}
+          >
+            <Text style={styles.btnText}>Stop</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          style={styles.btn}
+          accessibilityRole="button"
+          accessibilityLabel="Open settings"
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <Text style={styles.btnText}>Settings</Text>
         </Pressable>
       </View>
       <SupportChip />
@@ -188,6 +199,13 @@ const styles = StyleSheet.create({
   stage: { flex: 1, minHeight: 300, marginTop: 4 },
   web: { flex: 1, height: '100%', borderRadius: 24 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  muteHint: {
+    marginTop: 10,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 18,
+  },
   btn: {
     flexGrow: 1,
     minHeight: tapTarget.min,

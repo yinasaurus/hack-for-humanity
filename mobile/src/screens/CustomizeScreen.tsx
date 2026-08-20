@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,7 +14,7 @@ import { CompanionPet } from '../components/CompanionPet';
 import { SupportChip } from '../components/SupportChip';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
-import { updateAppearance, type CompanionState } from '../api';
+import { fetchCompanion, updateAppearance, type CompanionState } from '../api';
 import {
   DEFAULT_APPEARANCE,
   PET_FACES,
@@ -111,6 +111,35 @@ export function CustomizeScreen({ navigation, route }: Props) {
   const [tab, setTab] = useState<TabId>('friend');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || route?.params?.petType) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const c = await fetchCompanion(user.id);
+        if (cancelled) return;
+        setA({
+          petName: c.petName || DEFAULT_APPEARANCE.petName,
+          petType: c.petType || DEFAULT_APPEARANCE.petType,
+          petColor: c.petColor || DEFAULT_APPEARANCE.petColor,
+          pattern: c.pattern || DEFAULT_APPEARANCE.pattern,
+          eyes: c.eyes || DEFAULT_APPEARANCE.eyes,
+          hat: WEAR_HATS.some((h) => h.id === c.hat) ? c.hat : 'none',
+          face: WEAR_FACES.some((f) => f.id === c.face) ? c.face : 'none',
+          neck: WEAR_NECKS.some((n) => n.id === c.neck) ? c.neck : 'none',
+          held: HOLD_ITEMS.some((h) => h.id === c.held) ? c.held : 'none',
+          scene: c.scene || DEFAULT_APPEARANCE.scene,
+          accent: c.accent || DEFAULT_APPEARANCE.accent,
+        });
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, route?.params?.petType]);
 
   const patch = <K extends keyof PetAppearance>(key: K, value: PetAppearance[K]) => {
     setA((prev) => ({ ...prev, [key]: value }));

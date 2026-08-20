@@ -14,6 +14,9 @@ describe('uploadAccess helpers', () => {
     photoUrl: '/uploads/meal-a.jpg',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
+  const patientA = { id: 'patient-a', role: 'patient', clinicId: 'clinic-a' };
+  const clinicianSame = { id: 'clinician-1', role: 'clinician', clinicId: 'clinic-a' };
+  const clinicianOther = { id: 'clinician-2', role: 'clinician', clinicId: 'clinic-b' };
 
   it('finds check-in by upload basename', () => {
     const db = { checkIns: [checkIn] };
@@ -39,9 +42,27 @@ describe('uploadAccess helpers', () => {
     assert.equal(d.ok, true);
   });
 
-  it('clinician requesting any patient photo → ok', () => {
-    const d = decideUploadAccess({ sub: 'clinician-1', role: 'clinician' }, checkIn);
+  it('same-clinic clinician → ok', () => {
+    const d = decideUploadAccess({ sub: 'clinician-1', role: 'clinician' }, checkIn, {
+      clinicianUser: clinicianSame,
+      patientUser: patientA,
+    });
     assert.equal(d.ok, true);
+  });
+
+  it('cross-clinic clinician → 403', () => {
+    const d = decideUploadAccess({ sub: 'clinician-2', role: 'clinician' }, checkIn, {
+      clinicianUser: clinicianOther,
+      patientUser: patientA,
+    });
+    assert.equal(d.ok, false);
+    assert.equal(d.status, 403);
+  });
+
+  it('clinician without clinic context → 403', () => {
+    const d = decideUploadAccess({ sub: 'clinician-1', role: 'clinician' }, checkIn);
+    assert.equal(d.ok, false);
+    assert.equal(d.status, 403);
   });
 
   it('authenticated but unknown file → 404 (no existence leak to anon)', () => {
@@ -55,9 +76,24 @@ describe('GET /uploads/:file HTTP', () => {
   let server;
   let baseUrl;
   let tmpDir;
-  const patientA = { id: 'patient-a', role: 'patient', email: 'a@demo.local' };
-  const patientB = { id: 'patient-b', role: 'patient', email: 'b@demo.local' };
-  const clinician = { id: 'clinician-1', role: 'clinician', email: 'c@demo.local' };
+  const patientA = {
+    id: 'patient-a',
+    role: 'patient',
+    email: 'a@demo.local',
+    clinicId: 'clinic-a',
+  };
+  const patientB = {
+    id: 'patient-b',
+    role: 'patient',
+    email: 'b@demo.local',
+    clinicId: 'clinic-b',
+  };
+  const clinician = {
+    id: 'clinician-1',
+    role: 'clinician',
+    email: 'c@demo.local',
+    clinicId: 'clinic-a',
+  };
 
   before(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kindplate-uploads-'));
@@ -65,6 +101,7 @@ describe('GET /uploads/:file HTTP', () => {
     fs.writeFileSync(path.join(tmpDir, 'meal-b.jpg'), Buffer.from('fake-jpeg-b'));
 
     const db = {
+      users: [patientA, patientB, clinician],
       checkIns: [
         {
           id: 'c-a',
@@ -86,7 +123,17 @@ describe('GET /uploads/:file HTTP', () => {
     app.get('/uploads/:file', requireAuth(), (req, res) => {
       const filename = path.basename(req.params.file);
       const checkIn = findCheckInByUploadFile(db, filename);
-      const decision = decideUploadAccess(req.auth, checkIn);
+      const patientUser = checkIn
+        ? db.users.find((u) => u.id === checkIn.userId)
+        : null;
+      const clinicianUser =
+        req.auth.role === 'clinician'
+          ? db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician')
+          : null;
+      const decision = decideUploadAccess(req.auth, checkIn, {
+        clinicianUser,
+        patientUser,
+      });
       if (!decision.ok) {
         if (decision.status === 404) return res.status(404).end();
         return res.status(decision.status).json({ error: decision.error || 'Not allowed' });
@@ -131,13 +178,21 @@ describe('GET /uploads/:file HTTP', () => {
     assert.equal(buf.toString(), 'fake-jpeg-a');
   });
 
-  it('clinician requesting any patient photo → 200', async () => {
+  it('same-clinic clinician → 200', async () => {
     const token = signToken(clinician);
-    const res = await fetch(`${baseUrl}/uploads/meal-b.jpg`, {
+    const res = await fetch(`${baseUrl}/uploads/meal-a.jpg`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     assert.equal(res.status, 200);
     const buf = Buffer.from(await res.arrayBuffer());
-    assert.equal(buf.toString(), 'fake-jpeg-b');
+    assert.equal(buf.toString(), 'fake-jpeg-a');
+  });
+
+  it('cross-clinic clinician → 403', async () => {
+    const token = signToken(clinician);
+    const res = await fetch(`${baseUrl}/uploads/meal-b.jpg`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.status, 403);
   });
 });

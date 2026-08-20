@@ -17,7 +17,6 @@ import * as Speech from 'expo-speech';
 import { HelloCalendar } from '../components/HelloCalendar';
 import { MilestoneCelebration } from '../components/MilestoneCelebration';
 import { SupportChip } from '../components/SupportChip';
-import { CompanionMuteBar } from '../components/CompanionMuteBar';
 import {
   AnimalWebView,
   CHARACTER_CATALOG,
@@ -32,6 +31,7 @@ import { useSettings } from '../SettingsContext';
 import { CompanionState, Unlock, fetchCompanion } from '../api';
 import {
   expressionCaption,
+  nextAmbientIdle,
   nextQuietIdle,
   type CompanionExpression,
   type CompanionPresence,
@@ -49,7 +49,7 @@ type Props = {
 export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const { settings, updateSettings } = useSettings();
+  const { settings } = useSettings();
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +179,19 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     return () => clearInterval(id);
   }, [presence, napping, expression]);
 
+  // Ambient naps during happy idle — clock-based only (not check-in / miss gated)
+  useEffect(() => {
+    if (presence !== 'happy' || napping) return;
+    if (expression === 'waving' || expression === 'excited') return;
+    const id = setInterval(() => {
+      setExpression((prev) => {
+        const next = nextAmbientIdle(prev, new Date());
+        return next ?? prev;
+      });
+    }, 20000);
+    return () => clearInterval(id);
+  }, [presence, napping, expression]);
+
   const stopVoice = () => {
     try {
       Speech.stop();
@@ -236,7 +249,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             accessibilityLabel="Open settings"
             style={styles.topBtn}
           >
-            <Text style={styles.signOut}>Settings</Text>
+            <Text style={styles.settingsGear}>⚙</Text>
           </Pressable>
         </View>
 
@@ -288,16 +301,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 ? ' · Wake anytime, or say hello with a meal photo when you want'
                 : ' · Drag gently to look around'}
             </Text>
-
-            <CompanionMuteBar
-              muted={muted}
-              speaking={speaking}
-              onToggleMute={() => {
-                if (!muted) stopVoice();
-                updateSettings({ companionMuted: !muted });
-              }}
-              onStop={stopVoice}
-            />
 
             <View style={styles.petActions}>
               {!resting ? (
@@ -390,13 +393,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           </View>
         )}
 
-        {companion ? (
-          <HelloCalendar
-            helloDays={companion.helloDays || []}
-            streakDays={companion.streakDays}
-            totalCheckInDays={companion.totalCheckInDays}
-          />
-        ) : null}
+        {companion ? <HelloCalendar helloDays={companion.helloDays || []} /> : null}
 
         {resting && companion ? (
           <View style={styles.restCard} accessibilityRole="summary">
@@ -406,12 +403,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
               ready. Missed days never change how welcome you are. A meal photo is enough of a
               hello whenever you want one.
             </Text>
-            {companion.daysSinceLastCheckIn != null && companion.daysSinceLastCheckIn > 0 ? (
-              <Text style={styles.restMeta}>
-                Last hello was {companion.daysSinceLastCheckIn} day
-                {companion.daysSinceLastCheckIn === 1 ? '' : 's'} ago — that is okay.
-              </Text>
-            ) : null}
           </View>
         ) : null}
 
@@ -440,13 +431,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
         </Text>
 
         <View style={styles.linkRow}>
-          <Pressable
-            onPress={() => navigation.navigate('Customize', companion || undefined)}
-            accessibilityRole="link"
-            style={styles.linkHit}
-          >
-            <Text style={styles.link}>Customize {companion?.petName || 'companion'}</Text>
-          </Pressable>
           <Pressable
             onPress={() => navigation.navigate('Character')}
             accessibilityRole="link"
@@ -502,6 +486,11 @@ const styles = StyleSheet.create({
     color: colors.sageDeep,
   },
   brandResting: { color: colors.teal },
+  settingsGear: {
+    fontSize: 22,
+    color: colors.inkSoft,
+    lineHeight: 28,
+  },
   signOut: {
     fontFamily: 'Nunito_600SemiBold',
     color: colors.inkSoft,

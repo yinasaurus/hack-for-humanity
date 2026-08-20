@@ -31,13 +31,10 @@ export type Unlock = {
 
 export type CompanionState = {
   mood: 'happy' | 'resting';
-  streakDays: number;
-  totalCheckInDays: number;
-  daysSinceLastCheckIn: number | null;
   walksAvailable: boolean;
   unlocks: Unlock[];
   newlyUnlocked: Unlock[];
-  /** YYYY-MM-DD days with a check-in (for soft calendar). */
+  /** YYYY-MM-DD days with a check-in (for soft presence dots). */
   helloDays?: string[];
 } & PetAppearance;
 

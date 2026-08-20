@@ -54,16 +54,20 @@ export function daysSinceLastCheckIn(checkIns, todayKey = toDateKey(new Date()))
 }
 
 /**
- * Pet presence from check-ins: happy | resting only.
- * Client may overlay waving / excited / curious / sleepy — never sadness, hunger, or neediness.
+ * Pet presence band: happy | resting.
+ * Driven by time of day only — resting is a cozy quiet-hours default,
+ * never a reaction to missed check-ins or days-since-last-log.
+ * (Client may overlay waving / excited / curious / sleepy.)
+ *
+ * @param {_checkIns} unused — kept for call-site compatibility
+ * @param {_todayKey} unused — kept for call-site compatibility
+ * @param {Date} [now]
  */
-export function petMood(checkIns, todayKey = toDateKey(new Date())) {
-  const days = uniqueSortedDays(checkIns);
-  if (days.length === 0) return 'resting';
-  const last = days[days.length - 1];
-  const yesterday = shiftDay(todayKey, -1);
-  if (last === todayKey || last === yesterday) return 'happy';
-  return 'resting';
+export function petMood(_checkIns = [], _todayKey = toDateKey(new Date()), now = new Date()) {
+  const hour = now.getHours();
+  // Quiet hours → resting; daytime → calm happy. No miss gating.
+  if (hour >= 21 || hour < 8) return 'resting';
+  return 'happy';
 }
 
 export function checkInRate(checkIns, windowDays, todayKey = toDateKey(new Date())) {

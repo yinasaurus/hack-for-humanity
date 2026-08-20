@@ -24,9 +24,13 @@ import {
   enableGentleReminders,
 } from '../notifications';
 import { SupportChip } from '../components/SupportChip';
+import * as Speech from 'expo-speech';
 
 type Props = {
-  navigation: { goBack: () => void };
+  navigation: {
+    goBack: () => void;
+    navigate: (screen: string, params?: object) => void;
+  };
 };
 
 const HOUR_CHOICES = [9, 12, 15, 18, 20];
@@ -134,7 +138,16 @@ export function SettingsScreen({ navigation }: Props) {
             </View>
             <Switch
               value={settings.companionMuted}
-              onValueChange={(v) => updateSettings({ companionMuted: v })}
+              onValueChange={(v) => {
+                if (v) {
+                  try {
+                    Speech.stop();
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                updateSettings({ companionMuted: v });
+              }}
               trackColor={{ true: colors.sage, false: '#D8D0C8' }}
               accessibilityLabel="Mute companion voice"
             />
@@ -153,6 +166,20 @@ export function SettingsScreen({ navigation }: Props) {
               accessibilityLabel="Quiet-time music"
             />
           </View>
+          <Pressable
+            onPress={() => navigation.navigate('Customize')}
+            accessibilityRole="button"
+            accessibilityLabel="Customize companion looks"
+            style={styles.linkRow}
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Customize looks</Text>
+              <Text style={styles.rowBody}>
+                Species, colors, accessories, and scenes — cosmetics only, never body size.
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
         </View>
 
         {/* Reminders */}
@@ -322,6 +349,21 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rowText: { flex: 1 },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    minHeight: tapTarget.min,
+  },
+  chevron: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 22,
+    color: colors.inkSoft,
+  },
   rowTitle: {
     fontFamily: 'Nunito_700Bold',
     fontSize: 16,

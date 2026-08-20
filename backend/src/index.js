@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { assertJwtSecretConfigured } from './auth.js';
 import { registerRoutes } from './routes.js';
 
 dotenv.config();
+assertJwtSecretConfigured();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

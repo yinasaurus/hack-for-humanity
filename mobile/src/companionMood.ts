@@ -78,3 +78,39 @@ export function nextQuietIdle(current: CompanionExpression): CompanionExpression
   if (current === 'sleepy') return 'resting';
   return 'curious';
 }
+
+/**
+ * Ambient nap windows (local clock) — ordinary pet behavior, not check-in gated.
+ * Midday + late evening soft nap bands.
+ */
+export function isAmbientNapHour(now = new Date()): boolean {
+  const hour = now.getHours();
+  return (hour >= 13 && hour < 15) || (hour >= 22 && hour < 24);
+}
+
+/**
+ * During awake/happy idle: occasionally drift into a short nap, then wake.
+ * Deterministic on clock slice so it does not correlate with logging streaks.
+ * Returns null when no ambient transition this tick.
+ */
+export function nextAmbientIdle(
+  current: CompanionExpression,
+  now = new Date()
+): CompanionExpression | null {
+  if (current === 'waving' || current === 'excited') return null;
+
+  const minute = now.getMinutes();
+  // ~every 3rd 5-minute slice in a nap hour → sleepy; otherwise happy/curious
+  const inNapSlot = isAmbientNapHour(now) && minute % 15 < 5;
+
+  if (inNapSlot) {
+    if (current === 'sleepy') return null;
+    return 'sleepy';
+  }
+
+  if (current === 'sleepy') return 'happy';
+  // Soft variety while awake — not miss-coded
+  if (minute % 10 === 0 && current === 'happy') return 'curious';
+  if (minute % 10 === 5 && current === 'curious') return 'happy';
+  return null;
+}

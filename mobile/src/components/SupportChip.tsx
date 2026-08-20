@@ -17,7 +17,7 @@ type Props = {
 
 /**
  * Always-reachable, low-pressure crisis / support entry — not buried in Settings.
- * Opens a short resource sheet; never auto-calls or auto-plays audio.
+ * Singapore-local resources. Never auto-calls or auto-plays audio.
  */
 export function SupportChip({ compact = true }: Props) {
   const insets = useSafeAreaInsets();
@@ -57,38 +57,61 @@ export function SupportChip({ compact = true }: Props) {
           >
             <Text style={styles.title}>You’re not alone</Text>
             <Text style={styles.body}>
-              KindPlate is a companion for meal moments — not emergency care. If you
-              need real-time support, these options are here whenever you want them.
+              KindPlate is a companion for meal moments — not emergency care. This app is
+              not monitored 24/7 and is not a substitute for crisis support. If you need
+              real-time help in Singapore, these options are here whenever you want them.
             </Text>
 
             <Pressable
               style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://www.iasp.info/suicidalthoughts/')}
+              onPress={() => Linking.openURL('tel:1767')}
               accessibilityRole="link"
-              accessibilityLabel="Find international crisis resources"
+              accessibilityLabel="Call Samaritans of Singapore 24-hour hotline 1 7 6 7"
             >
-              <Text style={styles.linkTitle}>Crisis resources (international)</Text>
-              <Text style={styles.linkHint}>IASP — find a local helpline</Text>
+              <Text style={styles.linkTitle}>Samaritans of Singapore (SOS)</Text>
+              <Text style={styles.linkHint}>24-hour hotline · 1767</Text>
             </Pressable>
 
             <Pressable
               style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://www.nationaleatingdisorders.org/get-help/')}
+              onPress={() => Linking.openURL('https://wa.me/6591511767')}
               accessibilityRole="link"
-              accessibilityLabel="Eating disorders help from NEDA"
+              accessibilityLabel="Open SOS CareText on WhatsApp"
             >
-              <Text style={styles.linkTitle}>Eating disorders help</Text>
-              <Text style={styles.linkHint}>NEDA — Get Help</Text>
+              <Text style={styles.linkTitle}>SOS CareText</Text>
+              <Text style={styles.linkHint}>WhatsApp · 9151 1767</Text>
             </Pressable>
 
             <Pressable
               style={styles.linkBtn}
-              onPress={() => Linking.openURL('tel:988')}
+              onPress={() => Linking.openURL('tel:63214377')}
               accessibilityRole="link"
-              accessibilityLabel="Call 9 8 8 Suicide and Crisis Lifeline"
+              accessibilityLabel="Call eating disorder support at Singapore General Hospital"
             >
-              <Text style={styles.linkTitle}>988 (US)</Text>
-              <Text style={styles.linkHint}>Suicide & Crisis Lifeline</Text>
+              <Text style={styles.linkTitle}>Eating disorder support</Text>
+              <Text style={styles.linkHint}>
+                SGH Eating Disorders Programme · 6321 4377
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.linkBtn}
+              onPress={() => Linking.openURL('tel:999')}
+              accessibilityRole="link"
+              accessibilityLabel="Call 999 police emergency"
+            >
+              <Text style={styles.linkTitle}>Emergency — 999</Text>
+              <Text style={styles.linkHint}>Police</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.linkBtn}
+              onPress={() => Linking.openURL('tel:995')}
+              accessibilityRole="link"
+              accessibilityLabel="Call 995 ambulance or fire"
+            >
+              <Text style={styles.linkTitle}>Emergency — 995</Text>
+              <Text style={styles.linkHint}>Ambulance / fire</Text>
             </Pressable>
 
             <Pressable

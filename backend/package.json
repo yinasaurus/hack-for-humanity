@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node --test src/**/*.test.js",
+    "test": "node --import ./src/testEnv.js --test src/**/*.test.js",
     "seed": "node src/seed.js"
   },
   "dependencies": {

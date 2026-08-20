@@ -8,4 +8,5 @@ backend/data/
 .DS_Store
 dashboard/dist/
 mobile/.expo/
+mobile/.tmp-export-test/
 **/coverage/
