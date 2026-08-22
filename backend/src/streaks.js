@@ -94,23 +94,22 @@ export function consecutiveMisses(checkIns, todayKey = toDateKey(new Date())) {
   return misses;
 }
 
-export const MILESTONE_DAYS = [5, 10, 20, 50, 100];
+export const MILESTONE_DAYS = [1, 5, 10, 20, 50, 100];
 
 export function milestonesReached(totalUniqueDays) {
   const unlocked = [];
   for (const m of MILESTONE_DAYS) {
     if (totalUniqueDays >= m) unlocked.push(m);
   }
-  // After 100, every 20 days
-  if (totalUniqueDays > 100) {
-    for (let d = 120; d <= totalUniqueDays; d += 20) {
-      unlocked.push(d);
-    }
+  // Wardrobe cadence is independent of the named growth milestones.
+  for (let d = 20; d <= totalUniqueDays; d += 20) {
+    if (!unlocked.includes(d)) unlocked.push(d);
   }
-  return unlocked;
+  return unlocked.sort((a, b) => a - b);
 }
 
 export const MILESTONE_REWARDS = {
+  1: { type: 'accessory', id: 'welcome_star', label: 'Welcome star' },
   5: { type: 'accessory', id: 'soft_scarf', label: 'Soft scarf' },
   10: { type: 'background', id: 'sunny_meadow', label: 'Sunny meadow' },
   20: { type: 'accessory', id: 'flower_crown', label: 'Flower crown' },
@@ -123,6 +122,18 @@ export const MILESTONE_REWARDS = {
 export function rewardForMilestone(day) {
   if (MILESTONE_REWARDS[day]) return MILESTONE_REWARDS[day];
   return { type: 'accessory', id: `keepsake_${day}`, label: `Day ${day} keepsake` };
+}
+
+/** Categorical patient-facing state. Deficit percentages and targets stay clinician-only. */
+export function vitalityState(checkIns, dailyDeficitPct = null, now = new Date(), trackingStartedAt = null) {
+  const latest = [...checkIns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const baseline = latest?.createdAt || trackingStartedAt;
+  const hoursSince = baseline ? (now.getTime() - new Date(baseline).getTime()) / 36e5 : 0;
+  const misses = consecutiveMisses(checkIns, toDateKey(now));
+  if (hoursSince >= 48 || (dailyDeficitPct != null && dailyDeficitPct > 0.5)) return 'dormant';
+  if (misses >= 2 || (dailyDeficitPct != null && dailyDeficitPct >= 0.25)) return 'dim';
+  if (misses >= 1 || (dailyDeficitPct != null && dailyDeficitPct > 0)) return 'fatigued';
+  return 'bright';
 }
 
 /** Walks unlock when the patient has any streak of at least 2 (bonding, not content-gated). */

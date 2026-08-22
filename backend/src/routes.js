@@ -14,6 +14,7 @@ import {
   checkInRate,
   toDateKey,
   shiftDay,
+  vitalityState,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider, planGentleCareSchedule } from './ai.js';
@@ -47,6 +48,11 @@ import {
   redistributePendingSlots,
   toPatientCarePlan,
 } from './careSchedule.js';
+import {
+  clinicalProfileFromUser,
+  normalizeClinicalProfile,
+  patientReminderFromClinicalProfile,
+} from './clinical.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -76,6 +82,16 @@ export function toPatientCompanionState(userId) {
   const streak = currentStreak(checkIns);
   const totalDays = uniqueSortedDays(checkIns).length;
   const mood = petMood(checkIns);
+  const analyses = Object.values(db.analyses || {}).filter((a) => a.userId === userId);
+  const { metrics: clinicalMetrics } = evaluateAlerts(user || {}, checkIns, analyses);
+  const latestAt = [...checkIns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.createdAt;
+  const recentlyRestored = latestAt && Date.now() - new Date(latestAt).getTime() < 24 * 36e5;
+  const vitality = vitalityState(
+    checkIns,
+    recentlyRestored ? null : clinicalMetrics.dailyDeficitPct,
+    new Date(),
+    user?.createdAt
+  );
   const milestoneDays = milestonesReached(totalDays);
   const unlocks = db.unlocks[userId] || [];
   const newUnlocks = [];
@@ -104,12 +120,14 @@ export function toPatientCompanionState(userId) {
 
   return {
     mood,
+    vitality,
     walksAvailable: walksUnlocked(checkIns),
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
     helloDays: uniqueSortedDays(checkIns),
     checkupCelebration: toPatientPendingCelebration(pendingCheckup),
     clinicianReminder,
+    careGoals: patientReminderFromClinicalProfile(user?.clinicalProfile),
     ...appearance,
     // No calories, macros, scores, streak counts, or days-since metrics
   };
@@ -153,6 +171,11 @@ async function saveCheckInFromBuffer(user, buffer, mimeType) {
       createdAt,
       ...analysis,
       pending: false,
+      alertSeverity: evaluateAlerts(
+        user,
+        d.checkIns.filter((c) => c.userId === user.id),
+        [...Object.values(d.analyses).filter((a) => a.userId === user.id), { createdAt, ...analysis }]
+      ).metrics.intakeSeverity,
     };
   });
 
@@ -288,6 +311,24 @@ export function registerRoutes(app) {
     });
     const user = readDb().users.find((u) => u.id === req.params.id);
     res.json({ user: publicUser(user) });
+  });
+
+  // Atomic first-run setup: validates the avatar/name and only then marks onboarding complete.
+  app.post('/api/patient/:userId/onboarding', requireAuth(['patient']), (req, res) => {
+    if (req.auth.sub !== req.params.userId) return res.status(403).json({ error: 'Not allowed' });
+    const petName = String(req.body?.petName || '').trim();
+    if (!petName) return res.status(400).json({ error: 'petName required' });
+    let found = false;
+    updateDb((d) => {
+      const user = d.users.find((u) => u.id === req.params.userId && u.role === 'patient');
+      if (!user) return;
+      found = true;
+      applyAppearancePatch(user, { petType: req.body?.petType, petName });
+      user.onboarded = true;
+    });
+    if (!found) return res.status(404).json({ error: 'patient not found' });
+    const user = readDb().users.find((u) => u.id === req.params.userId);
+    res.json({ user: publicUser(user), companion: toPatientCompanionState(user.id) });
   });
 
   // Cosmetic pet appearance only (species/color/outfits/scenes — never size/body)
@@ -565,6 +606,7 @@ export function registerRoutes(app) {
         name: patient.name,
         email: patient.email,
         clinicId: clinicIdOf(patient),
+        clinicalProfile: clinicalProfileFromUser(patient),
       },
       metrics,
       consistency30,
@@ -588,6 +630,46 @@ export function registerRoutes(app) {
       aiProvider: aiProvider(),
     });
   });
+
+  app.patch('/api/clinician/patient/:id/clinical', requireAuth(['clinician']), async (req, res) => {
+    const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+    if (!patient) return res.status(404).json({ error: 'patient not found' });
+    if (!clinicianCanAccessPatient(clinician, patient)) return res.status(403).json({ error: 'Not allowed for this clinic' });
+    let clinicalProfile;
+    try {
+      clinicalProfile = normalizeClinicalProfile(req.body || {}, patient.clinicalProfile);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    updateDb((d) => {
+      const target = d.users.find((u) => u.id === patient.id);
+      target.clinicalProfile = clinicalProfile;
+    });
+    res.json({ clinicalProfile });
+  });
+
+  const createDigest = async (req, res) => {
+    const db = readDb();
+    const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+    const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+    if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+    if (!patient) return res.status(404).json({ error: 'patient not found' });
+    if (!clinicianCanAccessPatient(clinician, patient)) return res.status(403).json({ error: 'Not allowed for this clinic' });
+    const weeks = Math.min(12, Math.max(1, Number(req.query.weeks) || 4));
+    const cutoff = Date.now() - weeks * 7 * 864e5;
+    const checkIns = db.checkIns.filter((c) => c.userId === patient.id && new Date(c.createdAt).getTime() >= cutoff);
+    const analyses = Object.values(db.analyses).filter((a) => a.userId === patient.id && new Date(a.createdAt).getTime() >= cutoff);
+    const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
+    const digest = await generateClinicianSummary({ patientName: patient.name, metrics, analyses, alertReasons: alerts.map((a) => a.reason) });
+    const record = { patientId: patient.id, weeks, createdAt: new Date().toISOString(), ...digest, metrics };
+    updateDb((d) => { d.summaries[patient.id] = record; });
+    res.json({ digest: record, alerts });
+  };
+  app.get('/api/clinician/patient/:id/digest', requireAuth(['clinician']), createDigest);
+  app.post('/api/clinician/patient/:id/digest', requireAuth(['clinician']), createDigest);
 
   /**
    * Clinician-scheduled reminder — note + frequency; optional Gemini gentle care plan.

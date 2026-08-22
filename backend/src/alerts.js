@@ -19,6 +19,29 @@ export function evaluateAlerts(patient, checkIns, analyses = []) {
   const rate30 = checkInRate(checkIns, 30);
   const streak = currentStreak(checkIns);
   const totalDays = uniqueSortedDays(checkIns).length;
+  const target = Number(patient.clinicalProfile?.dailyCalorieTarget) || null;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayIntake = analyses
+    .filter((a) => String(a.createdAt || '').slice(0, 10) === today && a.isMeal !== false)
+    .reduce((sum, a) => sum + (Number(a.estimatedCalories) || 0), 0);
+  const deficitPct = target ? Math.max(0, (target - todayIntake) / target) : null;
+
+  let intakeSeverity = 'normal';
+  if (deficitPct != null) {
+    if (deficitPct > 0.5) intakeSeverity = 'level3';
+    else if (deficitPct >= 0.45) intakeSeverity = 'level2';
+    else if (deficitPct >= 0.25) intakeSeverity = 'level1';
+  }
+  if (intakeSeverity !== 'normal') {
+    const labels = { level1: 'Routine summary', level2: 'Same-day review', level3: 'High-priority review' };
+    alerts.push({
+      patientId: patient.id, patientName: patient.name,
+      reason: `${labels[intakeSeverity]}: estimated intake below clinician target`,
+      detail: `Estimated daily deficit is ${Math.round(deficitPct * 100)}% against the configured target.`,
+      guidance: 'Photo-based estimates are approximate. Clinician review is required.',
+      severity: intakeSeverity, createdAt: new Date().toISOString(),
+    });
+  }
 
   if (misses >= 5) {
     alerts.push({
@@ -81,6 +104,9 @@ export function evaluateAlerts(patient, checkIns, analyses = []) {
       rate30,
       totalDays,
       lowConfidenceAnalyses: analyses.filter((a) => a.confidence === 'low').length,
+      todayEstimatedIntake: todayIntake,
+      dailyDeficitPct: deficitPct,
+      intakeSeverity,
     },
   };
 }

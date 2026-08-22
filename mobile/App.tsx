@@ -20,11 +20,13 @@ import { CheckInScreen } from './src/screens/CheckInScreen';
 import { TogetherScreen } from './src/screens/TogetherScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { PetOnboardingScreen } from './src/screens/PetOnboardingScreen';
 import { colors } from './src/theme';
 
 export type RootStackParamList = {
   Welcome: undefined;
   Transparency: undefined;
+  PetOnboarding: undefined;
   Home: { celebrate?: boolean; newUnlocks?: import('./src/api').Unlock[] } | undefined;
   CheckIn: undefined;
   Together: undefined;
@@ -53,18 +55,18 @@ function RootNavigator() {
     );
   }
 
-  const needsOnboarding = user && !user.onboarded && showTransparency;
-
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
       {!user ? (
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      ) : needsOnboarding ? (
+      ) : !user.onboarded && showTransparency ? (
         <Stack.Screen name="Transparency">
           {() => (
             <TransparencyScreen onDone={() => setShowTransparency(false)} />
           )}
         </Stack.Screen>
+      ) : !user.onboarded ? (
+        <Stack.Screen name="PetOnboarding" component={PetOnboardingScreen} />
       ) : (
         <>
           <Stack.Screen name="Home">

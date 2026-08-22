@@ -1,5 +1,5 @@
 import type { ImageSourcePropType, ImageStyle, StyleProp } from 'react-native';
-import type { PetTypeId } from '../pets';
+import type { PetTypeId } from './pets';
 
 export type AccAnchor = {
   top?: number | `${number}%`;

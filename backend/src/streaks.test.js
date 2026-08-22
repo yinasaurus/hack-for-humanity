@@ -9,6 +9,7 @@ import {
   walksUnlocked,
   shiftDay,
   toDateKey,
+  vitalityState,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { toPatientSafeCheckIn } from './routes.js';
@@ -86,9 +87,30 @@ describe('petMood', () => {
 
 describe('milestonesReached', () => {
   it('unlocks at 5, 10, 20…', () => {
-    assert.deepEqual(milestonesReached(10), [5, 10]);
-    assert.deepEqual(milestonesReached(100), [5, 10, 20, 50, 100]);
+    assert.deepEqual(milestonesReached(10), [1, 5, 10]);
+    assert.deepEqual(milestonesReached(100), [1, 5, 10, 20, 40, 50, 60, 80, 100]);
+    assert.deepEqual(milestonesReached(80), [1, 5, 10, 20, 40, 50, 60, 80]);
     assert.ok(milestonesReached(120).includes(120));
+  });
+});
+
+describe('vitalityState', () => {
+  it('uses categorical recovery states without exposing deficit values', () => {
+    assert.equal(vitalityState([ci(0)], 0, new Date(`${today}T16:00:00Z`)), 'bright');
+    assert.equal(vitalityState([ci(0)], 0.3, new Date(`${today}T16:00:00Z`)), 'dim');
+    assert.equal(vitalityState([ci(3)], 0, new Date(`${today}T16:00:00Z`)), 'dormant');
+  });
+});
+
+describe('intake severity', () => {
+  it('tags >50% estimated deficit as level 3 for clinicians', () => {
+    const { alerts, metrics } = evaluateAlerts(
+      { id: 'p1', name: 'Test', clinicalProfile: { dailyCalorieTarget: 2000 } },
+      [ci(0)],
+      [{ createdAt: `${today}T12:00:00Z`, estimatedCalories: 800, isMeal: true }]
+    );
+    assert.equal(metrics.intakeSeverity, 'level3');
+    assert.ok(alerts.some((a) => a.severity === 'level3'));
   });
 });
 
