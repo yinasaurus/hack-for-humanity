@@ -15,10 +15,11 @@ import {
   toDateKey,
   shiftDay,
   vitalityState,
+  growthStageForDays,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider, planGentleCareSchedule } from './ai.js';
-import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE } from './appearance.js';
+import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE, isAllowedPetType } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
 import {
@@ -121,6 +122,8 @@ export function toPatientCompanionState(userId) {
   return {
     mood,
     vitality,
+    growthStage: growthStageForDays(totalDays),
+    petGender: user?.petGender || 'female',
     walksAvailable: walksUnlocked(checkIns),
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
@@ -218,7 +221,7 @@ export function registerRoutes(app) {
       clinicId: DEFAULT_CLINIC_ID,
       onboarded: false,
       ...DEFAULT_APPEARANCE,
-      petType: 'fox',
+      petType: 'panda',
       passwordHash,
       createdAt: new Date().toISOString(),
     };
@@ -316,14 +319,26 @@ export function registerRoutes(app) {
   // Atomic first-run setup: validates the avatar/name and only then marks onboarding complete.
   app.post('/api/patient/:userId/onboarding', requireAuth(['patient']), (req, res) => {
     if (req.auth.sub !== req.params.userId) return res.status(403).json({ error: 'Not allowed' });
+    const existing = readDb().users.find((u) => u.id === req.params.userId && u.role === 'patient');
+    if (!existing) return res.status(404).json({ error: 'patient not found' });
+    if (existing.onboarded) return res.status(409).json({ error: 'Pet selection is already complete' });
     const petName = String(req.body?.petName || '').trim();
     if (!petName) return res.status(400).json({ error: 'petName required' });
+    if (petName.length > 24) return res.status(400).json({ error: 'petName must be 24 characters or fewer' });
+    if (!isAllowedPetType(req.body?.petType)) {
+      return res.status(400).json({ error: 'Choose a valid pet species' });
+    }
+    const petGender = req.body?.petGender;
+    if (!['male', 'female'].includes(petGender)) {
+      return res.status(400).json({ error: 'Choose male or female for your pet' });
+    }
     let found = false;
     updateDb((d) => {
       const user = d.users.find((u) => u.id === req.params.userId && u.role === 'patient');
       if (!user) return;
       found = true;
       applyAppearancePatch(user, { petType: req.body?.petType, petName });
+      user.petGender = petGender;
       user.onboarded = true;
     });
     if (!found) return res.status(404).json({ error: 'patient not found' });
@@ -335,6 +350,11 @@ export function registerRoutes(app) {
   app.patch('/api/patient/:userId/appearance', requireAuth(['patient']), (req, res) => {
     if (req.auth.sub !== req.params.userId) {
       return res.status(403).json({ error: 'Not allowed' });
+    }
+    const existing = readDb().users.find((u) => u.id === req.params.userId && u.role === 'patient');
+    if (!existing) return res.status(404).json({ error: 'patient not found' });
+    if (req.body?.petType != null && req.body.petType !== existing.petType) {
+      return res.status(409).json({ error: 'Pet species cannot be changed after onboarding' });
     }
     updateDb((d) => {
       const u = d.users.find((x) => x.id === req.params.userId && x.role === 'patient');

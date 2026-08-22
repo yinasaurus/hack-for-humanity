@@ -2,8 +2,6 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, tapTarget } from '../theme';
-import { useAuth } from '../AuthContext';
-import { markOnboarded } from '../api';
 import { SupportChip } from '../components/SupportChip';
 
 type Props = {
@@ -15,15 +13,6 @@ type Props = {
  */
 export function TransparencyScreen({ onDone }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, setUser } = useAuth();
-
-  const finish = async () => {
-    if (user) {
-      const updated = await markOnboarded(user.id);
-      setUser(updated);
-    }
-    onDone();
-  };
 
   return (
     <View style={styles.root}>
@@ -54,18 +43,11 @@ export function TransparencyScreen({ onDone }: Props) {
           </Text>
         </View>
 
-        <View style={styles.block}>
-          <Text style={styles.blockTitle}>Hidden from you</Text>
-          <Text style={styles.blockBody}>
-            No calories, macros, or scores on your phone.
-          </Text>
-        </View>
-
         <Pressable
           style={styles.cta}
-          onPress={finish}
+          onPress={onDone}
           accessibilityRole="button"
-          accessibilityLabel="Continue to Buddi"
+          accessibilityLabel="Continue to pet selection"
         >
           <Text style={styles.ctaText}>Continue</Text>
         </Pressable>

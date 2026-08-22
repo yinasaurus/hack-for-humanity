@@ -564,7 +564,6 @@ export default function App() {
                   <label className="field"><span>Height (cm)</span><input type="number" min="1" value={clinical.heightCm ?? ''} onChange={(e) => setClinical({ ...clinical, heightCm: e.target.value ? Number(e.target.value) : null })} /></label>
                   <label className="field"><span>Weight (kg)</span><input type="number" min="1" step="0.1" value={clinical.weightKg ?? ''} onChange={(e) => setClinical({ ...clinical, weightKg: e.target.value ? Number(e.target.value) : null })} /></label>
                   <label className="field"><span>Daily calorie target</span><input type="number" min="1" value={clinical.dailyCalorieTarget ?? ''} onChange={(e) => setClinical({ ...clinical, dailyCalorieTarget: e.target.value ? Number(e.target.value) : null })} /></label>
-                  <label className="field"><span>Patient-facing food goals (one per line)</span><textarea rows={3} value={clinical.customGoals.join('\n')} onChange={(e) => setClinical({ ...clinical, customGoals: e.target.value.split('\n').map((v) => v.trim()).filter(Boolean) })} placeholder="Two gentle apple moments this week" /></label>
                   <button type="button" className="primary" disabled={clinicalBusy} onClick={() => void onSaveClinical()}>{clinicalBusy ? 'Saving…' : 'Save clinical plan'}</button>
                 </div>
               </section>

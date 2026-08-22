@@ -68,7 +68,7 @@ export function publicUser(user) {
     onboarded: Boolean(user.onboarded),
     createdAt: user.createdAt,
   };
-  for (const key of ['petName', 'petType', 'petColor', 'pattern', 'eyes', 'hat', 'face', 'neck', 'held', 'scene', 'accent']) {
+  for (const key of ['petName', 'petType', 'petGender', 'petColor', 'pattern', 'eyes', 'hat', 'face', 'neck', 'held', 'scene', 'accent']) {
     if (user[key] !== undefined) safe[key] = user[key];
   }
   return safe;

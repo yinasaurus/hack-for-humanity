@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
   type AppStateStatus,
   Pressable,
+  PanResponder,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -44,6 +45,7 @@ import {
 } from '../companionMood';
 import { nextCompanionTalk } from '../companionTalk';
 import type { AnimalWebHandle } from '../characters';
+import { PET_TYPES } from '../pets';
 
 /** Speak multi-sentence lines in sequence (Android TTS truncates long blobs). */
 function speakCompanionLines(full: string, onEnd: () => void) {
@@ -118,6 +120,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const [napping, setNapping] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [talkLine, setTalkLine] = useState<string | null>(null);
+  const [heartBurst, setHeartBurst] = useState(0);
   const petRef = useRef<AnimalWebHandle | null>(null);
   /** Server presence band — happy | resting only (quiet hours, not a miss penalty) */
   const [presence, setPresence] = useState<CompanionPresence>('happy');
@@ -130,6 +133,42 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
   const muted = settings.companionMuted;
 
+  const happyPetFeedback = useCallback(() => {
+    setNapping(false);
+    clearExpressionTimer();
+    setExpression('happy');
+    setHeartBurst((value) => value + 1);
+    petRef.current?.wake();
+    petRef.current?.react();
+    expressionTimer.current = setTimeout(() => setExpression('happy'), 2600);
+  }, []);
+
+  const rubResponder = useMemo(() => {
+    let distance = 0;
+    let previousX = 0;
+    let previousY = 0;
+    let fired = false;
+    return PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+        Math.abs(gesture.dx) + Math.abs(gesture.dy) > 5,
+      onPanResponderGrant: () => {
+        distance = 0;
+        previousX = 0;
+        previousY = 0;
+        fired = false;
+      },
+      onPanResponderMove: (_event, gesture) => {
+        distance += Math.abs(gesture.dx - previousX) + Math.abs(gesture.dy - previousY);
+        previousX = gesture.dx;
+        previousY = gesture.dy;
+        if (!fired && distance >= 48) {
+          fired = true;
+          happyPetFeedback();
+        }
+      },
+    });
+  }, [happyPetFeedback]);
+
   const clearExpressionTimer = () => {
     if (expressionTimer.current) {
       clearTimeout(expressionTimer.current);
@@ -137,7 +176,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     }
   };
 
-  /** After a short gesture — stay with the user unless they chose Sleep */
+  /** After a short gesture, return to a calm expression. */
   const settleAfterGesture = useCallback((nap: boolean) => {
     setExpression(nap ? 'sleepy' : 'happy');
   }, []);
@@ -287,15 +326,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     return () => clearInterval(id);
   }, [napping, expression]);
 
-  const stopVoice = () => {
-    try {
-      Speech.stop();
-    } catch {
-      /* ignore */
-    }
-    setSpeaking(false);
-  };
-
   if (loading && !companion) {
     return (
       <LinearGradient colors={[...gradients.loading]} style={styles.centered}>
@@ -399,7 +429,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
         {companion && (
           <View style={styles.hero}>
-            <View style={[styles.hero3d, { opacity: ({ bright: 1, fatigued: 0.82, dim: 0.58, dormant: 0.35 } as const)[companion.vitality || 'bright'] }]}>
+            <View
+              {...rubResponder.panHandlers}
+              accessibilityLabel={`Rub ${companion.petName} to make them happy`}
+              style={[styles.hero3d, { opacity: ({ bright: 1, fatigued: 0.82, dim: 0.58, dormant: 0.35 } as const)[companion.vitality || 'bright'] }]}
+            >
               <AnimalWebView
                 ref={petRef}
                 key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
@@ -416,8 +450,19 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                   scene: companion.scene,
                 }}
               />
+              {heartBurst > 0 ? (
+                <View key={heartBurst} pointerEvents="none" style={styles.hearts}>
+                  <Text style={[styles.heart, styles.heartLeft]}>♥</Text>
+                  <Text style={[styles.heart, styles.heartCenter]}>♥</Text>
+                  <Text style={[styles.heart, styles.heartRight]}>♥</Text>
+                </View>
+              ) : null}
             </View>
             <Text style={styles.petName}>{companion.petName}</Text>
+            <Text style={styles.petSpecies}>
+              {PET_TYPES.find((pet) => pet.id === companion.petType)?.label || companion.petType}
+              {' · '}{({ baby: 'Baby', little: 'Little', growing: 'Growing', playful: 'Playful', adventurer: 'Adventurer', grown: 'Grown' } as const)[companion.growthStage || 'baby']}
+            </Text>
             <Text style={styles.petCaption}>
               {expressionCaption(companion.petName, expression)}
             </Text>
@@ -525,25 +570,16 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                   setNapping(false);
                   clearExpressionTimer();
                   setExpression('curious');
+                  setTalkLine('Let’s play!');
+                  setHeartBurst((value) => value + 1);
+                  petRef.current?.wake();
+                  petRef.current?.react();
                   expressionTimer.current = setTimeout(() => {
                     settleAfterGesture(false);
                   }, 3200);
                 }}
               >
                 <Text style={styles.petBtnText}>Play</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.petBtn, styles.petBtnSleep]}
-                accessibilityRole="button"
-                accessibilityLabel="Let companion rest cozily"
-                onPress={() => {
-                  stopVoice();
-                  setNapping(true);
-                  clearExpressionTimer();
-                  setExpression('sleepy');
-                }}
-              >
-                <Text style={styles.petBtnText}>Sleep</Text>
               </Pressable>
             </View>
           </View>
@@ -696,6 +732,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.ink,
   },
+  hearts: { ...StyleSheet.absoluteFillObject },
+  heart: { position: 'absolute', color: colors.coral, fontSize: 30, textShadowColor: colors.white, textShadowRadius: 5 },
+  heartLeft: { left: '22%', top: '30%', transform: [{ rotate: '-12deg' }] },
+  heartCenter: { left: '47%', top: '15%' },
+  heartRight: { right: '20%', top: '34%', transform: [{ rotate: '12deg' }] },
+  petSpecies: {
+    marginTop: 2,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 14,
+    color: colors.sageDeep,
+  },
   styleLinkHit: {
     marginTop: 4,
     minHeight: 36,
@@ -792,7 +839,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  petBtnSleep: { backgroundColor: colors.teal },
   petBtnText: {
     fontFamily: 'Nunito_700Bold',
     color: colors.white,

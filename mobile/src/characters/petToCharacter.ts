@@ -3,6 +3,14 @@ import { CHARACTER_CATALOG, getCharacter } from './characterCatalog';
 
 /** Older Bun/Pup labels → low-poly catalog animals */
 const LEGACY_PET_TO_CHARACTER: Record<string, string> = {
+  dog: 'horse',
+  cat: 'fox',
+  capybara: 'horse',
+  cow: 'horse',
+  chipmunk: 'fox',
+  monkey: 'fox',
+  rabbit: 'flamingo',
+  penguin: 'stork',
   bun: 'flamingo',
   pup: 'horse',
   kit: 'fox',
