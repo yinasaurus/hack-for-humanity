@@ -271,16 +271,6 @@ export function CustomizeScreen({ navigation, route }: Props) {
           { paddingBottom: Math.max(insets.bottom, 16) + 72 },
         ]}
       >
-        <Text style={styles.section}>Name</Text>
-        <TextInput
-          value={a.petName}
-          onChangeText={(t) => patch('petName', t)}
-          maxLength={24}
-          style={styles.input}
-          placeholder="A gentle name"
-          placeholderTextColor={colors.inkSoft}
-        />
-
         <View style={styles.pathCard} accessibilityRole="summary">
           <Text style={styles.pathTitle}>Coming up</Text>
           <Text style={styles.pathBlurb}>Soft keepsakes from hello days — no deadlines.</Text>
@@ -299,6 +289,16 @@ export function CustomizeScreen({ navigation, route }: Props) {
             </View>
           ))}
         </View>
+
+        <Text style={styles.section}>Name</Text>
+        <TextInput
+          value={a.petName}
+          onChangeText={(t) => patch('petName', t)}
+          maxLength={24}
+          style={styles.input}
+          placeholder="A gentle name"
+          placeholderTextColor={colors.inkSoft}
+        />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs}>
           {TABS.map((t) => (
@@ -418,11 +418,11 @@ const styles = StyleSheet.create({
   },
   preview3d: {
     width: '100%',
-    height: 240,
+    height: 160,
     borderRadius: 20,
     marginTop: 4,
   },
-  content: { paddingHorizontal: spacing.lg, paddingTop: 12 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: 8 },
   title: {
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 26,
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.inkSoft,
     marginTop: 4,
-    marginBottom: 8,
+    marginBottom: 4,
     lineHeight: 20,
     alignSelf: 'flex-start',
   },
@@ -500,25 +500,25 @@ const styles = StyleSheet.create({
   chipTitleOn: { color: colors.sageDeep },
   chipBlurb: { fontFamily: 'Nunito_400Regular', fontSize: 11, color: colors.inkSoft, marginTop: 2 },
   pathCard: {
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
+    marginTop: 0,
+    marginBottom: spacing.md,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
   pathTitle: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 15,
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 16,
     color: colors.ink,
   },
   pathBlurb: {
-    marginTop: 6,
-    marginBottom: 10,
+    marginTop: 4,
+    marginBottom: 8,
     fontFamily: 'Nunito_400Regular',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 12,
+    lineHeight: 17,
     color: colors.inkSoft,
   },
   pathRow: {
