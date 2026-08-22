@@ -97,15 +97,20 @@ export function consecutiveMisses(checkIns, todayKey = toDateKey(new Date())) {
 export const MILESTONE_DAYS = [1, 5, 10, 20, 50, 100];
 
 export function milestonesReached(totalUniqueDays) {
-  const unlocked = [];
-  for (const m of MILESTONE_DAYS) {
-    if (totalUniqueDays >= m) unlocked.push(m);
-  }
-  // Wardrobe cadence is independent of the named growth milestones.
-  for (let d = 20; d <= totalUniqueDays; d += 20) {
-    if (!unlocked.includes(d)) unlocked.push(d);
-  }
+  const unlocked = MILESTONE_DAYS.filter((day) => totalUniqueDays >= day);
+  // After the final growth milestone, add one wardrobe reward every 20 days.
+  for (let day = 120; day <= totalUniqueDays; day += 20) unlocked.push(day);
   return unlocked.sort((a, b) => a - b);
+}
+
+/** Patient-safe visual chapter; it contains no streak count or nutrition data. */
+export function growthStageForDays(totalUniqueDays) {
+  if (totalUniqueDays >= 100) return 'grown';
+  if (totalUniqueDays >= 50) return 'adventurer';
+  if (totalUniqueDays >= 20) return 'playful';
+  if (totalUniqueDays >= 10) return 'growing';
+  if (totalUniqueDays >= 5) return 'little';
+  return 'baby';
 }
 
 export const MILESTONE_REWARDS = {

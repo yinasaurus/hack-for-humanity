@@ -6,8 +6,13 @@
  * are independent fields so any companion can wear any unlocked accessory.
  */
 
+export const SELECTABLE_PET_TYPES = [
+  'panda', 'dog', 'cat', 'capybara', 'cow', 'chipmunk', 'monkey', 'rabbit', 'penguin', 'otter',
+];
+
 export const ALLOWED = {
-  petType: ['fox', 'horse', 'parrot', 'flamingo', 'stork'],
+  // Keep retired renderer ids readable so existing profiles remain compatible.
+  petType: [...SELECTABLE_PET_TYPES, 'fox', 'horse', 'parrot', 'flamingo', 'stork'],
   petColor: [
     'peach',
     'honey',
@@ -62,9 +67,13 @@ const LEGACY_PET_TYPE = {
   otter: 'fox',
 };
 
+export function isAllowedPetType(petType) {
+  return typeof petType === 'string' && SELECTABLE_PET_TYPES.includes(petType);
+}
+
 export const DEFAULT_APPEARANCE = {
   petName: 'Companion',
-  petType: 'fox',
+  petType: 'panda',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',

@@ -33,10 +33,9 @@ type Props = {
 };
 
 /** Top-level categories: animal vs layered outfit (independent fields). */
-type TabId = 'companion' | 'outfit';
+type TabId = 'outfit';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'companion', label: 'Companion' },
   { id: 'outfit', label: 'Outfit' },
 ];
 
@@ -125,7 +124,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
   const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
   const [helloDayCount, setHelloDayCount] = useState(0);
-  const [tab, setTab] = useState<TabId>('companion');
+  const [tab, setTab] = useState<TabId>('outfit');
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -313,17 +312,6 @@ export function CustomizeScreen({ navigation, route }: Props) {
             </Pressable>
           ))}
         </ScrollView>
-
-        {tab === 'companion' && (
-          <>
-            <Text style={styles.section}>Friend</Text>
-            <ChipRow
-              options={PET_TYPES}
-              value={a.petType}
-              onChange={(id) => patch('petType', id)}
-            />
-          </>
-        )}
 
         {tab === 'outfit' && (
           <>

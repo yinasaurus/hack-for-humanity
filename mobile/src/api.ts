@@ -13,12 +13,15 @@ export const API_BASE =
 
 const TOKEN_KEY = 'kindplate.token';
 
+export type PetGender = 'male' | 'female';
+
 export type User = {
   id: string;
   email: string;
   name: string;
   role: 'patient' | 'clinician';
   onboarded: boolean;
+  petGender?: PetGender;
 } & Partial<PetAppearance>;
 
 export type Unlock = {
@@ -65,6 +68,8 @@ export type ClinicianReminder = {
 export type CompanionState = {
   mood: 'happy' | 'resting';
   vitality: 'bright' | 'fatigued' | 'dim' | 'dormant';
+  growthStage: 'baby' | 'little' | 'growing' | 'playful' | 'adventurer' | 'grown';
+  petGender: PetGender;
   walksAvailable: boolean;
   unlocks: Unlock[];
   newlyUnlocked: Unlock[];
@@ -150,12 +155,13 @@ export async function markOnboarded(userId: string): Promise<User> {
 export async function completeOnboarding(
   userId: string,
   petType: string,
-  petName: string
+  petName: string,
+  petGender: PetGender
 ): Promise<User> {
   const res = await fetch(`${API_BASE}/api/patient/${userId}/onboarding`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ petType, petName }),
+    body: JSON.stringify({ petType, petName, petGender }),
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not save your companion');
@@ -169,6 +175,7 @@ export async function fetchCompanion(userId: string): Promise<CompanionState> {
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not load companion');
+  assertNoNutritionLeak(data);
   return data;
 }
 

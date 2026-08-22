@@ -10,6 +10,7 @@ import {
   shiftDay,
   toDateKey,
   vitalityState,
+  growthStageForDays,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { toPatientSafeCheckIn } from './routes.js';
@@ -88,9 +89,16 @@ describe('petMood', () => {
 describe('milestonesReached', () => {
   it('unlocks at 5, 10, 20…', () => {
     assert.deepEqual(milestonesReached(10), [1, 5, 10]);
-    assert.deepEqual(milestonesReached(100), [1, 5, 10, 20, 40, 50, 60, 80, 100]);
-    assert.deepEqual(milestonesReached(80), [1, 5, 10, 20, 40, 50, 60, 80]);
+    assert.deepEqual(milestonesReached(100), [1, 5, 10, 20, 50, 100]);
+    assert.deepEqual(milestonesReached(80), [1, 5, 10, 20, 50]);
     assert.ok(milestonesReached(120).includes(120));
+  });
+
+  it('progresses through patient-safe visual stages', () => {
+    assert.equal(growthStageForDays(0), 'baby');
+    assert.equal(growthStageForDays(5), 'little');
+    assert.equal(growthStageForDays(20), 'playful');
+    assert.equal(growthStageForDays(100), 'grown');
   });
 });
 

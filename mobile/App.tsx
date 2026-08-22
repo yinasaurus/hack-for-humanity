@@ -20,13 +20,13 @@ import { CheckInScreen } from './src/screens/CheckInScreen';
 import { TogetherScreen } from './src/screens/TogetherScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
-import { PetOnboardingScreen } from './src/screens/PetOnboardingScreen';
+import { PetSelectionScreen } from './src/screens/PetSelectionScreen';
 import { colors } from './src/theme';
 
 export type RootStackParamList = {
   Welcome: undefined;
   Transparency: undefined;
-  PetOnboarding: undefined;
+  PetSelection: undefined;
   Home: { celebrate?: boolean; newUnlocks?: import('./src/api').Unlock[] } | undefined;
   CheckIn: undefined;
   Together: undefined;
@@ -38,7 +38,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function RootNavigator() {
   const { user, loading } = useAuth();
-  const [showTransparency, setShowTransparency] = useState(true);
+  const [transparencyCompletedFor, setTransparencyCompletedFor] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -59,14 +59,14 @@ function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
       {!user ? (
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      ) : !user.onboarded && showTransparency ? (
+      ) : !user.onboarded && transparencyCompletedFor !== user.id ? (
         <Stack.Screen name="Transparency">
           {() => (
-            <TransparencyScreen onDone={() => setShowTransparency(false)} />
+            <TransparencyScreen onDone={() => setTransparencyCompletedFor(user.id)} />
           )}
         </Stack.Screen>
       ) : !user.onboarded ? (
-        <Stack.Screen name="PetOnboarding" component={PetOnboardingScreen} />
+        <Stack.Screen name="PetSelection" component={PetSelectionScreen} />
       ) : (
         <>
           <Stack.Screen name="Home">
