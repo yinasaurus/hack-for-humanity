@@ -50,10 +50,7 @@ export function HelloCalendar({ helloDays }: Props) {
       accessible
       accessibilityLabel="Recent hello days shown as soft dots. Filled means you said hello that day."
     >
-      <Text style={styles.title}>Recent hellos</Text>
-      <Text style={styles.sub}>
-        Soft presence only — a filled dot means you said hello that day. No scores.
-      </Text>
+      <Text style={styles.title}>Hellos</Text>
 
       <View style={styles.dotRow}>
         {dots.map((d) => (
@@ -67,13 +64,6 @@ export function HelloCalendar({ helloDays }: Props) {
             accessibilityElementsHidden
           />
         ))}
-      </View>
-
-      <View style={styles.legendRow}>
-        <View style={[styles.legendSwatch, styles.dotFilled]} />
-        <Text style={styles.legend}>Hello</Text>
-        <View style={[styles.legendSwatch, styles.dotEmpty]} />
-        <Text style={styles.legend}>Quiet day</Text>
       </View>
     </View>
   );

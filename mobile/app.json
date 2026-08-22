@@ -1,24 +1,23 @@
 {
   "expo": {
-    "name": "KindPlate",
-    "slug": "kindplate",
+    "name": "Buddi",
+    "slug": "yinasaurus",
+    "owner": "yinasauruss-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F7F4EF"
-    },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.kindplate.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "KindPlate uses the camera so you can take a photo of your meal."
+        "NSCameraUsageDescription": "Buddi uses the camera so you can take a photo of your meal.",
+        "NSPhotoLibraryUsageDescription": "Buddi does not need your photo library — meal photos are taken live with the camera.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.kindplate.app",
       "adaptiveIcon": {
         "backgroundColor": "#F7F4EF",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -26,7 +25,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "POST_NOTIFICATIONS"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -37,14 +37,28 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "KindPlate uses the camera so you can take a photo of your meal.",
+          "cameraPermission": "Buddi uses the camera so you can take a photo of your meal.",
           "microphonePermission": false,
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F4EF",
+          "imageWidth": 200
         }
       ],
       "expo-font",
       "expo-audio",
       "expo-asset"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7cbf9b84-35d7-4c7a-a609-101ac81e0ed8"
+      }
+    }
   }
 }

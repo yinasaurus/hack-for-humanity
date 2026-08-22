@@ -65,7 +65,7 @@ export function SettingsScreen({ navigation }: Props) {
         if (result.scheduled === false) {
           setNote(
             isExpoGo()
-              ? `Preference saved (${describeReminderSchedule({ frequency, hour })}). Expo Go on Android often blocks local notifications — a development build can schedule them for real.`
+              ? `Preference saved (${describeReminderSchedule({ frequency, hour })}). Expo Go on Android (SDK 53+) can’t schedule device notifications — the in-app care note still shows. Use an EAS build for real OS reminders.`
               : `Preference saved (${describeReminderSchedule({ frequency, hour })}), but the OS could not schedule a notification.`
           );
         } else {
@@ -106,7 +106,7 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
 
-        <Text style={styles.brand}>KindPlate</Text>
+        <Text style={styles.brand}>Buddi</Text>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.sub}>{user?.email}</Text>
 
@@ -133,10 +133,8 @@ export function SettingsScreen({ navigation }: Props) {
         <View style={styles.card}>
           <View style={styles.row}>
             <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Companion voice muted</Text>
-              <Text style={styles.rowBody}>
-                Voice stays off until you unmute. Talk never starts on its own.
-              </Text>
+              <Text style={styles.rowTitle}>Mute voice</Text>
+              <Text style={styles.rowBody}>Off until you tap Talk.</Text>
             </View>
             <Switch
               value={settings.companionMuted}
@@ -157,9 +155,7 @@ export function SettingsScreen({ navigation }: Props) {
           <View style={[styles.row, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, marginTop: 8, paddingTop: 12 }]}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Quiet-time music</Text>
-              <Text style={styles.rowBody}>
-                Soft ambient sound while you sit together. Off by default.
-              </Text>
+              <Text style={styles.rowBody}>Soft sound while sitting together.</Text>
             </View>
             <Switch
               value={settings.togetherMusic}
@@ -175,10 +171,8 @@ export function SettingsScreen({ navigation }: Props) {
             style={styles.linkRow}
           >
             <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Customize looks</Text>
-              <Text style={styles.rowBody}>
-                Species, colors, accessories, and scenes — cosmetics only, never body size.
-              </Text>
+              <Text style={styles.rowTitle}>Style companion</Text>
+              <Text style={styles.rowBody}>Looks and keepsakes.</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
@@ -189,17 +183,14 @@ export function SettingsScreen({ navigation }: Props) {
         <View style={styles.card}>
           {isExpoGo() ? (
             <Text style={styles.expoGoNote}>
-              Running in Expo Go: we still try to schedule a gentle local reminder. On some
-              Android Expo Go builds it may only save the preference until you use a
-              development build.
+              Expo Go (Android): care notes still show in-app. OS notification pop-ups need an
+              EAS build — they will not fire here.
             </Text>
           ) : null}
           <View style={styles.row}>
             <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Reminders on</Text>
-              <Text style={styles.rowBody}>
-                “Your companion would love a quiet hello…” — never “you forgot.”
-              </Text>
+              <Text style={styles.rowTitle}>Reminders</Text>
+              <Text style={styles.rowBody}>Soft hellos only — never “you forgot.”</Text>
             </View>
             <Switch
               disabled={busy}
@@ -271,32 +262,6 @@ export function SettingsScreen({ navigation }: Props) {
 
         {note ? <Text style={styles.feedback}>{note}</Text> : null}
 
-        {/* Where AI lives */}
-        <Text style={styles.section}>Where the AI is</Text>
-        <View style={styles.card}>
-          <Text style={styles.aiLine}>
-            <Text style={styles.aiStrong}>On your phone: </Text>
-            you never see AI numbers. Check-in only saves a photo.
-          </Text>
-          <Text style={styles.aiLine}>
-            <Text style={styles.aiStrong}>On the clinic computer: </Text>
-            staff open KindPlate Clinic → generate meal estimates + pattern summaries.
-          </Text>
-          <Text style={styles.aiLine}>
-            <Text style={styles.aiStrong}>On the server: </Text>
-            photo analysis runs after upload; summaries run when a clinician taps
-            “Generate AI summary.”
-          </Text>
-          <Text style={styles.rowBody}>
-            AI observes; clinicians decide. Set OPENAI_API_KEY on the backend for live
-            vision — otherwise enriched demo analysis is used.
-          </Text>
-        </View>
-
-        <Text style={styles.privacy}>
-          Clinic sees meal photos + pattern summaries — not companion cosmetics or
-          quiet-time sessions.
-        </Text>
 
         <Pressable style={styles.signOut} onPress={() => signOut()}>
           <Text style={styles.signOutText}>Sign out</Text>

@@ -54,13 +54,10 @@ export function MilestoneCelebration({
           accessibilityViewIsModal
           accessibilityRole="summary"
         >
-          <Text style={styles.eyebrow}>A little keepsake</Text>
+          <Text style={styles.eyebrow}>Keepsake</Text>
           <Text style={styles.title}>Something soft for {petName}</Text>
           <Text style={styles.gift}>{labels}</Text>
-          <Text style={styles.body}>
-            A cosmetic keepsake for being here — never a score, never a body change. Skip or
-            continue whenever you like.
-          </Text>
+          <Text style={styles.body}>Cosmetic only — never a score.</Text>
           <Pressable
             style={styles.cta}
             onPress={onClose}

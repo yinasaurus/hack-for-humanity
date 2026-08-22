@@ -85,11 +85,8 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   const handle: AnimalWebHandle = useMemo(
     () => ({
       speak: (audioUrl: string) => {
-        if (muted) {
-          post('reactGentle');
-          return;
-        }
-        post('speak', { audioUrl });
+        // Always animate Talk; mute only skips WebView audio (expo-speech handles voice).
+        post('speak', { audioUrl: audioUrl || '' });
       },
       stopSpeaking: () => post('stop'),
       react: () => post(reducedMotion ? 'reactGentle' : 'react'),
@@ -507,22 +504,27 @@ function doReact() {
 }
 
 function doSpeak(url) {
-  if (quiet) return;
-  if (muted) {
-    doReactGentle();
-    return;
+  // User-initiated Talk: wake from quiet and animate even if voice is muted
+  // (TTS may play outside this WebView via expo-speech).
+  if (quiet) {
+    quiet = false;
+    applyQuietPose(false);
   }
   talking = true;
+  setBackground('happy');
   playClip(WANT_TALK, { loop: true, speed: reducedMotion ? 0 : 0.58, fade: 0.6 });
   try {
     if (audioEl) { audioEl.pause(); audioEl = null; }
-    if (url) {
+    if (url && !muted) {
       audioEl = new Audio(url);
-      audioEl.onended = () => { audioEl = null; goBaseIdle(); };
-      audioEl.onerror = () => { audioEl = null; setTimeout(goBaseIdle, 1800); };
-      audioEl.play().catch(() => setTimeout(goBaseIdle, 1800));
-    } else setTimeout(goBaseIdle, 2600);
-  } catch { setTimeout(goBaseIdle, 2600); }
+      audioEl.onended = () => { audioEl = null; talking = false; goBaseIdle(); };
+      audioEl.onerror = () => { audioEl = null; talking = false; setTimeout(goBaseIdle, 2200); };
+      audioEl.play().catch(() => { talking = false; setTimeout(goBaseIdle, 2200); });
+    } else {
+      // Longer hold so multi-line Talk feels matched to speech length
+      setTimeout(() => { talking = false; goBaseIdle(); }, 7200);
+    }
+  } catch { talking = false; setTimeout(goBaseIdle, 7200); }
 }
 
 /* ——— Bone-attached decorative accessories (Fox skeleton) ——— */

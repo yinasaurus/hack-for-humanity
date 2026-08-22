@@ -10,8 +10,10 @@ import {
   fetchPatients,
   generateSummary,
   getClinicToken,
+  previewCarePlan,
   setClinicToken,
   setClinicianReminder,
+  type CarePlan,
 } from './api';
 import type { AlertRow, PatientRow } from './api';
 import './App.css';
@@ -35,6 +37,27 @@ function formatDay(iso?: string) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
+
+
+type ReminderTimeOfDay = 'morning' | 'midday' | 'evening';
+
+const REMINDER_TIME_OPTIONS: { id: ReminderTimeOfDay; label: string; hour: number; hint: string }[] = [
+  { id: 'morning', label: 'Morning', hour: 8, hint: '~8:00 AM' },
+  { id: 'midday', label: 'Midday', hour: 12, hint: '~12:00 PM' },
+  { id: 'evening', label: 'Evening', hour: 18, hint: '~6:00 PM' },
+];
+
+function timeOfDayFromHour(hour?: number): ReminderTimeOfDay {
+  const h = typeof hour === 'number' ? hour : 12;
+  if (h <= 10) return 'morning';
+  if (h <= 15) return 'midday';
+  return 'evening';
+}
+
+function labelForTimeOfDay(id: ReminderTimeOfDay) {
+  return REMINDER_TIME_OPTIONS.find((o) => o.id === id)?.label || id;
+}
+
 
 function todayDateInput() {
   const now = new Date();
@@ -67,8 +90,11 @@ export default function App() {
   const [reminderFrequency, setReminderFrequency] = useState<
     'daily' | 'weekly' | 'every_2_days' | 'every_3_days'
   >('weekly');
+  const [reminderTimeOfDay, setReminderTimeOfDay] = useState<ReminderTimeOfDay>('midday');
   const [reminderBusy, setReminderBusy] = useState(false);
   const [reminderOk, setReminderOk] = useState<string | null>(null);
+  const [carePlanPreview, setCarePlanPreview] = useState<CarePlan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -108,18 +134,28 @@ export default function App() {
     setCelebrateOk(null);
     setReminderNote('');
     setReminderFrequency('weekly');
+    setReminderTimeOfDay('midday');
     setReminderOk(null);
+    setCarePlanPreview(null);
     (async () => {
       try {
         const d = await fetchPatientDetail(selectedId);
         setDetail(d);
         const existing = d.clinicianReminder as
-          | { note?: string; frequency?: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days' }
+          | {
+              note?: string;
+              frequency?: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days';
+              hour?: number;
+              timeOfDay?: ReminderTimeOfDay;
+            }
           | null
           | undefined;
         if (existing?.note) {
           setReminderNote(existing.note);
           if (existing.frequency) setReminderFrequency(existing.frequency);
+          setReminderTimeOfDay(
+            existing.timeOfDay || timeOfDayFromHour(existing.hour)
+          );
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not load patient');
@@ -197,14 +233,39 @@ export default function App() {
       await setClinicianReminder(selectedId, {
         note: reminderNote.trim(),
         frequency: reminderFrequency,
+        hour: REMINDER_TIME_OPTIONS.find((o) => o.id === reminderTimeOfDay)?.hour ?? 12,
+        timeOfDay: reminderTimeOfDay,
+        planWithAi: Boolean(carePlanPreview),
+        carePlan: carePlanPreview || undefined,
       });
-      setReminderOk('Clinician-scheduled reminder saved — patient companion will surface it gently.');
+      setReminderOk(
+        carePlanPreview
+          ? 'Saved with gentle AI-assisted day plan — moments are spread out; patient can move a day if needed.'
+          : 'Reminder saved — patient companion will surface it gently.'
+      );
       const d = await fetchPatientDetail(selectedId);
       setDetail(d);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save reminder');
     } finally {
       setReminderBusy(false);
+    }
+  };
+
+  const onPreviewCarePlan = async () => {
+    if (!selectedId || !reminderNote.trim()) return;
+    setPlanBusy(true);
+    setError(null);
+    try {
+      const { carePlan, aiProvider } = await previewCarePlan(selectedId, reminderNote.trim());
+      setCarePlanPreview(carePlan);
+      setReminderOk(
+        `Plan ready (${aiProvider}). Review slots, then Save — Gemini spreads moments so nothing piles onto one day.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not plan with AI');
+    } finally {
+      setPlanBusy(false);
     }
   };
 
@@ -217,6 +278,7 @@ export default function App() {
       await clearClinicianReminder(selectedId);
       setReminderNote('');
       setReminderFrequency('weekly');
+      setReminderTimeOfDay('midday');
       setReminderOk('Reminder cleared.');
       const d = await fetchPatientDetail(selectedId);
       setDetail(d);
@@ -247,7 +309,7 @@ export default function App() {
       <div className="app login-wrap">
         <form className="login-card" onSubmit={onLogin} aria-label="Clinician sign in">
           <p className="eyebrow">Clinician access</p>
-          <h1>KindPlate Clinic</h1>
+          <h1>Buddi Clinic</h1>
           <p className="muted">Demo: clinic@demo.local / demo</p>
           {error && (
             <div className="banner error" role="alert">
@@ -285,7 +347,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-brand">
-          <h1>KindPlate Clinic</h1>
+          <h1>Buddi Clinic</h1>
           <p className="header-tagline">Photos · patterns · notes — you decide</p>
         </div>
         <div className="header-right">
@@ -604,10 +666,10 @@ export default function App() {
               </section>
 
               <section className="block clinician-reminder">
-                <h3>Clinician-scheduled reminder</h3>
+                <h3>Care reminder + gentle AI plan</h3>
                 <p className="muted tiny">
-                  You choose the note and frequency — not AI scheduling. The patient sees this
-                  gently via their companion and local notifications.
+                  You write the care note (e.g. “3 apples this week” or “3 apples in 2 days”). Optional
+                  Gemini suggests a soft day/meal spread — never catch-up stacking, no body metrics.
                 </p>
                 <form
                   className="celebrate-form"
@@ -620,16 +682,19 @@ export default function App() {
                     <span>Reminder note (shown to patient)</span>
                     <textarea
                       value={reminderNote}
-                      onChange={(e) => setReminderNote(e.target.value)}
-                      placeholder='e.g. "eat 2 apples each week"'
+                      onChange={(e) => {
+                        setReminderNote(e.target.value);
+                        setCarePlanPreview(null);
+                      }}
+                      placeholder='e.g. "3 apples this week" or "3 soft apple moments in 2 days"'
                       rows={2}
                       maxLength={280}
                       required
-                      aria-label={`Clinician-scheduled reminder for ${detail.patient.name}`}
+                      aria-label={`Care reminder for ${detail.patient.name}`}
                     />
                   </label>
                   <label className="field">
-                    <span>Frequency</span>
+                    <span>Fallback notification frequency</span>
                     <select
                       value={reminderFrequency}
                       onChange={(e) =>
@@ -645,7 +710,38 @@ export default function App() {
                       <option value="every_3_days">Custom — every 3 days</option>
                     </select>
                   </label>
+                  <fieldset className="field time-of-day">
+                    <legend>Time of day</legend>
+                    <p className="muted tiny">
+                      Rough window for the OS reminder — Morning / Midday / Evening (not exact minutes).
+                    </p>
+                    <div className="time-of-day-row" role="radiogroup" aria-label="Reminder time of day">
+                      {REMINDER_TIME_OPTIONS.map((opt) => (
+                        <label key={opt.id} className="time-chip">
+                          <input
+                            type="radio"
+                            name="reminder-time"
+                            value={opt.id}
+                            checked={reminderTimeOfDay === opt.id}
+                            onChange={() => setReminderTimeOfDay(opt.id)}
+                          />
+                          <span>
+                            {opt.label}
+                            <small>{opt.hint}</small>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                   <div className="celebrate-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={planBusy || !reminderNote.trim()}
+                      onClick={() => void onPreviewCarePlan()}
+                    >
+                      {planBusy ? 'Planning…' : 'Plan with Gemini'}
+                    </button>
                     <button
                       type="submit"
                       className="primary"
@@ -666,10 +762,34 @@ export default function App() {
                   </div>
                 </form>
                 {reminderOk ? <p className="ok tiny">{reminderOk}</p> : null}
+                {carePlanPreview?.slots?.length ? (
+                  <ul className="note-list">
+                    <li>
+                      <p className="muted tiny">{carePlanPreview.summary}</p>
+                    </li>
+                    {carePlanPreview.slots.map((s, i) => (
+                      <li key={`${s.date}-${s.mealLabel}-${i}`}>
+                        <time className="muted tiny">
+                          {s.date} · {s.mealLabel}
+                        </time>
+                        <p>{s.prompt}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {detail.clinicianReminder ? (
                   <p className="muted tiny">
                     Active: {detail.clinicianReminder.frequency.replace(/_/g, ' ')} ·{' '}
-                    {detail.clinicianReminder.note}
+                    {labelForTimeOfDay(
+                      (detail.clinicianReminder as { timeOfDay?: ReminderTimeOfDay }).timeOfDay ||
+                        timeOfDayFromHour(
+                          (detail.clinicianReminder as { hour?: number }).hour
+                        )
+                    )}{' '}
+                    · {detail.clinicianReminder.note}
+                    {detail.clinicianReminder.carePlan?.slots?.length
+                      ? ` · ${detail.clinicianReminder.carePlan.slots.length} planned moments`
+                      : ''}
                   </p>
                 ) : null}
               </section>
@@ -709,6 +829,7 @@ export default function App() {
                 <h3>Recent check-ins</h3>
                 <p className="muted tiny">
                   Latest 3 · clinic-only estimates. Patients never see these numbers.
+                  Soft “possible screen photo” hints stay here too — check-in still counts.
                 </p>
                 <ul className="checkins">
                   {detail.checkIns.slice(0, 3).map(
@@ -721,6 +842,9 @@ export default function App() {
                         estimatedCalories: number;
                         confidence: string;
                         notes: string;
+                        pending?: boolean;
+                        isMeal?: boolean;
+                        possibleScreenPhoto?: boolean;
                       } | null;
                     }) => (
                       <li key={c.id} className="checkin-row">
@@ -736,23 +860,32 @@ export default function App() {
                         <div className="checkin-body">
                           <strong>{formatDate(c.createdAt)}</strong>
                           {c.analysis ? (
-                            <p>
-                              {c.analysis.isMeal === false ? (
-                                <>Not a meal photo · no estimate</>
-                              ) : (
-                                <>
-                                  {c.analysis.foodType}
-                                  <span className="kcal">
-                                    {' '}
-                                    · ~{c.analysis.estimatedCalories} kcal
-                                  </span>
-                                  <span className={`conf conf-${c.analysis.confidence}`}>
-                                    {' '}
-                                    · {c.analysis.confidence}
-                                  </span>
-                                </>
-                              )}
-                            </p>
+                            <>
+                              <p>
+                                {c.analysis.pending ? (
+                                  <>Analyzing photo… · companion hello already saved</>
+                                ) : c.analysis.isMeal === false ? (
+                                  <>Not a meal photo · no estimate</>
+                                ) : (
+                                  <>
+                                    {c.analysis.foodType}
+                                    <span className="kcal">
+                                      {' '}
+                                      · ~{c.analysis.estimatedCalories} kcal
+                                    </span>
+                                    <span className={`conf conf-${c.analysis.confidence}`}>
+                                      {' '}
+                                      · {c.analysis.confidence}
+                                    </span>
+                                  </>
+                                )}
+                              </p>
+                              {c.analysis.possibleScreenPhoto ? (
+                                <p className="screen-flag">
+                                  Possible screen photo · soft hint only — discuss in person if needed
+                                </p>
+                              ) : null}
+                            </>
                           ) : (
                             <p className="muted">No analysis</p>
                           )}

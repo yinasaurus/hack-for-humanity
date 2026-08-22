@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, spacing } from '../theme';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../SettingsContext';
-import { CompanionPet } from '../components/CompanionPet';
 import { SupportChip } from '../components/SupportChip';
 
 export function WelcomeScreen() {
@@ -81,20 +80,14 @@ export function WelcomeScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.brand}>KindPlate</Text>
-          <Text style={styles.tagline}>
-            Sign in to meet your companion — gentle meal check-ins, no scores.
-          </Text>
-
-          <View style={styles.petPreview}>
-            <CompanionPet mood="happy" petType="fox" size={160} showCaption={false} />
-          </View>
+          <Text style={styles.brand}>Buddi</Text>
+          <Text style={styles.tagline}>Your gentle meal companion.</Text>
 
           <Pressable style={styles.demoBtn} onPress={demoLogin} disabled={busy}>
             {busy && mode === 'login' ? (
               <ActivityIndicator color={colors.white} />
             ) : (
-              <Text style={styles.demoBtnText}>Quick demo sign-in (Maya)</Text>
+              <Text style={styles.demoBtnText}>Try demo</Text>
             )}
           </Pressable>
           <Text style={styles.demoHint}>maya@demo.local · password demo</Text>
@@ -198,12 +191,12 @@ const styles = StyleSheet.create({
   },
   tagline: {
     marginTop: spacing.sm,
+    marginBottom: spacing.md,
     fontFamily: 'Nunito_400Regular',
     fontSize: 16,
     lineHeight: 23,
     color: colors.inkSoft,
   },
-  petPreview: { alignItems: 'center', marginVertical: 8 },
   demoBtn: {
     backgroundColor: colors.sageDeep,
     borderRadius: 16,

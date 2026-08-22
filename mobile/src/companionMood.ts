@@ -52,16 +52,16 @@ export function expressionCaption(petName: string, expression: CompanionExpressi
     case 'waving':
       return `${n} is saying hello`;
     case 'excited':
-      return `${n} is glowing with a little celebration`;
+      return `${n} is celebrating`;
     case 'curious':
-      return `${n} is looking around softly`;
+      return `${n} is looking around`;
     case 'sleepy':
-      return `${n} is cozy and sleepy`;
+      return `${n} is sleepy`;
     case 'resting':
-      return `${n} is resting quietly`;
+      return `${n} is resting`;
     case 'happy':
     default:
-      return `${n} is glad you are here`;
+      return `${n} is glad you’re here`;
   }
 }
 

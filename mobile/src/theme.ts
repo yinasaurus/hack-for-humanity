@@ -1,5 +1,5 @@
 /**
- * KindPlate palette — therapist / counsellor professional branding
+ * Buddi palette — therapist / counsellor professional branding
  * (sage + soft blue-gray + warm cream + deep slate).
  * Inspired by: https://au.pinterest.com/pin/color-palette-for-therapists-psychologists-and-counsellors-professional-branding--563935184608786962/
  */

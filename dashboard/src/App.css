@@ -608,6 +608,15 @@
   color: #8a4b18;
 }
 
+.screen-flag {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: #6b5a3e;
+  background: #f7f1e6;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
 .trend {
   list-style: none;
   margin: 8px 0 0;
@@ -632,6 +641,48 @@
 
 .tiny {
   font-size: 0.82rem;
+}
+
+.time-of-day {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.time-of-day legend {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2f3634;
+  margin-bottom: 4px;
+}
+
+.time-of-day-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.time-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid #e7edf2;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.time-chip input {
+  margin: 0;
+}
+
+.time-chip small {
+  display: block;
+  color: #5b6b7c;
+  font-size: 0.75rem;
 }
 
 .banner.error {

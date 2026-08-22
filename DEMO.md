@@ -1,56 +1,29 @@
-# Demo day — 90 seconds + what YOU must do
+# Demo day — 90 seconds
 
-## You must do (I cannot)
+## Before you start
 
-### 1. Live OpenAI key (biggest “wow”)
-1. Open `backend/.env`
-2. Set:
-   ```
-   OPENAI_API_KEY=sk-...your key...
-   ```
-3. Restart backend (`npm run dev` in `backend/`)
-4. Clinic should show a clear banner: **Live AI** (not **Mock AI — no API key set**)
+1. **AI key** in `backend/.env`: prefer `GEMINI_API_KEY` (or `OPENAI_API_KEY`). Restart backend. Clinic should show **Live AI**.
+2. **Phone ↔ PC**: same Wi‑Fi/hotspot. Set `mobile/.env` → `EXPO_PUBLIC_API_URL=http://YOUR_PC_IP:3001`. Restart Expo. Smoke-test `http://YOUR_PC_IP:3001/api/health` on the phone.
+3. Firewall (Admin, once): `powershell -ExecutionPolicy Bypass -File scripts/open-demo-ports.ps1`
 
-### 2. Phone + laptop LAN (avoid demo death)
-1. Phone hotspot / same Wi‑Fi as the PC
-2. On PC, find LAN IP (PowerShell):
-   ```
-   ipconfig
-   ```
-   Look for IPv4 like `192.168.x.x` or `10.x.x.x`
-3. `mobile/.env`:
-   ```
-   EXPO_PUBLIC_API_URL=http://YOUR_PC_IP:3001
-   ```
-4. Restart Expo after changing `.env`
-5. Allow firewall (run once as Admin if needed):
-   ```
-   powershell -ExecutionPolicy Bypass -File scripts/open-demo-ports.ps1
-   ```
-6. Smoke test: open `http://YOUR_PC_IP:3001/api/health` on the phone browser → `{"ok":true,...}`
+## Ethics (say out loud)
 
-### 3. Say the ethics out loud (judges need to hear it)
-Memorize these three lines:
-1. **Patients never see calories, macros, or scores.**
-2. **Companion rests as a cozy default — never suffers or dies.**
-3. **AI observes; clinicians decide.**
+1. Patients never see calories, macros, or scores.
+2. Companion rests — never suffers or dies.
+3. AI observes; clinicians decide.
 
----
+## 90-second path
 
-## 90-second demo path (rehearse)
+| Time | Show |
+|------|------|
+| :00–:20 | Phone: `maya@demo.local` / `demo` → companion → Talk / Wave |
+| :20–:40 | Meal photo (live camera) → saved hello |
+| :40–:55 | Style look / keepsake path, or Quiet time |
+| :55–:75 | Clinic: `clinic@demo.local` / `demo` → Jordan alert → **Why this alert** |
+| :75–:90 | Maya/Sam → Generate AI summary · optional care reminder (note + Morning/Midday/Evening) |
 
-| :00–:20 | Phone: Maya (`maya@demo.local` / `demo`) → home 3D companion → switch animal / Wave · Talk |
-| :20–:40 | Check-in → live camera → capture → celebration / keepsake if unlocked |
-| :40–:55 | Optional: Customize accessories, or quiet-time Together; resting card if quiet hours |
-| :55–:75 | Laptop clinic: `clinic@demo.local` / `demo` → **Jordan** alert → read **Why this alert** |
-| :75–:90 | Select Maya or Sam → **Generate AI summary** → point at **Mock/Live AI banner** + disclaimer; optional: set a **clinician-scheduled reminder** (note + frequency — not AI scheduling) |
+Backup if camera fails: existing Maya photos on clinic + Jordan alert + ethics lines.
 
-Backup if camera fails: show existing Maya check-ins on clinic + Jordan alert + ethics lines.
+## Skip (don’t burn time)
 
----
-
-## Intentionally skipped (do not burn time)
-- Real DB migration
-- EAS / App Store build
-- Clinician mobile app
-- Anti-cheat / calorie UI for patients / punitive pet
+Real DB, App Store, clinician mobile app, anti-cheat / patient calorie UI.

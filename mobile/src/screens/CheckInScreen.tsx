@@ -13,7 +13,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
-import { API_BASE, submitCheckIn, submitCheckInPhoto } from '../api';
+import { API_BASE, submitCheckIn, submitCheckInPhoto, type Unlock } from '../api';
 import { SupportChip } from '../components/SupportChip';
 
 type Props = {
@@ -30,12 +30,25 @@ export function CheckInScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const cameraRef = useRef<CameraView>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
+  const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+
+  const goHomeSaved = (unlocks: Unlock[]) => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    navigation.navigate('Home', {
+      celebrate: true,
+      newUnlocks: unlocks,
+    });
+  };
 
   if (!permission) {
     return (
@@ -50,7 +63,7 @@ export function CheckInScreen({ navigation }: Props) {
       <View style={styles.centered}>
         <Text style={styles.title}>Camera access</Text>
         <Text style={styles.body}>
-          KindPlate needs the camera so you can take a photo of your meal. Photos
+          Buddi needs the camera so you can take a photo of your meal. Photos
           are not chosen from your library — only a live photo from this screen.
         </Text>
         <Pressable
@@ -77,7 +90,7 @@ export function CheckInScreen({ navigation }: Props) {
           accessibilityLabel="Go back without taking a photo"
           style={styles.backHit}
         >
-          <Text style={styles.back}>Not now — that’s okay</Text>
+          <Text style={styles.back}>Skip</Text>
         </Pressable>
         <SupportChip />
       </View>
@@ -97,67 +110,92 @@ export function CheckInScreen({ navigation }: Props) {
     setStatus('Capturing…');
 
     try {
-      // skipProcessing:true often drops base64 on Android — avoid it
+      // Faster capture: smaller JPEG, no base64 encode when multipart URI upload works
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.45,
-        base64: true,
+        quality: 0.28,
+        base64: false,
         exif: false,
         shutterSound: false,
       });
 
-      if (!photo?.uri && !photo?.base64) {
+      if (!photo?.uri) {
         throw new Error('Camera did not return a photo. Try again.');
       }
 
-      setStatus('Saving to KindPlate…');
+      setStatus('Saving…');
 
       let result: Awaited<ReturnType<typeof submitCheckInPhoto>>;
       try {
-        if (photo.uri) {
-          result = await submitCheckInPhoto(user.id, photo.uri, 'image/jpeg');
-        } else {
-          throw new Error('no uri');
-        }
+        result = await submitCheckInPhoto(user.id, photo.uri, 'image/jpeg');
       } catch (uploadErr) {
-        // Fallback: base64 JSON (or read file if base64 missing)
-        let b64 = photo.base64;
-        if (!b64 && photo.uri) {
-          b64 = await FileSystem.readAsStringAsync(photo.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        }
+        // Fallback: read file as base64 JSON (slower — only if multipart fails)
+        setStatus('Saving (backup path)…');
+        const b64 = await FileSystem.readAsStringAsync(photo.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
         if (!b64) {
           throw uploadErr instanceof Error
             ? uploadErr
             : new Error('Could not read photo data');
         }
-        setStatus('Saving (backup path)…');
         result = await submitCheckIn(user.id, b64, 'image/jpeg');
       }
 
       setStatus(null);
-      setDoneMessage('Saved — your companion noticed you stopped by.');
       const unlocks = result.companion?.newlyUnlocked || [];
-      setTimeout(() => {
-        navigation.navigate('Home', {
-          celebrate: true,
-          newUnlocks: unlocks,
-        });
-      }, 700);
+      setPendingUnlocks(unlocks);
+      setDoneMessage('Your companion noticed you.');
+      // Hold the thank-you beat so it is readable, then return home with a soft hello.
+      leaveTimer.current = setTimeout(() => goHomeSaved(unlocks), 1600);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save photo';
+      const softMeal =
+        /not (appear to be )?a meal|doesn’t look like a meal|does not appear to be a meal/i.test(
+          msg
+        );
       const hint =
         msg.toLowerCase().includes('network') ||
         msg.toLowerCase().includes('fetch') ||
         msg.toLowerCase().includes('connect')
           ? `\n\nCheck Wi‑Fi/hotspot and API ${API_BASE}`
-          : '';
+          : softMeal
+            ? '\n\nTry a meal photo, or skip.'
+            : '';
       setError(`${msg}${hint}`);
       setStatus(null);
     } finally {
       setBusy(false);
     }
   };
+
+  if (doneMessage) {
+    return (
+      <View
+        style={[
+          styles.root,
+          styles.savedRoot,
+          {
+            paddingTop: Math.max(insets.top, 12) + 8,
+            paddingBottom: Math.max(insets.bottom, 12) + 8,
+          },
+        ]}
+      >
+        <Text style={styles.header} accessibilityRole="header">
+          Saved
+        </Text>
+        <Text style={styles.doneBig}>{doneMessage}</Text>
+        <Pressable
+          style={styles.shutter}
+          onPress={() => goHomeSaved(pendingUnlocks)}
+          accessibilityRole="button"
+          accessibilityLabel="Back to companion"
+        >
+          <Text style={styles.shutterText}>Back to companion</Text>
+        </Pressable>
+        <SupportChip />
+      </View>
+    );
+  }
 
   return (
     <View
@@ -170,11 +208,9 @@ export function CheckInScreen({ navigation }: Props) {
       ]}
     >
       <Text style={styles.header} accessibilityRole="header">
-        Take a photo of your meal
+        Meal photo
       </Text>
-      <Text style={styles.sub}>
-        One gentle moment if you want — or leave anytime. Skipping is always okay.
-      </Text>
+      <Text style={styles.sub}>Live camera only · skip anytime</Text>
 
       <View style={styles.cameraWrap}>
         <CameraView
@@ -198,7 +234,6 @@ export function CheckInScreen({ navigation }: Props) {
 
       {status ? <Text style={styles.status}>{status}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {doneMessage ? <Text style={styles.done}>{doneMessage}</Text> : null}
 
       <Pressable
         style={[styles.shutter, (!cameraReady || busy) && styles.shutterDisabled]}
@@ -356,6 +391,16 @@ const styles = StyleSheet.create({
     color: colors.sage,
     textAlign: 'center',
     fontFamily: 'Nunito_700Bold',
+  },
+  doneBig: {
+    marginTop: spacing.lg,
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 22,
+    lineHeight: 30,
+    color: colors.sageDeep,
+  },
+  savedRoot: {
+    justifyContent: 'center',
   },
   hint: {
     marginTop: 10,

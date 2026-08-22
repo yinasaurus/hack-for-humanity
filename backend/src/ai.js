@@ -48,14 +48,20 @@ First decide isMeal. Be strict.
 isMeal = true ONLY if edible food or a drink is the main subject (plate, bowl, cup, takeaway container, clearly edible items).
 isMeal = false for: laptops, keyboards, monitors, phones, code/terminals, desks, documents, rooms, people without food, pets, empty surfaces, packaging alone with no food visible, or anything unclear.
 
+Also set possibleScreenPhoto (boolean). This is a soft clinician hint only — never reject the check-in for it.
+possibleScreenPhoto = true when the meal looks photographed from another screen (phone/monitor/tablet), a search-result image, a printed photo of food, strong moiré/pixel grid, bezel/browser chrome around the food, or other signs it may not be a real plate in front of the camera.
+possibleScreenPhoto = false when it looks like a real plated meal / takeaway in physical space, or when unsure.
+Do NOT set isMeal false just because possibleScreenPhoto is true — if food is the main subject, isMeal stays true.
+
 Return JSON only:
 - isMeal (boolean) — required
+- possibleScreenPhoto (boolean) — required
 - foodType (string)
 - estimatedCalories, estimatedProteinG, estimatedCarbsG, estimatedFatG (numbers)
 - confidence ("high" | "medium" | "low")
 - notes (short string)
 
-If isMeal is false: foodType "Not a meal photo", all macros 0, confidence "high".
+If isMeal is false: foodType "Not a meal photo", all macros 0, confidence "high", possibleScreenPhoto false.
 Do NOT invent food when unsure — set isMeal false.
 Do NOT diagnose eating disorders. Do NOT judge portions.`;
 
@@ -149,13 +155,21 @@ export async function generateClinicianSummary({
     foodType: a.foodType,
     estimatedCalories: a.estimatedCalories,
     confidence: a.confidence,
+    possibleScreenPhoto: Boolean(a.possibleScreenPhoto),
   }));
 
   const lowConf = analyses.filter((a) => a.confidence === 'low').length;
+  const possibleScreenCount = analyses.filter((a) => a.possibleScreenPhoto).length;
   const provider = aiProvider();
 
   if (provider === 'mock') {
-    return mockSummary({ patientName, metrics, alertReasons, lowConf });
+    return mockSummary({
+      patientName,
+      metrics,
+      alertReasons,
+      lowConf,
+      possibleScreenCount,
+    });
   }
 
   const system = `You write brief pre-appointment summaries for clinicians supporting patients who log meals with a companion app.
@@ -163,8 +177,10 @@ Rules:
 - Observations only — never diagnose, never prescribe, never instruct the clinician what to do.
 - Phrase as patterns ("logging dropped off over the past week"), not clinical conclusions.
 - Mention nutritional trends only as rough estimates from photo analysis; note low-confidence analyses.
+- If possibleScreenPhotoCount > 0, mention gently that some photos may have been of a screen/image rather than a plate — soft context only, not an accusation.
 - Return JSON: { "summary": string, "shouldAlert": boolean, "alertReason": string|null }
-- If shouldAlert is true, alertReason MUST be a concrete explainable string.`;
+- If shouldAlert is true, alertReason MUST be a concrete explainable string.
+- Do NOT set shouldAlert solely because of possible screen photos.`;
 
   const userPayload = JSON.stringify({
     patientName,
@@ -172,6 +188,7 @@ Rules:
     recentAnalyses: analysisBrief,
     existingAlertReasons: alertReasons,
     lowConfidenceCount: lowConf,
+    possibleScreenPhotoCount: possibleScreenCount,
   });
 
   try {
@@ -217,6 +234,69 @@ Rules:
   }
 }
 
+/**
+ * Turn a clinician care note into a gentle multi-day reminder schedule.
+ * Timing / soft prompts only — never calories, weight, or "catch-up" stacking advice.
+ */
+export async function planGentleCareSchedule(goalText, { startDate } = {}) {
+  const { mockPlanCareSchedule, normalizePlan } = await import('./careSchedule.js');
+  const { toDateKey } = await import('./streaks.js');
+  const start = startDate || toDateKey(new Date());
+  const text = String(goalText || '').trim();
+  if (!text) {
+    return mockPlanCareSchedule('a gentle care moment', { startDate: start });
+  }
+
+  const provider = aiProvider();
+  if (provider === 'mock') {
+    return mockPlanCareSchedule(text, { startDate: start });
+  }
+
+  const system = `You help clinicians schedule GENTLE care-moment reminders for an eating-disorder companion app (Buddi).
+Rules:
+- Output JSON only: {
+  "summary": string,
+  "windowDays": number,
+  "slots": [ { "date": "YYYY-MM-DD", "mealLabel": "morning|midday|afternoon|evening|anytime", "prompt": string } ]
+}
+- Spread moments evenly across the window. NEVER put multiple catch-up moments on one day after a miss.
+- Prompts must be warm, optional, non-coercive (e.g. "a soft apple moment if it feels okay"). No scores, calories, weight, BMI, or "you must".
+- If the clinician says "3 apples in 2 days", plan ~3 soft moments across those 2 days without dumping everything into one meal.
+- If they say "3 apples weekly", use windowDays=7 and space 3 moments.
+- Dates must be on/after ${start}. windowDays between 1 and 21. Max 14 slots.
+- mealLabel should vary (morning/midday/afternoon/evening) when multiple moments fall close together.`;
+
+  try {
+    if (provider === 'gemini') {
+      const model = geminiModel();
+      const result = await model.generateContent(
+        `${system}\n\nClinician note:\n${text}\nStart date: ${start}`
+      );
+      const parsed = parseJsonLoose(result.response.text());
+      return normalizePlan({ ...parsed, startDate: start, source: 'gemini' }, text);
+    }
+
+    const openai = openaiClient();
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: `Clinician note:\n${text}\nStart date: ${start}` },
+      ],
+      max_tokens: 700,
+    });
+    const parsed = parseJsonLoose(response.choices[0]?.message?.content || '{}');
+    return normalizePlan({ ...parsed, startDate: start, source: 'openai' }, text);
+  } catch (err) {
+    console.error('planGentleCareSchedule failed:', err.message);
+    return {
+      ...mockPlanCareSchedule(text, { startDate: start }),
+      note: 'AI planner unavailable; gentle mock plan used.',
+    };
+  }
+}
+
 export function normalizeAnalysis(parsed = {}) {
   // Missing isMeal → treat as not a meal (fail closed). Models sometimes omit the field.
   const hasFlag = Object.prototype.hasOwnProperty.call(parsed, 'isMeal')
@@ -224,9 +304,16 @@ export function normalizeAnalysis(parsed = {}) {
   const rawFlag = hasFlag ? parsed.isMeal ?? parsed.is_meal : false;
   const isMeal = rawFlag === true || rawFlag === 'true';
 
+  const possibleScreenPhoto =
+    parsed.possibleScreenPhoto === true ||
+    parsed.possibleScreenPhoto === 'true' ||
+    parsed.possible_screen_photo === true ||
+    parsed.possible_screen_photo === 'true';
+
   if (!isMeal) {
     return {
       isMeal: false,
+      possibleScreenPhoto: false,
       foodType: 'Not a meal photo',
       estimatedCalories: 0,
       estimatedProteinG: 0,
@@ -246,6 +333,7 @@ export function normalizeAnalysis(parsed = {}) {
     : 'low';
   return {
     isMeal: true,
+    possibleScreenPhoto,
     foodType: String(parsed.foodType || 'Unclear meal'),
     estimatedCalories: Number(parsed.estimatedCalories) || 0,
     estimatedProteinG: Number(parsed.estimatedProteinG) || 0,
@@ -300,6 +388,7 @@ export function mockAnalyze(seed = '') {
   return {
     ...pick,
     isMeal: true,
+    possibleScreenPhoto: false,
     notes: pick.confidence === 'low'
       ? 'Mock demo — no live vision. Set GEMINI_API_KEY for real photo analysis; review photos directly.'
       : MOCK_NOTES,
@@ -307,13 +396,18 @@ export function mockAnalyze(seed = '') {
   };
 }
 
-function mockSummary({ patientName, metrics, alertReasons, lowConf }) {
+function mockSummary({ patientName, metrics, alertReasons, lowConf, possibleScreenCount = 0 }) {
   const rate7pct = Math.round((metrics.rate7 || 0) * 100);
   const rate30pct = Math.round((metrics.rate30 || 0) * 100);
   const parts = [];
   parts.push(
     `Logging consistency: ${patientName} checked in on ${rate7pct}% of the last 7 days and ${rate30pct}% of the last 30 days.`
   );
+  if (possibleScreenCount > 0) {
+    parts.push(
+      `Photo context: ${possibleScreenCount} recent check-in(s) were soft-flagged as possibly photographed from a screen or image — review in person; the app does not reject or punish for this.`
+    );
+  }
   parts.push(
     `Engagement pattern: current streak ${metrics.streak || 0} day(s); consecutive missed days ${metrics.misses || 0}.`
   );

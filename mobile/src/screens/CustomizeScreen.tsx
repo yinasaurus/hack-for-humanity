@@ -15,6 +15,7 @@ import { AnimalWebView, characterForLiveCompanion } from '../characters';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { fetchCompanion, updateAppearance, type CompanionState, type Unlock } from '../api';
+import { upcomingKeepsakeSteps } from '../keepsakePath';
 import {
   DEFAULT_APPEARANCE,
   PET_FACES,
@@ -123,6 +124,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
+  const [helloDayCount, setHelloDayCount] = useState(0);
   const [tab, setTab] = useState<TabId>('companion');
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
@@ -141,6 +143,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
         const c = await fetchCompanion(user.id);
         if (cancelled) return;
         setUnlocks(c.unlocks || []);
+        setHelloDayCount((c.helloDays || []).length);
         // Only hydrate from server if the user hasn't started editing
         if (!dirtyRef.current) {
           const next = appearanceFromPartial(c);
@@ -176,6 +179,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
     }
     return ids;
   }, [unlocks]);
+
+  const keepsakePath = useMemo(
+    () => upcomingKeepsakeSteps(helloDayCount, 4),
+    [helloDayCount]
+  );
 
   const patch = <K extends keyof PetAppearance>(key: K, value: PetAppearance[K]) => {
     dirtyRef.current = true;
@@ -226,11 +234,8 @@ export function CustomizeScreen({ navigation, route }: Props) {
           { paddingTop: Math.max(insets.top, 8) + 4 },
         ]}
       >
-        <Text style={styles.title}>Style your companion</Text>
-        <Text style={styles.sub}>
-          Live low-poly animal (Fox, Horse, Parrot, Flamingo, Stork). Cosmetics only — never
-          body size. Hats fit best on Fox.
-        </Text>
+        <Text style={styles.title}>Style</Text>
+        <Text style={styles.sub}>Looks only — never body size.</Text>
         {loadingLook ? (
           <ActivityIndicator color={colors.sageDeep} style={{ marginVertical: 24 }} />
         ) : (
@@ -276,6 +281,25 @@ export function CustomizeScreen({ navigation, route }: Props) {
           placeholderTextColor={colors.inkSoft}
         />
 
+        <View style={styles.pathCard} accessibilityRole="summary">
+          <Text style={styles.pathTitle}>Coming up</Text>
+          <Text style={styles.pathBlurb}>Soft keepsakes from hello days — no deadlines.</Text>
+          {keepsakePath.map((step) => (
+            <View key={step.milestoneDay} style={styles.pathRow}>
+              <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
+                {step.label}
+              </Text>
+              <Text style={styles.pathAway}>
+                {step.unlocked
+                  ? 'Yours'
+                  : step.hellosAway === 1
+                    ? '~1 hello'
+                    : `~${step.hellosAway} hellos`}
+              </Text>
+            </View>
+          ))}
+        </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabs}>
           {TABS.map((t) => (
             <Pressable
@@ -292,11 +316,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {tab === 'companion' && (
           <>
-            <Text style={styles.section}>Choose your friend</Text>
-            <Text style={styles.colorHint}>
-              Pick a low-poly animal. Fox can wear hats and scarves on the body; other
-              friends still animate — accessories may float until a matching rig exists.
-            </Text>
+            <Text style={styles.section}>Friend</Text>
             <ChipRow
               options={PET_TYPES}
               value={a.petType}
@@ -322,10 +342,6 @@ export function CustomizeScreen({ navigation, route }: Props) {
               unlockedIds={unlockedCosmeticIds}
             />
             <Text style={styles.section}>Neck</Text>
-            <Text style={styles.colorHint}>
-              Soft scarf unlocks as a keepsake after gentle check-in milestones — still never a
-              score.
-            </Text>
             <ChipRow
               options={WEAR_NECKS}
               value={a.neck}
@@ -382,7 +398,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
           accessibilityLabel="Leave without saving"
           style={{ minHeight: tapTarget.min, justifyContent: 'center' }}
         >
-          <Text style={styles.back}>Not now — that’s okay</Text>
+          <Text style={styles.back}>Cancel</Text>
         </Pressable>
       </ScrollView>
       <SupportChip />
@@ -483,6 +499,51 @@ const styles = StyleSheet.create({
   chipTitle: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.ink },
   chipTitleOn: { color: colors.sageDeep },
   chipBlurb: { fontFamily: 'Nunito_400Regular', fontSize: 11, color: colors.inkSoft, marginTop: 2 },
+  pathCard: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pathTitle: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.ink,
+  },
+  pathBlurb: {
+    marginTop: 6,
+    marginBottom: 10,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.inkSoft,
+  },
+  pathRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  pathLabel: {
+    flex: 1,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+  pathLabelOn: {
+    color: colors.sageDeep,
+  },
+  pathAway: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 12,
+    color: colors.inkSoft,
+  },
   keepsakeTag: {
     marginTop: 4,
     fontFamily: 'Nunito_600SemiBold',

@@ -132,13 +132,16 @@ export async function celebrateCheckup(
   return data.celebration;
 }
 
-/** Clinician-scheduled reminder — note + frequency (not AI-parsed). */
+/** Clinician-scheduled reminder — optional Gemini gentle care plan. */
 export async function setClinicianReminder(
   patientId: string,
   payload: {
     note: string;
     frequency: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days';
     hour?: number;
+    timeOfDay?: 'morning' | 'midday' | 'evening';
+    planWithAi?: boolean;
+    carePlan?: unknown;
   }
 ) {
   const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/reminder`, {
@@ -150,6 +153,36 @@ export async function setClinicianReminder(
   if (!res.ok) throw new Error(data.error || 'Could not save reminder');
   return data.reminder;
 }
+
+/** Preview a gentle multi-day plan (Gemini when keyed; otherwise mock). */
+export async function previewCarePlan(patientId: string, note: string) {
+  const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/reminder/plan`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ note }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not plan reminder');
+  return data as { carePlan: CarePlan; aiProvider: string };
+}
+
+export type CarePlanSlot = {
+  id?: string;
+  date: string;
+  mealLabel: string;
+  prompt: string;
+  status?: string;
+};
+
+export type CarePlan = {
+  goalText?: string;
+  summary?: string;
+  windowDays?: number;
+  startDate?: string;
+  endDate?: string;
+  slots?: CarePlanSlot[];
+  source?: string;
+};
 
 export async function clearClinicianReminder(patientId: string) {
   const res = await fetch(`${API_BASE}/api/clinician/patients/${patientId}/reminder`, {

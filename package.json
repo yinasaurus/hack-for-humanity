@@ -1,5 +1,5 @@
 {
-  "name": "kindplate",
+  "name": "buddi",
   "private": true,
   "scripts": {
     "backend": "npm --prefix backend run dev",
@@ -7,8 +7,5 @@
     "backend:test": "npm --prefix backend test",
     "dashboard": "npm --prefix dashboard run dev",
     "mobile": "npm --prefix mobile start"
-  },
-  "dependencies": {
-    "expo": "^57.0.15"
   }
 }

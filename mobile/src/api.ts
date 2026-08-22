@@ -40,6 +40,26 @@ export type ClinicianReminder = {
   note: string;
   frequency: 'daily' | 'weekly' | 'every_2_days' | 'every_3_days';
   hour: number;
+  timeOfDay?: 'morning' | 'midday' | 'evening';
+  carePlan?: {
+    summary?: string;
+    startDate?: string;
+    endDate?: string;
+    slots?: {
+      id: string;
+      date: string;
+      mealLabel: string;
+      prompt: string;
+      status: string;
+    }[];
+  } | null;
+  todayMoment?: {
+    id: string;
+    date: string;
+    mealLabel: string;
+    prompt: string;
+    isToday: boolean;
+  } | null;
 };
 
 export type CompanionState = {
@@ -148,6 +168,17 @@ export async function acknowledgeCheckupCelebration(
   );
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not acknowledge celebration');
+  return data;
+}
+
+/** Move today's/overdue care-plan moments later — no catch-up stacking. */
+export async function skipCarePlanToday(userId: string): Promise<CompanionState> {
+  const res = await fetch(`${API_BASE}/api/patient/${userId}/care-plan/skip-today`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not adjust care plan');
   return data;
 }
 

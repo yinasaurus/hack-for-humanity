@@ -16,7 +16,7 @@ import {
   shiftDay,
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
-import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider } from './ai.js';
+import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider, planGentleCareSchedule } from './ai.js';
 import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
@@ -42,8 +42,11 @@ import {
   normalizeReminderFrequency,
   normalizeReminderHour,
   normalizeReminderNote,
-  toPatientClinicianReminder,
 } from './clinicianReminder.js';
+import {
+  redistributePendingSlots,
+  toPatientCarePlan,
+} from './careSchedule.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -97,7 +100,7 @@ export function toPatientCompanionState(userId) {
   const allUnlocks = [...unlocks, ...newUnlocks];
   const appearance = appearanceFromUser(user);
   const pendingCheckup = pendingCelebrationForPatient(db, userId);
-  const clinicianReminder = toPatientClinicianReminder(getClinicianReminder(db, userId));
+  const clinicianReminder = toPatientCarePlan(getClinicianReminder(db, userId));
 
   return {
     mood,
@@ -113,6 +116,8 @@ export function toPatientCompanionState(userId) {
 }
 
 async function saveCheckInFromBuffer(user, buffer, mimeType) {
+  // Meal gate runs before we log — non-food photos must not create a check-in.
+  // (This waits on vision; client still captures smaller JPEGs to keep it quicker.)
   const analysis = await analyzeFoodPhoto({
     imageBase64: buffer.toString('base64'),
     mimeType: mimeType || 'image/jpeg',
@@ -147,6 +152,7 @@ async function saveCheckInFromBuffer(user, buffer, mimeType) {
       userId: user.id,
       createdAt,
       ...analysis,
+      pending: false,
     };
   });
 
@@ -584,12 +590,12 @@ export function registerRoutes(app) {
   });
 
   /**
-   * Clinician-scheduled reminder — note + frequency set manually (not AI-parsed).
+   * Clinician-scheduled reminder — note + frequency; optional Gemini gentle care plan.
    */
   app.post(
     '/api/clinician/patients/:id/reminder',
     requireAuth(['clinician']),
-    (req, res) => {
+    async (req, res) => {
       const db = readDb();
       const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
       if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
@@ -608,11 +614,22 @@ export function registerRoutes(app) {
         });
       }
 
+      let carePlan = null;
+      if (req.body?.planWithAi || req.body?.carePlan) {
+        if (req.body?.carePlan?.slots) {
+          const { normalizePlan } = await import('./careSchedule.js');
+          carePlan = normalizePlan(req.body.carePlan, note);
+        } else {
+          carePlan = await planGentleCareSchedule(note);
+        }
+      }
+
       const reminder = {
         id: uuid(),
         note,
         frequency,
-        hour: normalizeReminderHour(req.body?.hour),
+        hour: normalizeReminderHour(req.body?.hour ?? req.body?.timeOfDay),
+        carePlan,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: clinician.id,
@@ -624,6 +641,26 @@ export function registerRoutes(app) {
       });
 
       res.status(201).json({ reminder });
+    }
+  );
+
+  /** Preview a Gemini/mock gentle schedule without saving. */
+  app.post(
+    '/api/clinician/patients/:id/reminder/plan',
+    requireAuth(['clinician']),
+    async (req, res) => {
+      const db = readDb();
+      const clinician = db.users.find((u) => u.id === req.auth.sub && u.role === 'clinician');
+      if (!clinician) return res.status(401).json({ error: 'Please sign in again' });
+      const patient = db.users.find((u) => u.id === req.params.id && u.role === 'patient');
+      if (!patient) return res.status(404).json({ error: 'not found' });
+      if (!clinicianCanAccessPatient(clinician, patient)) {
+        return res.status(403).json({ error: 'Not allowed for this clinic' });
+      }
+      const note = normalizeReminderNote(req.body?.note);
+      if (!note) return res.status(400).json({ error: 'reminder note required' });
+      const carePlan = await planGentleCareSchedule(note);
+      res.json({ carePlan, aiProvider: aiProvider() });
     }
   );
 
@@ -646,6 +683,54 @@ export function registerRoutes(app) {
       });
 
       res.json({ ok: true });
+    }
+  );
+
+  /** Patient: move today's (or overdue) pending moments later — no catch-up stacking. */
+  app.post(
+    '/api/patient/:userId/care-plan/skip-today',
+    requireAuth(['patient']),
+    (req, res) => {
+      if (req.auth.sub !== req.params.userId) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+      const user = readDb().users.find((u) => u.id === req.params.userId);
+      if (!user || user.role !== 'patient') {
+        return res.status(404).json({ error: 'patient not found' });
+      }
+
+      const today = toDateKey(new Date());
+      let ok = false;
+      updateDb((d) => {
+        if (!d.clinicianReminders?.[user.id]?.carePlan?.slots) return;
+        const reminder = d.clinicianReminders[user.id];
+        const plan = reminder.carePlan;
+        const stay = plan.slots.filter(
+          (s) => s.status !== 'pending' || String(s.date) > today
+        );
+        const toMove = plan.slots.filter(
+          (s) => s.status === 'pending' && String(s.date) <= today
+        );
+        if (!toMove.length) {
+          ok = true;
+          return;
+        }
+        const from = shiftDay(today, 1);
+        let end = plan.endDate || shiftDay(today, Math.max(1, (plan.windowDays || 7) - 1));
+        if (end < from) end = shiftDay(from, Math.max(0, toMove.length - 1));
+        const moved = redistributePendingSlots(toMove, from, end);
+        reminder.carePlan = {
+          ...plan,
+          endDate: end,
+          slots: [...stay, ...moved].sort((a, b) => String(a.date).localeCompare(String(b.date))),
+          updatedAt: new Date().toISOString(),
+        };
+        reminder.updatedAt = new Date().toISOString();
+        ok = true;
+      });
+
+      if (!ok) return res.status(404).json({ error: 'no care plan' });
+      res.json(toPatientCompanionState(user.id));
     }
   );
 

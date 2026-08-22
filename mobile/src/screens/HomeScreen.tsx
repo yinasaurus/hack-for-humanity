@@ -27,6 +27,7 @@ import {
   Unlock,
   acknowledgeCheckupCelebration,
   fetchCompanion,
+  skipCarePlanToday,
   type CheckupCelebrationPending,
 } from '../api';
 import {
@@ -41,6 +42,38 @@ import {
   type CompanionExpression,
   type CompanionPresence,
 } from '../companionMood';
+import { nextCompanionTalk } from '../companionTalk';
+import type { AnimalWebHandle } from '../characters';
+
+/** Speak multi-sentence lines in sequence (Android TTS truncates long blobs). */
+function speakCompanionLines(full: string, onEnd: () => void) {
+  const parts = full
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const queue = parts.length ? parts : [full];
+  let i = 0;
+  const next = () => {
+    if (i >= queue.length) {
+      onEnd();
+      return;
+    }
+    const chunk = queue[i++];
+    Speech.speak(chunk, {
+      rate: 0.88,
+      pitch: 1.02,
+      onDone: next,
+      onStopped: onEnd,
+      onError: onEnd,
+    });
+  };
+  try {
+    Speech.stop();
+  } catch {
+    /* ignore */
+  }
+  next();
+}
 
 const CLINICIAN_REMINDER_SYNC_KEY = 'kindplate.clinicianReminderSyncId';
 
@@ -72,8 +105,8 @@ type Props = {
 
 export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
-  const { settings } = useSettings();
+  const { user } = useAuth();
+  const { settings, updateSettings } = useSettings();
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +114,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
   const [checkupMoment, setCheckupMoment] = useState<CheckupCelebrationPending | null>(null);
   const [showCheckup, setShowCheckup] = useState(false);
+  const [helloBanner, setHelloBanner] = useState(false);
   const [napping, setNapping] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [talkLine, setTalkLine] = useState<string | null>(null);
+  const petRef = useRef<AnimalWebHandle | null>(null);
   /** Server presence band — happy | resting only (quiet hours, not a miss penalty) */
   const [presence, setPresence] = useState<CompanionPresence>('happy');
   /** Client presentation — may include waving / excited / curious / sleepy */
@@ -167,6 +203,21 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
       setShowMilestone(true);
     }
   }, [newUnlocks]);
+
+  // Soft hello after a meal check-in (even when no keepsake unlocked)
+  useEffect(() => {
+    if (!celebrate) return;
+    setHelloBanner(true);
+    setNapping(false);
+    clearExpressionTimer();
+    setExpression('excited');
+    expressionTimer.current = setTimeout(() => {
+      settleAfterGesture(nappingRef.current);
+      setHelloBanner(false);
+      navigation.setParams?.({ celebrate: undefined });
+    }, 4200);
+    return () => clearExpressionTimer();
+  }, [celebrate, navigation, settleAfterGesture]);
 
   useEffect(() => {
     if (!companion) return;
@@ -308,47 +359,48 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           styles.content,
           {
             paddingTop: Math.max(insets.top, 8) + 4,
-            paddingBottom: Math.max(insets.bottom, 16) + 72,
+            paddingBottom: Math.max(insets.bottom, 16) + 28,
           },
         ]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
       >
         <View style={styles.topRow}>
           <Text style={[styles.brand, cozyLook && styles.brandResting]} accessibilityRole="header">
-            KindPlate
+            Buddi
           </Text>
-          <Pressable
-            onPress={() => navigation.navigate('Settings')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Open settings"
-            style={styles.topBtn}
-          >
-            <Text style={styles.settingsGear}>⚙</Text>
-          </Pressable>
+          <View style={styles.topActions}>
+            <SupportChip placement="inline" />
+            <Pressable
+              onPress={() => navigation.navigate('Settings')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              style={styles.topBtn}
+            >
+              <Text style={styles.settingsGear}>⚙</Text>
+            </Pressable>
+          </View>
         </View>
 
         <Text style={styles.hello}>Hi {user?.name}</Text>
         <Text style={styles.sub}>
-          {quietHours
-            ? 'Evening hush — your companion is cozy. Talk, wave, or play anytime; a meal photo is never required.'
-            : 'Thanks for spending a moment here today.'}
+          {quietHours ? 'Quiet evening — hang out anytime.' : 'Glad you’re here.'}
         </Text>
 
-        <Pressable
-          style={styles.switchAccount}
-          onPress={signOut}
-          accessibilityRole="button"
-          accessibilityLabel="Sign out or switch account"
-        >
-          <Text style={styles.switchAccountText}>Sign out / switch account</Text>
-        </Pressable>
+        {helloBanner ? (
+          <View style={styles.helloBanner} accessibilityRole="summary">
+            <Text style={styles.helloBannerText}>
+              Saved — {companion?.petName || 'your companion'} says hi.
+            </Text>
+          </View>
+        ) : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {companion && (
           <View style={styles.hero}>
             <AnimalWebView
+              ref={petRef}
               key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
               character={characterForLiveCompanion(companion.petType)}
               expression={expression}
@@ -366,16 +418,50 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             <Text style={styles.petName}>{companion.petName}</Text>
             <Text style={styles.petCaption}>
               {expressionCaption(companion.petName, expression)}
-              {' · Drag gently to look around · Customize in Settings'}
             </Text>
+            <Pressable
+              onPress={() => navigation.navigate('Customize', companion)}
+              accessibilityRole="link"
+              style={styles.styleLinkHit}
+            >
+              <Text style={styles.styleLink}>Style look</Text>
+            </Pressable>
+
+            {talkLine ? (
+              <View style={styles.speechBubble} accessibilityRole="summary">
+                <Text style={styles.speechBubbleText}>{talkLine}</Text>
+              </View>
+            ) : null}
 
             {companion.clinicianReminder?.note ? (
               <View style={styles.careNote} accessibilityRole="summary">
-                <Text style={styles.careNoteEyebrow}>From your care team</Text>
-                <Text style={styles.careNoteBody}>{companion.clinicianReminder.note}</Text>
-                <Text style={styles.careNoteSoft}>
-                  A gentle clinician-scheduled reminder — nothing to score.
+                <Text style={styles.careNoteEyebrow}>Care note</Text>
+                <Text style={styles.careNoteBody}>
+                  {companion.clinicianReminder.todayMoment?.prompt ||
+                    companion.clinicianReminder.note}
                 </Text>
+                {companion.clinicianReminder.todayMoment ? (
+                  <Text style={styles.careNoteSoft}>
+                    {companion.clinicianReminder.todayMoment.isToday
+                      ? `Today · ${companion.clinicianReminder.todayMoment.mealLabel}`
+                      : `Next · ${companion.clinicianReminder.todayMoment.date}`}
+                  </Text>
+                ) : null}
+                {companion.clinicianReminder.carePlan?.slots?.length ? (
+                  <Pressable
+                    style={styles.careNoteBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Move today's care moment to another day"
+                    onPress={() => {
+                      if (!user) return;
+                      void skipCarePlanToday(user.id)
+                        .then((next) => setCompanion(next))
+                        .catch(() => {});
+                    }}
+                  >
+                    <Text style={styles.careNoteBtnText}>Not today</Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
 
@@ -386,20 +472,24 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 accessibilityLabel={`Talk with ${companion.petName}`}
                 onPress={() => {
                   setNapping(false);
-                  if (!muted) {
-                    setSpeaking(true);
-                    Speech.speak(`Hi. I'm ${companion.petName}. I'm glad you're here.`, {
-                      rate: 0.82,
-                      pitch: 1.0,
-                      onDone: () => setSpeaking(false),
-                      onStopped: () => setSpeaking(false),
-                    });
-                  }
                   clearExpressionTimer();
                   setExpression('happy');
+                  const line = nextCompanionTalk(companion.petName);
+                  setTalkLine(line);
+                  petRef.current?.wake();
+                  petRef.current?.speak('');
+                  // User tapped Talk — always speak (never auto-plays on its own).
+                  if (muted) {
+                    void updateSettings({ companionMuted: false });
+                  }
+                  setSpeaking(true);
+                  speakCompanionLines(line, () => setSpeaking(false));
+                  expressionTimer.current = setTimeout(() => {
+                    settleAfterGesture(false);
+                  }, 7800);
                 }}
               >
-                <Text style={styles.petBtnText}>Talk</Text>
+                <Text style={styles.petBtnText}>{speaking ? 'Talking…' : 'Talk'}</Text>
               </Pressable>
               <Pressable
                 style={styles.petBtn}
@@ -452,11 +542,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
         {napping && companion ? (
           <View style={styles.restCard} accessibilityRole="summary">
-            <Text style={styles.restTitle}>Resting together</Text>
+            <Text style={styles.restTitle}>Resting</Text>
             <Text style={styles.restBody}>
-              {companion.petName} is not sad or fading — just resting quietly. Talk, wave, or
-              play whenever you like. Missed days never change how welcome you are. A meal
-              photo is optional whenever you want one.
+              {companion.petName} is cozy — not upset. Talk whenever you like.
             </Text>
           </View>
         ) : null}
@@ -467,21 +555,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Take a meal photo check-in"
         >
-          <Text style={styles.primaryText}>Take a photo of your meal</Text>
+          <Text style={styles.primaryText}>Meal photo</Text>
         </Pressable>
-        <Pressable
-          onPress={() => {}}
-          accessibilityRole="text"
-          style={styles.skipHintWrap}
-        >
-          <Text style={styles.skipHint}>
-            No pressure — you can skip a photo any day. Your companion simply rests.
-          </Text>
-        </Pressable>
-        <Text style={styles.clinicNote}>
-          Your clinic can see meal photos and a plain-language pattern summary — not a score,
-          and not a diagnosis. AI observes; clinicians decide.
-        </Text>
+        <Text style={styles.skipHint}>Optional · skip anytime</Text>
 
         <View style={styles.linkRow}>
           {companion?.walksAvailable ? (
@@ -490,23 +566,18 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
               accessibilityRole="link"
               style={styles.linkHit}
             >
-              <Text style={styles.link}>Sit quietly together</Text>
+              <Text style={styles.link}>Quiet time</Text>
             </Pressable>
-          ) : (
-            <Text style={styles.linkMuted}>Quiet time unlocks after a few check-ins</Text>
-          )}
+          ) : null}
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            accessibilityRole="link"
+            style={styles.linkHit}
+          >
+            <Text style={styles.linkMuted}>Settings</Text>
+          </Pressable>
         </View>
-
-        {companion && companion.unlocks.length > 0 && (
-          <View style={styles.unlocks}>
-            <Text style={styles.unlocksTitle}>Keepsakes</Text>
-            <Text style={styles.keepsakeLine}>
-              {companion.unlocks.map((u) => u.label).join(' · ')}
-            </Text>
-          </View>
-        )}
       </ScrollView>
-      <SupportChip />
     </LinearGradient>
   );
 }
@@ -520,11 +591,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   topBtn: {
     minHeight: tapTarget.min,
     minWidth: tapTarget.min,
     justifyContent: 'center',
     alignItems: 'flex-end',
+  },
+  helloBanner: {
+    marginTop: spacing.sm,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  helloBannerText: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 15,
+    color: colors.sageDeep,
+    lineHeight: 22,
   },
   brand: {
     fontFamily: 'Nunito_800ExtraBold',
@@ -589,6 +681,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.ink,
   },
+  styleLinkHit: {
+    marginTop: 4,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  styleLink: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
+    color: colors.sageDeep,
+    textDecorationLine: 'underline',
+  },
   petCaption: {
     marginTop: 4,
     fontFamily: 'Nunito_400Regular',
@@ -627,6 +730,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: colors.inkSoft,
+  },
+  careNoteBtn: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.sageDeep,
+  },
+  careNoteBtnText: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 13,
+    color: colors.white,
+  },
+  speechBubble: {
+    marginTop: 12,
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  speechBubbleText: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.ink,
   },
   petActions: {
     flexDirection: 'row',
@@ -699,19 +832,10 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 17,
   },
-  skipHintWrap: { marginTop: 8 },
   skipHint: {
+    marginTop: 8,
     fontFamily: 'Nunito_400Regular',
     fontSize: 13,
-    lineHeight: 19,
-    color: colors.inkSoft,
-    textAlign: 'center',
-  },
-  clinicNote: {
-    marginTop: 10,
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 13,
-    lineHeight: 19,
     color: colors.inkSoft,
     textAlign: 'center',
   },
@@ -735,18 +859,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
     fontSize: 13,
     color: colors.inkSoft,
-  },
-  unlocks: { marginTop: spacing.xl },
-  unlocksTitle: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 14,
-    color: colors.ink,
-    marginBottom: 6,
-  },
-  keepsakeLine: {
-    fontFamily: 'Nunito_400Regular',
-    color: colors.inkSoft,
-    fontSize: 14,
-    lineHeight: 21,
   },
 });

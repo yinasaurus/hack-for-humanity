@@ -26,6 +26,20 @@ describe('meal photo rejection', () => {
     assert.equal(a.isMeal, true);
     assert.equal(a.foodType, 'Rice bowl');
     assert.equal(a.estimatedCalories, 450);
+    assert.equal(a.possibleScreenPhoto, false);
+    assert.equal(isNotAMeal(a), false);
+  });
+
+  it('flags possible screen photos without rejecting the meal', () => {
+    const a = normalizeAnalysis({
+      isMeal: true,
+      possibleScreenPhoto: true,
+      foodType: 'Chicken rice',
+      estimatedCalories: 520,
+      confidence: 'medium',
+    });
+    assert.equal(a.isMeal, true);
+    assert.equal(a.possibleScreenPhoto, true);
     assert.equal(isNotAMeal(a), false);
   });
 

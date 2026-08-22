@@ -37,35 +37,27 @@ export function TransparencyScreen({ onDone }: Props) {
           },
         ]}
       >
-        <Text style={styles.brand}>KindPlate</Text>
+        <Text style={styles.brand}>Buddi</Text>
         <Text style={styles.title} accessibilityRole="header">
-          What your clinic can see
-        </Text>
-        <Text style={styles.body}>
-          Nothing about your care should feel hidden. Here is what your clinician can view in
-          their dashboard:
+          What your clinic sees
         </Text>
 
         <View style={styles.block}>
-          <Text style={styles.blockTitle}>Photos you take</Text>
+          <Text style={styles.blockTitle}>Meal photos</Text>
+          <Text style={styles.blockBody}>The photos you take, and which days you said hello.</Text>
+        </View>
+
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Pattern notes</Text>
           <Text style={styles.blockBody}>
-            The meal photos you capture in the app, along with the days you checked in.
+            Soft AI summaries for appointments — observations only, not diagnoses.
           </Text>
         </View>
 
         <View style={styles.block}>
-          <Text style={styles.blockTitle}>A plain-language summary</Text>
+          <Text style={styles.blockTitle}>Hidden from you</Text>
           <Text style={styles.blockBody}>
-            An AI-written pattern note for appointments — about showing-up patterns and rough
-            trends estimated from photos. It observes; it does not diagnose or decide your care.
-          </Text>
-        </View>
-
-        <View style={styles.block}>
-          <Text style={styles.blockTitle}>What stays off your screen</Text>
-          <Text style={styles.blockBody}>
-            This app never shows you calories, macros, scores, or comparisons. Your companion
-            responds to showing up — not to what was on the plate.
+            No calories, macros, or scores on your phone.
           </Text>
         </View>
 
@@ -73,11 +65,11 @@ export function TransparencyScreen({ onDone }: Props) {
           style={styles.cta}
           onPress={finish}
           accessibilityRole="button"
-          accessibilityLabel="Continue to KindPlate"
+          accessibilityLabel="Continue to Buddi"
         >
           <Text style={styles.ctaText}>Continue</Text>
         </Pressable>
-        <Text style={styles.softNote}>You can revisit care details anytime in Settings.</Text>
+        <Text style={styles.softNote}>Details also live in Settings.</Text>
       </ScrollView>
       <SupportChip />
     </View>

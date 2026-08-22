@@ -13,15 +13,30 @@ import { colors, spacing, tapTarget } from '../theme';
 type Props = {
   /** Hide on screens that already show a full support section */
   compact?: boolean;
+  /**
+   * top — floats top-right (away from Capture / primary CTAs)
+   * inline — sits in a header row without covering content
+   */
+  placement?: 'top' | 'inline';
 };
 
 /**
  * Always-reachable, low-pressure crisis / support entry — not buried in Settings.
  * Singapore-local resources. Never auto-calls or auto-plays audio.
  */
-export function SupportChip({ compact = true }: Props) {
+export function SupportChip({ compact = true, placement = 'top' }: Props) {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+
+  const chipStyle =
+    placement === 'inline'
+      ? [styles.chip, styles.chipInline, compact && styles.chipCompact]
+      : [
+          styles.chip,
+          styles.chipFloat,
+          compact && styles.chipCompact,
+          { top: Math.max(insets.top, 10) + 4 },
+        ];
 
   return (
     <>
@@ -29,11 +44,7 @@ export function SupportChip({ compact = true }: Props) {
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel="Open support and crisis resources"
-        style={[
-          styles.chip,
-          compact && styles.chipCompact,
-          { bottom: Math.max(insets.bottom, 10) + 4 },
-        ]}
+        style={chipStyle}
         hitSlop={6}
       >
         <Text style={styles.chipText}>Support</Text>
@@ -57,9 +68,7 @@ export function SupportChip({ compact = true }: Props) {
           >
             <Text style={styles.title}>You’re not alone</Text>
             <Text style={styles.body}>
-              KindPlate is a companion for meal moments — not emergency care. This app is
-              not monitored 24/7 and is not a substitute for crisis support. If you need
-              real-time help in Singapore, these options are here whenever you want them.
+              Buddi isn’t emergency care. In Singapore, these lines are here if you need them.
             </Text>
 
             <Pressable
@@ -131,12 +140,10 @@ export function SupportChip({ compact = true }: Props) {
 
 const styles = StyleSheet.create({
   chip: {
-    position: 'absolute',
-    left: spacing.md,
     zIndex: 40,
-    minHeight: tapTarget.min,
-    minWidth: tapTarget.min,
-    paddingHorizontal: 14,
+    minHeight: 40,
+    minWidth: 40,
+    paddingHorizontal: 12,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
@@ -148,6 +155,15 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  chipFloat: {
+    position: 'absolute',
+    right: spacing.md,
+  },
+  chipInline: {
+    position: 'relative',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   chipCompact: {},
   chipText: {
