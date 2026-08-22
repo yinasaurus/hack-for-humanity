@@ -13,6 +13,8 @@ import {
   previewCarePlan,
   setClinicToken,
   setClinicianReminder,
+  updateClinicalProfile,
+  type ClinicalProfile,
   type CarePlan,
 } from './api';
 import type { AlertRow, PatientRow } from './api';
@@ -95,6 +97,8 @@ export default function App() {
   const [reminderOk, setReminderOk] = useState<string | null>(null);
   const [carePlanPreview, setCarePlanPreview] = useState<CarePlan | null>(null);
   const [planBusy, setPlanBusy] = useState(false);
+  const [clinical, setClinical] = useState<ClinicalProfile>({ heightCm: null, weightKg: null, dailyCalorieTarget: null, customGoals: [] });
+  const [clinicalBusy, setClinicalBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -141,6 +145,7 @@ export default function App() {
       try {
         const d = await fetchPatientDetail(selectedId);
         setDetail(d);
+        setClinical(d.patient.clinicalProfile || { heightCm: null, weightKg: null, dailyCalorieTarget: null, customGoals: [] });
         const existing = d.clinicianReminder as
           | {
               note?: string;
@@ -188,6 +193,17 @@ export default function App() {
     } finally {
       setSummaryBusy(false);
     }
+  };
+
+  const onSaveClinical = async () => {
+    if (!selectedId) return;
+    setClinicalBusy(true); setError(null);
+    try {
+      const saved = await updateClinicalProfile(selectedId, clinical);
+      setClinical(saved);
+      setDetail(await fetchPatientDetail(selectedId));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not save clinical goals'); }
+    finally { setClinicalBusy(false); }
   };
 
   const onAddNote = async () => {
@@ -538,6 +554,18 @@ export default function App() {
                     {Math.round(detail.metrics.rate30 * 30)}/{30}
                   </strong>
                   <span className="metric-sub">{pct(detail.metrics.rate30)} of days</span>
+                </div>
+              </section>
+
+              <section className="block" aria-label="Clinician-only clinical targets">
+                <h3>Clinical targets</h3>
+                <p className="muted tiny">Clinician-only. Numerical values are never returned by patient APIs.</p>
+                <div className="celebrate-form">
+                  <label className="field"><span>Height (cm)</span><input type="number" min="1" value={clinical.heightCm ?? ''} onChange={(e) => setClinical({ ...clinical, heightCm: e.target.value ? Number(e.target.value) : null })} /></label>
+                  <label className="field"><span>Weight (kg)</span><input type="number" min="1" step="0.1" value={clinical.weightKg ?? ''} onChange={(e) => setClinical({ ...clinical, weightKg: e.target.value ? Number(e.target.value) : null })} /></label>
+                  <label className="field"><span>Daily calorie target</span><input type="number" min="1" value={clinical.dailyCalorieTarget ?? ''} onChange={(e) => setClinical({ ...clinical, dailyCalorieTarget: e.target.value ? Number(e.target.value) : null })} /></label>
+                  <label className="field"><span>Patient-facing food goals (one per line)</span><textarea rows={3} value={clinical.customGoals.join('\n')} onChange={(e) => setClinical({ ...clinical, customGoals: e.target.value.split('\n').map((v) => v.trim()).filter(Boolean) })} placeholder="Two gentle apple moments this week" /></label>
+                  <button type="button" className="primary" disabled={clinicalBusy} onClick={() => void onSaveClinical()}>{clinicalBusy ? 'Saving…' : 'Save clinical plan'}</button>
                 </div>
               </section>
 

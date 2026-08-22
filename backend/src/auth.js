@@ -58,6 +58,18 @@ export function requireAuth(roles = null) {
 
 export function publicUser(user) {
   if (!user) return null;
-  const { passwordHash, ...safe } = user;
+  // Explicit allowlist: clinical fields added to persistence can never drift into patient auth APIs.
+  const safe = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    clinicId: user.clinicId,
+    onboarded: Boolean(user.onboarded),
+    createdAt: user.createdAt,
+  };
+  for (const key of ['petName', 'petType', 'petColor', 'pattern', 'eyes', 'hat', 'face', 'neck', 'held', 'scene', 'accent']) {
+    if (user[key] !== undefined) safe[key] = user[key];
+  }
   return safe;
 }

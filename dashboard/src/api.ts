@@ -93,14 +93,31 @@ export async function fetchPatientDetail(id: string) {
 }
 
 export async function generateSummary(patientId: string) {
-  const res = await fetch(`${API_BASE}/api/generate-summary`, {
+  const res = await fetch(`${API_BASE}/api/clinician/patient/${patientId}/digest`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ patientId }),
+    body: JSON.stringify({}),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Could not generate summary');
   return data;
+}
+
+export type ClinicalProfile = {
+  heightCm: number | null;
+  weightKg: number | null;
+  dailyCalorieTarget: number | null;
+  customGoals: string[];
+  updatedAt?: string | null;
+};
+
+export async function updateClinicalProfile(patientId: string, profile: ClinicalProfile) {
+  const res = await fetch(`${API_BASE}/api/clinician/patient/${patientId}/clinical`, {
+    method: 'PATCH', headers: authHeaders(), body: JSON.stringify(profile),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Could not update clinical goals');
+  return data.clinicalProfile as ClinicalProfile;
 }
 
 export async function addClinicianNote(patientId: string, text: string) {

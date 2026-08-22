@@ -399,22 +399,24 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
         {companion && (
           <View style={styles.hero}>
-            <AnimalWebView
-              ref={petRef}
-              key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
-              character={characterForLiveCompanion(companion.petType)}
-              expression={expression}
-              muted={muted}
-              style={styles.hero3d}
-              accessibilityLabel={`${companion.petName} companion`}
-              outfit={{
-                hat: companion.hat,
-                face: companion.face,
-                neck: companion.neck,
-                held: companion.held,
-                scene: companion.scene,
-              }}
-            />
+            <View style={[styles.hero3d, { opacity: ({ bright: 1, fatigued: 0.82, dim: 0.58, dormant: 0.35 } as const)[companion.vitality || 'bright'] }]}>
+              <AnimalWebView
+                ref={petRef}
+                key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
+                character={characterForLiveCompanion(companion.petType)}
+                expression={expression}
+                muted={muted}
+                style={styles.hero3d}
+                accessibilityLabel={`${companion.petName} companion, vitality ${companion.vitality || 'bright'}`}
+                outfit={{
+                  hat: companion.hat,
+                  face: companion.face,
+                  neck: companion.neck,
+                  held: companion.held,
+                  scene: companion.scene,
+                }}
+              />
+            </View>
             <Text style={styles.petName}>{companion.petName}</Text>
             <Text style={styles.petCaption}>
               {expressionCaption(companion.petName, expression)}
@@ -462,6 +464,15 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                     <Text style={styles.careNoteBtnText}>Not today</Text>
                   </Pressable>
                 ) : null}
+              </View>
+            ) : null}
+
+            {companion.careGoals?.messages?.length ? (
+              <View style={styles.careNote} accessibilityRole="summary">
+                <Text style={styles.careNoteEyebrow}>{companion.careGoals.title}</Text>
+                {companion.careGoals.messages.map((message) => (
+                  <Text key={message} style={styles.careNoteBody}>{message}</Text>
+                ))}
               </View>
             ) : null}
 
@@ -675,6 +686,10 @@ const styles = StyleSheet.create({
     height: 320,
     borderRadius: 28,
   },
+  vitality_bright: { opacity: 1 },
+  vitality_fatigued: { opacity: 0.82 },
+  vitality_dim: { opacity: 0.58 },
+  vitality_dormant: { opacity: 0.35 },
   petName: {
     marginTop: 10,
     fontFamily: 'Nunito_800ExtraBold',

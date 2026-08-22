@@ -25,6 +25,7 @@ const patients = [
     ...DEFAULT_APPEARANCE,
     petName: 'Maple',
     petType: 'fox',
+    clinicalProfile: { heightCm: 165, weightKg: 58, dailyCalorieTarget: 2100, customGoals: ['Two gentle apple moments this week'] },
     // password: demo
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
@@ -38,6 +39,7 @@ const patients = [
     onboarded: true,
     ...DEFAULT_APPEARANCE,
     petType: 'fox',
+    clinicalProfile: { heightCm: 178, weightKg: 72, dailyCalorieTarget: 2400, customGoals: [] },
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
   },
@@ -50,6 +52,7 @@ const patients = [
     onboarded: true,
     ...DEFAULT_APPEARANCE,
     petType: 'fox',
+    clinicalProfile: { heightCm: 170, weightKg: 64, dailyCalorieTarget: 2200, customGoals: ['Add an afternoon snack when it feels manageable'] },
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
     createdAt: daysAgo(40),
   },

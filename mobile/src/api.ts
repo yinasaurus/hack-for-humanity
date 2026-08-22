@@ -64,6 +64,7 @@ export type ClinicianReminder = {
 
 export type CompanionState = {
   mood: 'happy' | 'resting';
+  vitality: 'bright' | 'fatigued' | 'dim' | 'dormant';
   walksAvailable: boolean;
   unlocks: Unlock[];
   newlyUnlocked: Unlock[];
@@ -73,6 +74,7 @@ export type CompanionState = {
   checkupCelebration?: CheckupCelebrationPending | null;
   /** Clinician-scheduled reminder (note + frequency; not AI). */
   clinicianReminder?: ClinicianReminder | null;
+  careGoals?: { title: string; messages: string[] } | null;
 } & PetAppearance;
 
 export type AuthResult = { user: User; token: string };
@@ -142,6 +144,22 @@ export async function markOnboarded(userId: string): Promise<User> {
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not update onboarding');
+  return data.user;
+}
+
+export async function completeOnboarding(
+  userId: string,
+  petType: string,
+  petName: string
+): Promise<User> {
+  const res = await fetch(`${API_BASE}/api/patient/${userId}/onboarding`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ petType, petName }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not save your companion');
+  assertNoNutritionLeak(data);
   return data.user;
 }
 
