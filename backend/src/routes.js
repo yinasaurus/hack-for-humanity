@@ -6,7 +6,10 @@ import { fileURLToPath } from 'url';
 import { readDb, updateDb, DATA_DIR } from './db.js';
 import {
   currentStreak,
+  isValidTimeZone,
+  maxHistoricalStreak,
   milestonesReached,
+  normalizeTimeZone,
   petMood,
   rewardForMilestone,
   uniqueSortedDays,
@@ -19,7 +22,7 @@ import {
 } from './streaks.js';
 import { evaluateAlerts } from './alerts.js';
 import { analyzeFoodPhoto, generateClinicianSummary, isNotAMeal, NOT_A_MEAL_ERROR, hasLiveAi, aiProvider, planGentleCareSchedule } from './ai.js';
-import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE, isAllowedPetType } from './appearance.js';
+import { appearanceFromUser, applyAppearancePatch, DEFAULT_APPEARANCE, findLockedWardrobeChange, isAllowedPetType } from './appearance.js';
 import { publicUser, requireAuth, signToken } from './auth.js';
 import { decideUploadAccess, findCheckInByUploadFile } from './uploadAccess.js';
 import {
@@ -75,13 +78,21 @@ export function toPatientSafeCheckIn(checkIn) {
   };
 }
 
-export function toPatientCompanionState(userId) {
-  const db = readDb();
+export function toPatientCompanionState(userId, dbOverride = null) {
+  const db = dbOverride || readDb();
   const user = db.users.find((u) => u.id === userId);
   const checkIns = db.checkIns.filter((c) => c.userId === userId);
+  const timeZone = normalizeTimeZone(user?.timezone);
   // Compute streaks/milestones server-side; do not expose counts to patients.
-  const streak = currentStreak(checkIns);
-  const totalDays = uniqueSortedDays(checkIns).length;
+  const computedHistoricalStreak = maxHistoricalStreak(checkIns, timeZone);
+  const storedHistoricalStreak = Number(user?.highestConsecutiveStreak) || 0;
+  const unlocks = db.unlocks?.[userId] || [];
+  // Persist the high-water mark so earned growth survives a broken streak or
+  // later deletion of an old check-in record.
+  const highestConsecutiveStreak = Math.max(
+    storedHistoricalStreak,
+    computedHistoricalStreak
+  );
   const mood = petMood(checkIns);
   const analyses = Object.values(db.analyses || {}).filter((a) => a.userId === userId);
   const { metrics: clinicalMetrics } = evaluateAlerts(user || {}, checkIns, analyses);
@@ -91,30 +102,76 @@ export function toPatientCompanionState(userId) {
     checkIns,
     recentlyRestored ? null : clinicalMetrics.dailyDeficitPct,
     new Date(),
-    user?.createdAt
+    user?.createdAt,
+    timeZone
   );
-  const milestoneDays = milestonesReached(totalDays);
-  const unlocks = db.unlocks[userId] || [];
+  const milestoneDays = milestonesReached(highestConsecutiveStreak);
+  const earnedMilestones = new Set(milestoneDays);
+  // Existing prototype unlocks may have been created from cumulative days.
+  // Keep only rewards justified by the new high-water streak, then backfill
+  // any missing valid rewards. An old unlock must never promote a patient.
+  const validUnlocks = [];
+  const seenUnlockDays = new Set();
+  for (const unlock of unlocks) {
+    const day = Number(unlock?.milestoneDay);
+    if (!earnedMilestones.has(day) || seenUnlockDays.has(day)) continue;
+    seenUnlockDays.add(day);
+    validUnlocks.push(unlock);
+  }
   const newUnlocks = [];
 
   for (const day of milestoneDays) {
-    if (!unlocks.some((u) => u.milestoneDay === day)) {
+    if (!seenUnlockDays.has(day)) {
       const reward = rewardForMilestone(day);
       newUnlocks.push({
         milestoneDay: day,
         ...reward,
         unlockedAt: new Date().toISOString(),
       });
+      seenUnlockDays.add(day);
+    }
+  }
+  const allUnlocks = [...validUnlocks, ...newUnlocks];
+  const unlocksChanged = validUnlocks.length !== unlocks.length;
+
+  const shouldPersistProgress = !dbOverride;
+  const needsUserProgressUpdate =
+    user && (user.timezone !== timeZone || Number(user.highestConsecutiveStreak) !== highestConsecutiveStreak);
+  if (shouldPersistProgress && (newUnlocks.length || unlocksChanged || needsUserProgressUpdate)) {
+    updateDb((d) => {
+      const target = d.users.find((entry) => entry.id === userId);
+      const persistedHighest = Math.max(
+        Number(target?.highestConsecutiveStreak) || 0,
+        highestConsecutiveStreak
+      );
+      if (target) {
+        target.timezone = timeZone;
+        target.highestConsecutiveStreak = persistedHighest;
+      }
+      if (newUnlocks.length || unlocksChanged) {
+        if (!d.unlocks) d.unlocks = {};
+        const earnedNow = new Set(milestonesReached(persistedHighest));
+        const mergedByDay = new Map();
+        for (const unlock of [...(d.unlocks[userId] || []), ...allUnlocks]) {
+          const day = Number(unlock?.milestoneDay);
+          if (earnedNow.has(day) && !mergedByDay.has(day)) mergedByDay.set(day, unlock);
+        }
+        d.unlocks[userId] = [...mergedByDay.values()].sort(
+          (a, b) => Number(a.milestoneDay) - Number(b.milestoneDay)
+        );
+      }
+    });
+  } else if (dbOverride) {
+    if (user) {
+      user.timezone = timeZone;
+      user.highestConsecutiveStreak = highestConsecutiveStreak;
+    }
+    if (newUnlocks.length || unlocksChanged) {
+      if (!db.unlocks) db.unlocks = {};
+      db.unlocks[userId] = allUnlocks;
     }
   }
 
-  if (newUnlocks.length) {
-    updateDb((d) => {
-      d.unlocks[userId] = [...(d.unlocks[userId] || []), ...newUnlocks];
-    });
-  }
-
-  const allUnlocks = [...unlocks, ...newUnlocks];
   const appearance = appearanceFromUser(user);
   const pendingCheckup = pendingCelebrationForPatient(db, userId);
   const clinicianReminder = toPatientCarePlan(getClinicianReminder(db, userId));
@@ -122,12 +179,12 @@ export function toPatientCompanionState(userId) {
   return {
     mood,
     vitality,
-    growthStage: growthStageForDays(totalDays),
+    growthStage: growthStageForDays(highestConsecutiveStreak),
     petGender: user?.petGender || 'female',
-    walksAvailable: walksUnlocked(checkIns),
+    walksAvailable: walksUnlocked(checkIns, timeZone),
     unlocks: allUnlocks,
     newlyUnlocked: newUnlocks,
-    helloDays: uniqueSortedDays(checkIns),
+    helloDays: uniqueSortedDays(checkIns, timeZone),
     checkupCelebration: toPatientPendingCelebration(pendingCheckup),
     clinicianReminder,
     careGoals: patientReminderFromClinicalProfile(user?.clinicalProfile),
@@ -199,7 +256,7 @@ export function registerRoutes(app) {
 
   // --- Auth ---
   app.post('/api/auth/signup', async (req, res) => {
-    const { email, password, name } = req.body || {};
+    const { email, password, name, timezone } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: 'email and password required' });
     }
@@ -220,8 +277,10 @@ export function registerRoutes(app) {
       role: 'patient',
       clinicId: DEFAULT_CLINIC_ID,
       onboarded: false,
+      timezone: normalizeTimeZone(timezone),
+      highestConsecutiveStreak: 0,
       ...DEFAULT_APPEARANCE,
-      petType: 'panda',
+      petType: DEFAULT_APPEARANCE.petType,
       passwordHash,
       createdAt: new Date().toISOString(),
     };
@@ -310,7 +369,10 @@ export function registerRoutes(app) {
     }
     updateDb((d) => {
       const u = d.users.find((x) => x.id === req.params.id);
-      if (u) u.onboarded = true;
+      if (u) {
+        u.onboarded = true;
+        if (u.role === 'patient') u.timezone = normalizeTimeZone(req.body?.timezone ?? u.timezone);
+      }
     });
     const user = readDb().users.find((u) => u.id === req.params.id);
     res.json({ user: publicUser(user) });
@@ -339,11 +401,36 @@ export function registerRoutes(app) {
       found = true;
       applyAppearancePatch(user, { petType: req.body?.petType, petName });
       user.petGender = petGender;
+      user.timezone = normalizeTimeZone(req.body?.timezone ?? user.timezone);
+      if (!Number.isFinite(Number(user.highestConsecutiveStreak))) {
+        user.highestConsecutiveStreak = 0;
+      }
       user.onboarded = true;
     });
     if (!found) return res.status(404).json({ error: 'patient not found' });
     const user = readDb().users.find((u) => u.id === req.params.userId);
     res.json({ user: publicUser(user), companion: toPatientCompanionState(user.id) });
+  });
+
+  // Patient devices may change timezone after onboarding (travel or a device
+  // restore). Keep this narrow endpoint separate from cosmetic appearance.
+  app.patch('/api/patient/:userId/timezone', requireAuth(['patient']), (req, res) => {
+    if (req.auth.sub !== req.params.userId) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+    const user = readDb().users.find((u) => u.id === req.params.userId && u.role === 'patient');
+    if (!user) return res.status(404).json({ error: 'patient not found' });
+    if (!isValidTimeZone(req.body?.timezone)) {
+      return res.status(400).json({ error: 'timezone must be a valid IANA timezone' });
+    }
+    const timezone = normalizeTimeZone(req.body.timezone);
+    updateDb((d) => {
+      const target = d.users.find((u) => u.id === req.params.userId && u.role === 'patient');
+      if (target) target.timezone = timezone;
+    });
+    const companion = toPatientCompanionState(req.params.userId);
+    const updatedUser = readDb().users.find((entry) => entry.id === req.params.userId);
+    res.json({ user: publicUser(updatedUser), timezone, companion });
   });
 
   // Cosmetic pet appearance only (species/color/outfits/scenes — never size/body)
@@ -355,6 +442,13 @@ export function registerRoutes(app) {
     if (!existing) return res.status(404).json({ error: 'patient not found' });
     if (req.body?.petType != null && req.body.petType !== existing.petType) {
       return res.status(409).json({ error: 'Pet species cannot be changed after onboarding' });
+    }
+    const unlockIds = new Set(
+      (readDb().unlocks?.[req.params.userId] || []).map((unlock) => unlock.id)
+    );
+    const lockedChange = findLockedWardrobeChange(req.body || {}, existing, unlockIds);
+    if (lockedChange) {
+      return res.status(403).json({ error: 'That wardrobe item is still a future keepsake' });
     }
     updateDb((d) => {
       const u = d.users.find((x) => x.id === req.params.userId && x.role === 'patient');
@@ -563,17 +657,19 @@ export function registerRoutes(app) {
     const clinicId = clinicIdOf(clinician);
     const patients = patientsInClinic(db, clinicId).map((p) => {
       const checkIns = db.checkIns.filter((c) => c.userId === p.id);
+      const timeZone = normalizeTimeZone(p.timezone);
+      const todayKey = toDateKey(new Date(), timeZone);
       return {
         id: p.id,
         name: p.name,
         email: p.email,
         clinicId: clinicIdOf(p),
-        rate7: checkInRate(checkIns, 7),
-        rate30: checkInRate(checkIns, 30),
-        streak: currentStreak(checkIns),
+        rate7: checkInRate(checkIns, 7, todayKey, timeZone),
+        rate30: checkInRate(checkIns, 30, todayKey, timeZone),
+        streak: currentStreak(checkIns, todayKey, timeZone),
         lastCheckIn: checkIns.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
           ?.createdAt,
-        totalDays: uniqueSortedDays(checkIns).length,
+        totalDays: uniqueSortedDays(checkIns, timeZone).length,
       };
     });
     res.json({ patients, clinicId });
@@ -597,8 +693,9 @@ export function registerRoutes(app) {
     const summary = db.summaries[patient.id] || null;
     const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
 
-    const today = toDateKey(new Date());
-    const loggedDays = new Set(uniqueSortedDays(checkIns));
+    const timeZone = normalizeTimeZone(patient.timezone);
+    const today = toDateKey(new Date(), timeZone);
+    const loggedDays = new Set(uniqueSortedDays(checkIns, timeZone));
     const consistency30 = [];
     for (let i = 29; i >= 0; i--) {
       const key = shiftDay(today, -i);
@@ -614,7 +711,7 @@ export function registerRoutes(app) {
       )
       .slice(-14)
       .map((a) => ({
-        date: (a.createdAt || '').slice(0, 10),
+        date: toDateKey(a.createdAt, timeZone),
         estimatedCalories: a.estimatedCalories,
         foodType: a.foodType,
         confidence: a.confidence,

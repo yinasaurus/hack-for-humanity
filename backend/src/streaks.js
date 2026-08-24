@@ -1,22 +1,59 @@
 /**
  * Streak & check-in helpers.
- * A "day" is a calendar day in the local timezone of the server (demo: UTC date string YYYY-MM-DD).
- * Rewards are based only on presence of a log — never on photo content.
+ * Rewards are based only on presence of an accepted log — never on photo content.
+ *
+ * Most historical callers use UTC date keys. Patient progression passes the
+ * patient's validated IANA timezone explicitly so two photos around midnight
+ * cannot accidentally count as two progression days.
  */
 
-export function toDateKey(isoOrDate) {
-  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
-  return d.toISOString().slice(0, 10);
+export const DEFAULT_TIMEZONE = 'Asia/Singapore';
+const UTC_TIMEZONE = 'UTC';
+
+/** Return true only for a timezone understood by the runtime's IANA database. */
+export function isValidTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timeZone.trim() }).format();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-export function uniqueSortedDays(checkIns) {
-  const set = new Set(checkIns.map((c) => toDateKey(c.createdAt)));
+/** Patient-safe timezone normalization with the product's Singapore fallback. */
+export function normalizeTimeZone(timeZone) {
+  const candidate = typeof timeZone === 'string' ? timeZone.trim() : '';
+  return isValidTimeZone(candidate) ? candidate : DEFAULT_TIMEZONE;
+}
+
+// Common spelling used by API consumers; retain one implementation.
+export const normalizeTimezone = normalizeTimeZone;
+
+export function toDateKey(isoOrDate, timeZone = UTC_TIMEZONE) {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: normalizeTimeZone(timeZone),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function uniqueSortedDays(checkIns, timeZone = UTC_TIMEZONE) {
+  const set = new Set(checkIns.map((c) => toDateKey(c.createdAt, timeZone)));
   return [...set].sort();
 }
 
 /** Consecutive days ending on the most recent check-in day (or today if checked in today). */
-export function currentStreak(checkIns, todayKey = toDateKey(new Date())) {
-  const days = uniqueSortedDays(checkIns);
+export function currentStreak(
+  checkIns,
+  todayKey = toDateKey(new Date(), UTC_TIMEZONE),
+  timeZone = UTC_TIMEZONE
+) {
+  const days = uniqueSortedDays(checkIns, timeZone);
   if (days.length === 0) return 0;
 
   const last = days[days.length - 1];
@@ -38,14 +75,40 @@ export function currentStreak(checkIns, todayKey = toDateKey(new Date())) {
   return streak;
 }
 
+/**
+ * Longest consecutive run ever achieved in a patient's history.
+ * Unlike currentStreak, this deliberately does not require the run to touch
+ * today or yesterday; a break affects vitality, never earned growth.
+ */
+export function maxHistoricalStreak(checkIns, timeZone = UTC_TIMEZONE) {
+  const days = uniqueSortedDays(checkIns, timeZone);
+  if (days.length === 0) return 0;
+
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i += 1) {
+    if (days[i] === shiftDay(days[i - 1], 1)) {
+      run += 1;
+    } else {
+      run = 1;
+    }
+    if (run > longest) longest = run;
+  }
+  return longest;
+}
+
 export function shiftDay(dayKey, delta) {
   const d = new Date(`${dayKey}T12:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
 }
 
-export function daysSinceLastCheckIn(checkIns, todayKey = toDateKey(new Date())) {
-  const days = uniqueSortedDays(checkIns);
+export function daysSinceLastCheckIn(
+  checkIns,
+  todayKey = toDateKey(new Date(), UTC_TIMEZONE),
+  timeZone = UTC_TIMEZONE
+) {
+  const days = uniqueSortedDays(checkIns, timeZone);
   if (days.length === 0) return null;
   const last = days[days.length - 1];
   const a = new Date(`${last}T12:00:00.000Z`);
@@ -70,9 +133,14 @@ export function petMood(_checkIns = [], _todayKey = toDateKey(new Date()), now =
   return 'happy';
 }
 
-export function checkInRate(checkIns, windowDays, todayKey = toDateKey(new Date())) {
+export function checkInRate(
+  checkIns,
+  windowDays,
+  todayKey = toDateKey(new Date(), UTC_TIMEZONE),
+  timeZone = UTC_TIMEZONE
+) {
   if (windowDays <= 0) return 0;
-  const days = new Set(uniqueSortedDays(checkIns));
+  const days = new Set(uniqueSortedDays(checkIns, timeZone));
   let hit = 0;
   for (let i = 0; i < windowDays; i++) {
     const key = shiftDay(todayKey, -i);
@@ -82,8 +150,12 @@ export function checkInRate(checkIns, windowDays, todayKey = toDateKey(new Date(
 }
 
 /** Consecutive calendar days without a check-in, counting back from today. */
-export function consecutiveMisses(checkIns, todayKey = toDateKey(new Date())) {
-  const days = new Set(uniqueSortedDays(checkIns));
+export function consecutiveMisses(
+  checkIns,
+  todayKey = toDateKey(new Date(), UTC_TIMEZONE),
+  timeZone = UTC_TIMEZONE
+) {
+  const days = new Set(uniqueSortedDays(checkIns, timeZone));
   let misses = 0;
   let cursor = todayKey;
   while (!days.has(cursor)) {
@@ -104,12 +176,12 @@ export function milestonesReached(totalUniqueDays) {
 }
 
 /** Patient-safe visual chapter; it contains no streak count or nutrition data. */
-export function growthStageForDays(totalUniqueDays) {
-  if (totalUniqueDays >= 100) return 'grown';
-  if (totalUniqueDays >= 50) return 'adventurer';
-  if (totalUniqueDays >= 20) return 'playful';
-  if (totalUniqueDays >= 10) return 'growing';
-  if (totalUniqueDays >= 5) return 'little';
+export function growthStageForDays(historicalStreak) {
+  if (historicalStreak >= 100) return 'grown';
+  if (historicalStreak >= 50) return 'adventurer';
+  if (historicalStreak >= 20) return 'playful';
+  if (historicalStreak >= 10) return 'growing';
+  if (historicalStreak >= 5) return 'little';
   return 'baby';
 }
 
@@ -122,6 +194,10 @@ export const MILESTONE_REWARDS = {
   100: { type: 'accessory', id: 'star_pendant', label: 'Star pendant' },
   120: { type: 'toy', id: 'ribbon_ball', label: 'Ribbon ball' },
   140: { type: 'background', id: 'quiet_garden', label: 'Quiet garden' },
+  160: { type: 'accessory', id: 'cozy_beanie', label: 'Cozy beanie' },
+  180: { type: 'accessory', id: 'round_glasses', label: 'Round glasses' },
+  200: { type: 'accessory', id: 'soft_crown', label: 'Soft crown' },
+  220: { type: 'accessory', id: 'pocket_heart', label: 'Pocket heart' },
 };
 
 export function rewardForMilestone(day) {
@@ -130,11 +206,17 @@ export function rewardForMilestone(day) {
 }
 
 /** Categorical patient-facing state. Deficit percentages and targets stay clinician-only. */
-export function vitalityState(checkIns, dailyDeficitPct = null, now = new Date(), trackingStartedAt = null) {
+export function vitalityState(
+  checkIns,
+  dailyDeficitPct = null,
+  now = new Date(),
+  trackingStartedAt = null,
+  timeZone = UTC_TIMEZONE
+) {
   const latest = [...checkIns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const baseline = latest?.createdAt || trackingStartedAt;
   const hoursSince = baseline ? (now.getTime() - new Date(baseline).getTime()) / 36e5 : 0;
-  const misses = consecutiveMisses(checkIns, toDateKey(now));
+  const misses = consecutiveMisses(checkIns, toDateKey(now, timeZone), timeZone);
   if (hoursSince >= 48 || (dailyDeficitPct != null && dailyDeficitPct > 0.5)) return 'dormant';
   if (misses >= 2 || (dailyDeficitPct != null && dailyDeficitPct >= 0.25)) return 'dim';
   if (misses >= 1 || (dailyDeficitPct != null && dailyDeficitPct > 0)) return 'fatigued';
@@ -142,6 +224,7 @@ export function vitalityState(checkIns, dailyDeficitPct = null, now = new Date()
 }
 
 /** Walks unlock when the patient has any streak of at least 2 (bonding, not content-gated). */
-export function walksUnlocked(checkIns) {
-  return currentStreak(checkIns) >= 2 || uniqueSortedDays(checkIns).length >= 3;
+export function walksUnlocked(checkIns, timeZone = UTC_TIMEZONE) {
+  const todayKey = toDateKey(new Date(), timeZone);
+  return currentStreak(checkIns, todayKey, timeZone) >= 2 || uniqueSortedDays(checkIns, timeZone).length >= 3;
 }

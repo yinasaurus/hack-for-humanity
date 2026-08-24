@@ -2,6 +2,8 @@ import {
   checkInRate,
   consecutiveMisses,
   currentStreak,
+  normalizeTimeZone,
+  toDateKey,
   uniqueSortedDays,
 } from './streaks.js';
 
@@ -13,16 +15,17 @@ import {
 
 export function evaluateAlerts(patient, checkIns, analyses = []) {
   const alerts = [];
-  const misses = consecutiveMisses(checkIns);
-  const rate7 = checkInRate(checkIns, 7);
-  const rate10 = checkInRate(checkIns, 10);
-  const rate30 = checkInRate(checkIns, 30);
-  const streak = currentStreak(checkIns);
-  const totalDays = uniqueSortedDays(checkIns).length;
+  const timeZone = normalizeTimeZone(patient?.timezone);
+  const today = toDateKey(new Date(), timeZone);
+  const misses = consecutiveMisses(checkIns, today, timeZone);
+  const rate7 = checkInRate(checkIns, 7, today, timeZone);
+  const rate10 = checkInRate(checkIns, 10, today, timeZone);
+  const rate30 = checkInRate(checkIns, 30, today, timeZone);
+  const streak = currentStreak(checkIns, today, timeZone);
+  const totalDays = uniqueSortedDays(checkIns, timeZone).length;
   const target = Number(patient.clinicalProfile?.dailyCalorieTarget) || null;
-  const today = new Date().toISOString().slice(0, 10);
   const todayIntake = analyses
-    .filter((a) => String(a.createdAt || '').slice(0, 10) === today && a.isMeal !== false)
+    .filter((a) => a.createdAt && toDateKey(a.createdAt, timeZone) === today && a.isMeal !== false)
     .reduce((sum, a) => sum + (Number(a.estimatedCalories) || 0), 0);
   const deficitPct = target ? Math.max(0, (target - todayIntake) / target) : null;
 
