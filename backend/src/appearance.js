@@ -7,12 +7,21 @@
  */
 
 export const SELECTABLE_PET_TYPES = [
-  'panda', 'dog', 'cat', 'capybara', 'cow', 'chipmunk', 'monkey', 'rabbit', 'penguin', 'otter',
+  'fox', 'horse', 'parrot', 'flamingo', 'stork',
+  'dog', 'cat', 'panda', 'penguin', 'rabbit',
+];
+
+/** IDs from the first onboarding prototype; readable but retired for new users. */
+export const LEGACY_PET_TYPES = [
+  'capybara', 'cow', 'chipmunk', 'monkey', 'hamster', 'otter',
 ];
 
 export const ALLOWED = {
   // Keep retired renderer ids readable so existing profiles remain compatible.
-  petType: [...SELECTABLE_PET_TYPES, 'fox', 'horse', 'parrot', 'flamingo', 'stork'],
+  petType: [
+    ...SELECTABLE_PET_TYPES,
+    ...LEGACY_PET_TYPES,
+  ],
   petColor: [
     'peach',
     'honey',
@@ -58,12 +67,11 @@ export const ALLOWED = {
 
 /** Map retired Bun/Pup ids → low-poly animals */
 const LEGACY_PET_TYPE = {
-  bun: 'flamingo',
+  bun: 'rabbit',
   pup: 'horse',
   kit: 'fox',
   bean: 'stork',
   chick: 'parrot',
-  panda: 'horse',
   otter: 'fox',
 };
 
@@ -73,7 +81,7 @@ export function isAllowedPetType(petType) {
 
 export const DEFAULT_APPEARANCE = {
   petName: 'Companion',
-  petType: 'panda',
+  petType: 'fox',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',
@@ -84,6 +92,42 @@ export const DEFAULT_APPEARANCE = {
   scene: 'sky',
   accent: 'none',
 };
+
+/**
+ * Wardrobe inventory. A null requirement is available from onboarding;
+ * everything else needs the matching permanent keepsake unlock.
+ */
+export const WARDROBE_UNLOCK_REQUIREMENTS = {
+  'hat:none': null,
+  'face:none': null,
+  'neck:none': null,
+  'held:none': null,
+  'scene:sky': null,
+  'neck:scarf': 'soft_scarf',
+  'scene:sunny_meadow': 'sunny_meadow',
+  'hat:flower': 'flower_crown',
+  'scene:cozy_nook': 'cozy_nook',
+  'held:star': 'star_pendant',
+  'hat:bow': 'ribbon_ball',
+  'scene:quiet_garden': 'quiet_garden',
+  'hat:beanie': 'cozy_beanie',
+  'face:glasses': 'round_glasses',
+  'hat:crown_soft': 'soft_crown',
+  'held:heart': 'pocket_heart',
+};
+
+/** Return the first changed wardrobe field the patient has not unlocked. */
+export function findLockedWardrobeChange(body = {}, current = {}, unlockIds = new Set()) {
+  for (const field of ['hat', 'face', 'neck', 'held', 'scene']) {
+    const value = body[field];
+    if (value == null || value === current[field]) continue;
+    const key = `${field}:${value}`;
+    if (!(key in WARDROBE_UNLOCK_REQUIREMENTS)) return { field, value };
+    const required = WARDROBE_UNLOCK_REQUIREMENTS[key];
+    if (required && !unlockIds.has(required)) return { field, value, required };
+  }
+  return null;
+}
 
 function normalizePetType(petType) {
   if (ALLOWED.petType.includes(petType)) return petType;

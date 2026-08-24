@@ -57,6 +57,13 @@ const HAT_BY_TYPE: Partial<Record<PetTypeId, AccAnchor>> = {
   parrot: { top: '8%', left: '28%', width: 0.44, height: 0.28 },
   flamingo: { top: '-2%', left: '28%', width: 0.44, height: 0.28 },
   stork: { top: '6%', left: '26%', width: 0.48, height: 0.32 },
+  dog: { top: '4%', left: '29%', width: 0.42, height: 0.28 },
+  cat: { top: '3%', left: '30%', width: 0.4, height: 0.27 },
+  panda: { top: '3%', left: '28%', width: 0.44, height: 0.29 },
+  penguin: { top: '5%', left: '29%', width: 0.42, height: 0.28 },
+  rabbit: { top: '3%', left: '28%', width: 0.44, height: 0.3 },
+  // Legacy Hamster records are rendered through Rabbit's character.
+  hamster: { top: '3%', left: '28%', width: 0.44, height: 0.3 },
 };
 
 export function hatStyle(petType: PetTypeId, imgSize: number): StyleProp<ImageStyle> {

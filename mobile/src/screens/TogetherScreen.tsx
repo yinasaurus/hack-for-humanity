@@ -107,6 +107,7 @@ export function TogetherScreen({ navigation }: Props) {
       <AnimalWebView
         key={`together-${companion?.petType || 'fox'}`}
         character={characterForLiveCompanion(companion?.petType)}
+        growthStage={companion?.growthStage}
         expression="happy"
         muted={settings.companionMuted}
         style={styles.hero3d}

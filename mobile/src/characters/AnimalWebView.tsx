@@ -2,6 +2,15 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } fr
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { AnimalCharacterHandle, CharacterDef } from './types';
+import { createAnimalIntent } from './animalCapabilities';
+import { choreographyForSpecies } from './animalChoreography';
+import {
+  getSpeciesGrowthStagePresentation,
+  type GrowthStage,
+} from './growthStage';
+import { animalPresentationFor } from './animalPresentation';
+import { RABBIT_PROCEDURAL_MODEL } from './rabbitProceduralModel';
+import { CAT_PROCEDURAL_MODEL } from './catProceduralModel';
 import { colors } from '../theme';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
@@ -11,6 +20,10 @@ import {
 } from '../companionMood';
 import { PET_SCENES, type PetSceneId } from '../pets';
 
+// Renderer selection is keyed by the declarative spec id; adding another
+// procedural species only extends this registry and does not alter the build path.
+const PROCEDURAL_MODEL_SPECS = [RABBIT_PROCEDURAL_MODEL, CAT_PROCEDURAL_MODEL] as const;
+
 export type AnimalOutfit = {
   hat?: string;
   face?: string;
@@ -19,8 +32,15 @@ export type AnimalOutfit = {
   scene?: string;
 };
 
+type PendingAnimalCommand = {
+  type: string;
+  payload?: object;
+};
+
 type Props = {
   character: CharacterDef;
+  /** Patient-safe visual chapter from the clinic backend. */
+  growthStage?: GrowthStage;
   /** Presentation expression (positive–neutral only) */
   expression?: CompanionExpression;
   /** @deprecated prefer expression — maps happy|resting */
@@ -37,6 +57,7 @@ export type AnimalWebHandle = AnimalCharacterHandle & {
   sleep: () => void;
   wake: () => void;
   wave: () => void;
+  vocalize: () => void;
   setExpression: (expression: CompanionExpression) => void;
 };
 
@@ -47,6 +68,7 @@ export type AnimalWebHandle = AnimalCharacterHandle & {
 export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalWebView(
   {
     character,
+    growthStage = 'baby',
     expression,
     mood = 'happy',
     style,
@@ -62,43 +84,76 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   const active: CompanionExpression = expression || mood;
   const startQuiet = isQuietBand(active);
   const readyRef = useRef(false);
+  const pendingCommandsRef = useRef<PendingAnimalCommand[]>([]);
 
   const html = useMemo(
-    () => buildHtml(character, startQuiet, reducedMotion),
+    () => buildHtml(character, startQuiet, reducedMotion, growthStage),
     [
       character.id,
       character.modelPath,
+      character.proceduralModel,
       character.clips.idle,
       character.clips.talk,
       character.clips.react,
+      character.actions,
+      character.rig,
       character.scale,
+      growthStage,
       reducedMotion,
     ]
   );
 
-  const post = (type: string, payload?: object) => {
+  const send = (type: string, payload?: object) => {
     webRef.current?.injectJavaScript(
       `window.__kpCmd && window.__kpCmd(${JSON.stringify({ type, ...payload })}); true;`
     );
   };
 
+  const post = (type: string, payload?: object) => {
+    if (!readyRef.current) {
+      pendingCommandsRef.current.push({ type, payload });
+      return;
+    }
+    send(type, payload);
+  };
+
+  const markReady = () => {
+    readyRef.current = true;
+    const pending = pendingCommandsRef.current.splice(0);
+    pending.forEach(({ type, payload }) => send(type, payload));
+  };
+
   const handle: AnimalWebHandle = useMemo(
     () => ({
+      dispatch: (intent) => post('dispatch', { intent }),
       speak: (audioUrl: string) => {
-        // Always animate Talk; mute only skips WebView audio (expo-speech handles voice).
+        // Legacy bridge: the React Native audio adapter owns playback.
         post('speak', { audioUrl: audioUrl || '' });
       },
       stopSpeaking: () => post('stop'),
-      react: () => post(reducedMotion ? 'reactGentle' : 'react'),
+      react: () =>
+        post('dispatch', {
+          intent: createAnimalIntent(reducedMotion ? 'gentle' : 'play'),
+        }),
       sleep: () => post('setExpression', { expression: 'sleepy' }),
       wake: () => post('setExpression', { expression: 'happy' }),
-      wave: () => post('setExpression', { expression: 'waving' }),
+      wave: () => post('dispatch', { intent: createAnimalIntent('wave') }),
+      vocalize: () => post('dispatch', { intent: createAnimalIntent('talk') }),
       setExpression: (next: CompanionExpression) => post('setExpression', { expression: next }),
     }),
     [muted, reducedMotion]
   );
 
   useImperativeHandle(ref, () => handle, [handle]);
+
+  useEffect(() => {
+    readyRef.current = false;
+    pendingCommandsRef.current = [];
+    return () => {
+      readyRef.current = false;
+      pendingCommandsRef.current = [];
+    };
+  }, [character.id, character.modelPath, character.proceduralModel, growthStage, reducedMotion]);
 
   useEffect(() => {
     onReady?.(handle);
@@ -137,7 +192,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     try {
       const msg = JSON.parse(e.nativeEvent.data);
       if (msg?.type === 'ready') {
-        readyRef.current = true;
+        markReady();
         post('setOutfit', {
           hat: outfit?.hat || 'none',
           face: outfit?.face || 'none',
@@ -152,7 +207,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     }
   };
 
-  if (!character.modelPath) {
+  if (!character.modelPath && !character.proceduralModel) {
     return (
       <View
         style={[styles.wrap, style, styles.empty]}
@@ -170,7 +225,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       accessibilityRole="image"
     >
       <WebView
-        key={character.modelPath}
+        key={`${character.proceduralModel || character.modelPath}-${growthStage}`}
         ref={webRef}
         originWhitelist={['*']}
         source={{ html, baseUrl: 'https://cdn.jsdelivr.net/' }}
@@ -195,16 +250,41 @@ function sceneFill(sceneId?: string) {
   return hit?.fill || '#F7F4EF';
 }
 
-function buildHtml(character: CharacterDef, startQuiet: boolean, reducedMotion: boolean) {
-  const modelPath = JSON.stringify(character.modelPath);
+function buildHtml(
+  character: CharacterDef,
+  startQuiet: boolean,
+  reducedMotion: boolean,
+  growthStage: GrowthStage = 'baby'
+) {
+  const proceduralModel = character.proceduralModel
+    ? PROCEDURAL_MODEL_SPECS.find(({ id }) => id === character.proceduralModel) || null
+    : null;
+  const modelPath = JSON.stringify(character.modelPath || '');
   const idle = JSON.stringify(character.clips.idle);
   const talk = JSON.stringify(character.clips.talk);
   const react = JSON.stringify(character.clips.react);
+  const actionCandidates = JSON.stringify(character.actions || {});
+  const rigHints = JSON.stringify(character.rig || {});
+  const choreography = JSON.stringify(choreographyForSpecies(character.id));
   const scale = character.scale ?? 1;
-  const bgAwake = '#F7F4EF';
-  const bgSleep = '#E4EBF2';
-  const bgExcited = '#E8E4D8';
-  const bgCurious = '#EEF2F0';
+  const growth = getSpeciesGrowthStagePresentation(growthStage, character.id);
+  const growthChannels = growth.channels || {
+    body: growth.proportions.bodyScale,
+    head: growth.proportions.headScale,
+    muzzle: growth.proportions.headScale,
+    neck: 1,
+    legs: 1,
+    wings: 1,
+    ears: 1,
+    tail: 1,
+    eyes: 1,
+  };
+  const animal = animalPresentationFor(character.id);
+  const bgAwake = proceduralModel?.framing.background || '#F7F4EF';
+  const bgSleep = proceduralModel ? '#D5E1E5' : '#E4EBF2';
+  const bgExcited = proceduralModel ? '#E1E7D9' : '#E8E4D8';
+  const bgCurious = proceduralModel ? '#E3ECEF' : '#EEF2F0';
+  const groundColor = proceduralModel?.framing.ground || '#D6DDE2';
 
   return `<!DOCTYPE html>
 <html>
@@ -233,10 +313,23 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const MODEL = ${modelPath};
+const SPECIES_ID = ${JSON.stringify(character.id)};
 const WANT_IDLE = ${idle};
 const WANT_TALK = ${talk};
 const WANT_REACT = ${react};
+const ACTION_CANDIDATES = ${actionCandidates};
+const RIG_HINTS = ${rigHints};
+const CHOREOGRAPHY = ${choreography};
 const MODEL_SCALE = ${scale};
+const GROWTH_SCALE = ${growth.scale};
+const GROWTH_POSITION = ${JSON.stringify(growth.position)};
+const GROWTH_BODY_SCALE = ${JSON.stringify(growthChannels.body)};
+const GROWTH_HEAD_SCALE = ${growthChannels.head};
+const GROWTH_CHANNELS = ${JSON.stringify(growthChannels)};
+const ANIMAL = ${JSON.stringify(animal)};
+const PROCEDURAL_MODEL = ${JSON.stringify(proceduralModel)};
+const IS_PROCEDURAL = Boolean(PROCEDURAL_MODEL);
+const GROUND_COLOR = ${JSON.stringify(groundColor)};
 let expression = ${startQuiet ? "'resting'" : "'happy'"};
 let quiet = ${startQuiet ? 'true' : 'false'};
 let reducedMotion = ${reducedMotion ? 'true' : 'false'};
@@ -256,30 +349,46 @@ const BG = {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(BG[expression] || '${bgAwake}');
 
-const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 500);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.01, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
+renderer.shadowMap.enabled = !reducedMotion;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xa8b8b0, 1.0));
-const key = new THREE.DirectionalLight(0xffffff, 1.0);
-key.position.set(5, 8, 4);
+const LIGHTING = ANIMAL.visual?.lighting || { key: 1.4, fill: 0.72, rim: 0.48 };
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x8fa39c, 1.35));
+const key = new THREE.DirectionalLight(0xfff2df, LIGHTING.key);
+key.position.set(4.5, 7, 5);
+key.castShadow = !reducedMotion;
+key.shadow.mapSize.set(768, 768);
+key.shadow.bias = -0.0008;
 scene.add(key);
-scene.add(new THREE.DirectionalLight(0xb7c9d1, 0.4).translateX(-4));
+const fill = new THREE.DirectionalLight(0xc9dce3, LIGHTING.fill);
+fill.position.set(-4, 3, 2);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffd8bd, LIGHTING.rim);
+rim.position.set(1, 4, -5);
+scene.add(rim);
 
 const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(2.5, 64),
-  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1 })
+  new THREE.CircleGeometry(2.5, 96),
+  new THREE.MeshStandardMaterial({ color: GROUND_COLOR, transparent: true, opacity: 0.34, roughness: 1 })
 );
 ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
 scene.add(ground);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
+controls.minPolarAngle = Math.PI * 0.3;
+controls.maxPolarAngle = Math.PI * 0.62;
 controls.minDistance = 0.5;
 controls.maxDistance = 40;
 controls.enableZoom = !reducedMotion;
@@ -289,16 +398,20 @@ let actions = {};
 let current = null;
 let talking = false;
 let root = null;
-let audioEl = null;
 let modelSize = new THREE.Vector3(1, 1, 1);
 const clock = new THREE.Clock();
 let clipNames = [];
 let baseQuat = new THREE.Quaternion();
 let basePos = new THREE.Vector3();
 let boneByName = {};
+let morphByName = {};
+let eyeMeshes = [];
 let hasSkeleton = false;
 let outfitState = { hat: 'none', face: 'none', neck: 'none', held: 'none', scene: 'sky' };
 const acc = { hat: null, face: null, neck: null, held: null };
+let proceduralOverlay = null;
+let proceduralSequence = 0;
+let idleOffsets = {};
 
 function easeSoft(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
@@ -308,24 +421,218 @@ function isQuietExpr(e) {
   return e === 'resting' || e === 'sleepy' || e === 'curious';
 }
 
+function applySpeciesMaterial(object) {
+  if (IS_PROCEDURAL) {
+    object.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      mesh.castShadow = !reducedMotion;
+      mesh.receiveShadow = true;
+    });
+    return;
+  }
+  const direction = ANIMAL.material;
+  const visual = ANIMAL.visual?.surface || {};
+  if (!direction?.tint) return;
+  const tint = new THREE.Color(direction.tint);
+  object.traverse((mesh) => {
+    if (!mesh.isMesh || !mesh.material) return;
+    mesh.castShadow = !reducedMotion;
+    mesh.receiveShadow = true;
+    const geometry = mesh.geometry;
+    if (visual.smoothNormals && geometry?.isBufferGeometry && geometry.attributes?.position) {
+      geometry.computeVertexNormals();
+      geometry.normalizeNormals();
+    }
+    const tune = (source) => {
+      const material = source.clone();
+      if (material.color && !material.vertexColors) {
+        material.color.lerp(tint, Math.min(direction.strength || 0, 0.18));
+      }
+      if ('roughness' in material) material.roughness = visual.roughness ?? direction.roughness;
+      if ('metalness' in material) material.metalness = visual.metalness ?? 0;
+      if ('clearcoat' in material) material.clearcoat = visual.clearcoat ?? 0;
+      if ('clearcoatRoughness' in material) material.clearcoatRoughness = 0.32;
+      if ('flatShading' in material) material.flatShading = false;
+      if (material.map) {
+        material.map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      }
+      material.needsUpdate = true;
+      return material;
+    };
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map(tune)
+      : tune(mesh.material);
+  });
+}
+
+function eyeAliasKey(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function indexEyeMeshes(object) {
+  const aliases = new Set([
+    'eye', 'eyes', 'eyel', 'eyer', 'leye', 'reye',
+    'left-eye', 'right-eye', 'left_eye', 'right_eye',
+    'pupil', 'pupill', 'pupilr',
+  ].map(eyeAliasKey));
+  const declared = new Set([
+    ...(Array.isArray(RIG_HINTS.eye) ? RIG_HINTS.eye : []),
+    ...(Array.isArray(PROCEDURAL_MODEL?.parts)
+      ? PROCEDURAL_MODEL.parts.filter((part) => part.material === 'eye').map((part) => part.name)
+      : []),
+  ].map(eyeAliasKey));
+  eyeMeshes = [];
+  object.traverse((mesh) => {
+    if (!mesh.isMesh || !mesh.name) return;
+    const normalized = eyeAliasKey(mesh.name);
+    if (aliases.has(normalized) || declared.has(normalized)) eyeMeshes.push(mesh);
+  });
+}
+
+function applyEyeProfile() {
+  const eyes = ANIMAL.visual?.eyes;
+  if (!eyes) return;
+  const growthScale = Number(GROWTH_CHANNELS?.eyes || 1);
+  const totalScale = Number(eyes.scale || 1) * growthScale;
+  eyeMeshes.forEach((mesh) => {
+    if (totalScale !== 1) mesh.scale.multiplyScalar(totalScale);
+    const polish = (source) => {
+      if (!source) return source;
+      const material = source.clone ? source.clone() : source;
+      if (eyes.color && material.color) material.color.set(eyes.color);
+      if ('roughness' in material) material.roughness = eyes.roughness;
+      if ('clearcoat' in material) material.clearcoat = eyes.highlight;
+      if ('clearcoatRoughness' in material) material.clearcoatRoughness = 0.12;
+      material.needsUpdate = true;
+      return material;
+    };
+    mesh.material = Array.isArray(mesh.material)
+      ? mesh.material.map(polish)
+      : polish(mesh.material);
+  });
+}
+
+function proceduralMaterial(spec) {
+  return new THREE.MeshPhysicalMaterial({
+    color: spec.color,
+    roughness: spec.roughness,
+    metalness: spec.metalness,
+    clearcoat: spec.clearcoat,
+    clearcoatRoughness: 0.28,
+    flatShading: Boolean(spec.flatShading),
+  });
+}
+
+function proceduralGeometry(part) {
+  const segments = Math.max(6, Number(part.segments) || 32);
+  const rings = Math.max(4, Math.floor(segments * 0.72));
+  const primitive = String(part.primitive);
+  if (primitive === 'capsule') {
+    return new THREE.CapsuleGeometry(0.5, 1, Math.max(6, Math.floor(segments / 8)), segments);
+  }
+  if (primitive === 'cylinder') {
+    return new THREE.CylinderGeometry(1, 1, 2, segments, 1, false);
+  }
+  if (primitive === 'cone') {
+    return new THREE.ConeGeometry(1, 2, segments, 1);
+  }
+  if (primitive === 'polyhedron') {
+    return new THREE.DodecahedronGeometry(1, 0);
+  }
+  if (primitive === 'box') {
+    return new THREE.BoxGeometry(2, 2, 2);
+  }
+  if (primitive === 'wedge') {
+    const geometry = new THREE.CylinderGeometry(0.46, 1, 2, 4, 1, false, Math.PI / 4);
+    geometry.rotateX(Math.PI / 2);
+    return geometry;
+  }
+  return new THREE.SphereGeometry(1, segments, rings);
+}
+
+/** Turn any renderer-neutral procedural spec into named smooth pivot nodes. */
+function buildProceduralModel(spec) {
+  const nodes = {};
+  (spec?.parts || []).forEach((part) => {
+    const node = part.primitive === 'group' ? new THREE.Group() : new THREE.Bone();
+    node.name = part.name;
+    node.position.set(
+      Number(part.position?.[0] || 0) + Number(part.pivot?.[0] || 0),
+      Number(part.position?.[1] || 0) + Number(part.pivot?.[1] || 0),
+      Number(part.position?.[2] || 0) + Number(part.pivot?.[2] || 0)
+    );
+    node.rotation.set(
+      Number(part.rotation?.[0] || 0),
+      Number(part.rotation?.[1] || 0),
+      Number(part.rotation?.[2] || 0)
+    );
+    node.userData.proceduralPart = part.name;
+    node.userData.pivot = [...(part.pivot || [0, 0, 0])];
+    nodes[part.name] = node;
+  });
+  (spec?.parts || []).forEach((part) => {
+    const node = nodes[part.name];
+    const parent = part.parent ? nodes[part.parent] : null;
+    if (node && parent) parent.add(node);
+  });
+  (spec?.parts || []).forEach((part) => {
+    if (!part.material || !nodes[part.name]) return;
+    const mesh = new THREE.Mesh(proceduralGeometry(part), proceduralMaterial(spec.materials[part.material]));
+    mesh.name = part.name;
+    mesh.position.set(
+      -Number(part.pivot?.[0] || 0),
+      -Number(part.pivot?.[1] || 0),
+      -Number(part.pivot?.[2] || 0)
+    );
+    mesh.scale.set(
+      Number(part.scale?.[0] || 1),
+      Number(part.scale?.[1] || 1),
+      Number(part.scale?.[2] || 1)
+    );
+    mesh.castShadow = !reducedMotion;
+    mesh.receiveShadow = true;
+    nodes[part.name].add(mesh);
+  });
+  return nodes[spec?.root] || nodes.RabbitRoot || new THREE.Group();
+}
+
 function resolveName(wanted) {
   if (!wanted) return null;
   if (actions[wanted]) return wanted;
   const lower = String(wanted).toLowerCase();
-  return (
-    clipNames.find((n) => n.toLowerCase() === lower) ||
-    clipNames.find((n) => n.toLowerCase().includes(lower) || lower.includes(n.toLowerCase())) ||
-    null
-  );
+  return clipNames.find((n) => n.toLowerCase() === lower) || null;
+}
+
+function actionCandidates(action) {
+  const legacy = {
+    idle: WANT_IDLE,
+    talk: WANT_TALK,
+    wave: WANT_TALK,
+    play: WANT_REACT,
+    curious: WANT_TALK,
+    gentle: WANT_IDLE,
+  }[action];
+  const defaults = {
+    idle: ['Idle', 'idle', 'Standing'],
+    talk: ['Talk', 'talk', 'Eat', 'Bark'],
+    wave: ['Wave', 'wave', 'Gesture'],
+    play: ['Play', 'play', 'Jump', 'Run', 'Attack'],
+    curious: ['Curious', 'curious', 'Survey'],
+    gentle: ['Gentle', 'gentle', 'Idle', 'Standing'],
+  }[action] || [];
+  return [...new Set([...(ACTION_CANDIDATES[action] || []), legacy, ...defaults].filter(Boolean))];
+}
+
+function resolveSemanticClip(action) {
+  for (const candidate of actionCandidates(action)) {
+    const resolved = resolveName(candidate);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 function pickFallback(prefer) {
-  const order = [prefer, WANT_IDLE, WANT_TALK, WANT_REACT, 'Walk', 'Survey', 'Idle', 'idle', 'fly', 'Flap'];
-  for (const n of order) {
-    const hit = resolveName(n);
-    if (hit) return hit;
-  }
-  return clipNames[0] || null;
+  return resolveName(prefer);
 }
 
 function playClip(wanted, { loop = true, fade = 0.55, speed = 1 } = {}) {
@@ -348,6 +655,11 @@ function playClip(wanted, { loop = true, fade = 0.55, speed = 1 } = {}) {
   return next;
 }
 
+function playSemanticClip(action, options = {}) {
+  const name = resolveSemanticClip(action);
+  return name ? playClip(name, options) : null;
+}
+
 function idleSpeed() {
   if (reducedMotion) return 0;
   if (expression === 'sleepy') return 0.22;
@@ -363,66 +675,79 @@ function setBackground(e) {
   document.body.style.background = c;
 }
 
-function applyQuietPose(on, cozy = false) {
+function applyQuietPose() {
   if (!root) return;
+  // Rest belongs in the face, head, ears, tail, and animation speed. Rotating
+  // the planted root made every sleepy companion look as if it were falling.
   root.quaternion.copy(baseQuat);
-  if (on) {
-    root.rotateZ(cozy ? -0.48 : -0.4);
-    root.rotateX(cozy ? 0.14 : 0.1);
-  }
 }
 
 function goBaseIdle() {
+  cancelProcedural();
   talking = false;
   quiet = isQuietExpr(expression);
   setBackground(expression);
   applyQuietPose(quiet, expression === 'sleepy');
   if (reducedMotion) {
-    playClip(WANT_IDLE, { loop: true, speed: 0, fade: 0.8 });
+    playSemanticClip('idle', { loop: true, speed: 0, fade: 0.8 });
     if (current) { current.paused = true; current.setEffectiveTimeScale(0); }
     return;
   }
-  playClip(WANT_IDLE, { loop: true, speed: idleSpeed(), fade: 0.7 });
+  playSemanticClip('idle', { loop: true, speed: idleSpeed(), fade: 0.7 });
 }
 
-function softBob({ amp = 0.035, dur = 1600, yaw = 0, scalePulse = 0 } = {}) {
+function softBob({ amp = 0.035, dur = 1600, yaw = 0, roll = 0, scalePulse = 0 } = {}) {
   if (!root) return;
+  cancelProcedural();
   const token = ++animToken;
   const start = performance.now();
   const startY = root.position.y;
   const startYaw = root.rotation.y;
-  const startScale = root.scale.x;
+  const startRoll = root.rotation.z;
+  const startScale = root.scale.clone();
   function step(now) {
     if (token !== animToken || !root) return;
     const t = Math.min(1, (now - start) / dur);
     const e = easeSoft(t);
     root.position.y = startY + Math.sin(e * Math.PI) * amp;
     if (yaw) root.rotation.y = startYaw + Math.sin(e * Math.PI * 2) * yaw;
+    if (roll) root.rotation.z = startRoll + Math.sin(e * Math.PI * 2) * roll;
     if (scalePulse) {
-      const s = startScale * (1 + Math.sin(e * Math.PI) * scalePulse);
-      root.scale.setScalar(s);
+      const pulse = 1 + Math.sin(e * Math.PI) * scalePulse;
+      root.scale.copy(startScale).multiplyScalar(pulse);
     }
     if (t < 1) requestAnimationFrame(step);
     else {
       root.position.y = startY;
       root.rotation.y = startYaw;
-      root.scale.setScalar(startScale);
+      root.rotation.z = startRoll;
+      root.scale.copy(startScale);
     }
   }
   requestAnimationFrame(step);
 }
 
 function doReactGentle() {
-  softBob({ amp: quiet ? 0.02 : 0.035, dur: 1600 });
+  const m = ANIMAL.actions.gentle;
+  if (reducedMotion) {
+    return softBob({ amp: 0.01, dur: m.durationMs, yaw: 0, roll: 0, scalePulse: 0 });
+  }
+  const state = beginProcedural('gentle', m.durationMs);
+  if (!state || !Object.keys(state.bones).length) {
+    return softBob({ amp: m.amp, dur: m.durationMs, yaw: 0, roll: 0, scalePulse: m.scalePulse });
+  }
+  scheduleProceduralIdle(state, m.durationMs + 80);
 }
 
 function doWaveGreeting() {
   if (reducedMotion) return doReactGentle();
-  playClip(WANT_TALK, { loop: false, speed: 0.5, fade: 0.65 });
-  softBob({ amp: 0.04, dur: 2000, yaw: quiet ? 0.14 : 0.24 });
-  setTimeout(() => {
+  const m = ANIMAL.actions.wave;
+  const state = beginProcedural('wave', m.durationMs);
+  playSemanticClip('wave', { loop: false, speed: m.clipSpeed, fade: 0.65 });
+  if (!state) return;
+  scheduleProceduralIdle(state, m.durationMs + 100, () => {
     if (expression === 'waving') goBaseIdle();
-  }, 2100);
+  });
 }
 
 function doExcited() {
@@ -430,15 +755,13 @@ function doExcited() {
   applyQuietPose(false);
   setBackground('excited');
   if (reducedMotion) return softBob({ amp: 0.03, dur: 1800, scalePulse: 0.02 });
-  const a = playClip(WANT_REACT, { loop: false, speed: 0.68, fade: 0.5 });
-  softBob({ amp: 0.055, dur: 2200, scalePulse: 0.035 });
-  if (!a || !mixer) return;
-  const onFin = (e) => {
-    if (e.action !== a) return;
-    mixer.removeEventListener('finished', onFin);
+  const m = ANIMAL.actions.play;
+  const state = beginProcedural('play', m.durationMs);
+  playSemanticClip('play', { loop: false, speed: m.clipSpeed, fade: 0.5 });
+  if (!state) return;
+  scheduleProceduralIdle(state, m.durationMs + 100, () => {
     if (expression === 'excited') goBaseIdle();
-  };
-  mixer.addEventListener('finished', onFin);
+  });
 }
 
 function doCurious() {
@@ -446,30 +769,35 @@ function doCurious() {
   applyQuietPose(true, false);
   setBackground('curious');
   if (reducedMotion) return;
-  playClip(WANT_TALK, { loop: true, speed: 0.4, fade: 0.7 });
-  softBob({ amp: 0.025, dur: 2800, yaw: 0.32 });
-  setTimeout(() => {
-    if (expression === 'curious') playClip(WANT_IDLE, { loop: true, speed: idleSpeed(), fade: 0.7 });
-  }, 3000);
+  const m = ANIMAL.actions.curious;
+  const state = beginProcedural('curious', m.durationMs);
+  playSemanticClip('curious', { loop: true, speed: m.clipSpeed, fade: 0.7 });
+  if (!state || !Object.keys(state.bones).length) {
+    softBob({ amp: m.amp, dur: m.durationMs, yaw: 0, roll: 0, scalePulse: m.scalePulse });
+    return;
+  }
+  scheduleProceduralIdle(state, m.durationMs + 100, () => {
+    if (expression === 'curious') playSemanticClip('idle', { loop: true, speed: idleSpeed(), fade: 0.7 });
+  });
 }
 
 function doSleepy() {
+  cancelProcedural();
   quiet = true;
   talking = false;
-  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
   applyQuietPose(true, true);
   setBackground('sleepy');
-  playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.8 });
+  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.8 });
   softBob({ amp: 0.018, dur: 2400, scalePulse: 0.025 });
 }
 
 function doResting() {
+  cancelProcedural();
   quiet = true;
   talking = false;
-  if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
   applyQuietPose(true, false);
   setBackground('resting');
-  playClip(WANT_IDLE, { loop: true, speed: reducedMotion ? 0 : 0.28, fade: 0.8 });
+  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.28, fade: 0.8 });
 }
 
 function doHappy() {
@@ -492,39 +820,45 @@ function setExpression(next) {
 }
 
 function doReact() {
-  if (talking || quiet || reducedMotion) return doReactGentle();
-  const a = playClip(WANT_REACT, { loop: false, speed: 0.62, fade: 0.6 });
-  if (!a || !mixer) return goBaseIdle();
-  const onFin = (e) => {
-    if (e.action !== a) return;
-    mixer.removeEventListener('finished', onFin);
-    goBaseIdle();
-  };
-  mixer.addEventListener('finished', onFin);
+  if (talking || reducedMotion) return doReactGentle();
+  quiet = false;
+  applyQuietPose(false);
+  setBackground('excited');
+  const m = ANIMAL.actions.play;
+  const state = beginProcedural('play', m.durationMs);
+  playSemanticClip('play', { loop: false, speed: m.clipSpeed, fade: 0.6 });
+  if (!state) return doReactGentle();
+  scheduleProceduralIdle(state, m.durationMs + 100);
 }
 
-function doSpeak(url) {
-  // User-initiated Talk: wake from quiet and animate even if voice is muted
-  // (TTS may play outside this WebView via expo-speech).
-  if (quiet) {
-    quiet = false;
-    applyQuietPose(false);
-  }
+function doAnimalTalk(durationMs = 0) {
+  const m = ANIMAL.actions.gentle;
+  const duration = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : m.durationMs;
   talking = true;
+  quiet = false;
+  applyQuietPose(false);
   setBackground('happy');
-  playClip(WANT_TALK, { loop: true, speed: reducedMotion ? 0 : 0.58, fade: 0.6 });
-  try {
-    if (audioEl) { audioEl.pause(); audioEl = null; }
-    if (url && !muted) {
-      audioEl = new Audio(url);
-      audioEl.onended = () => { audioEl = null; talking = false; goBaseIdle(); };
-      audioEl.onerror = () => { audioEl = null; talking = false; setTimeout(goBaseIdle, 2200); };
-      audioEl.play().catch(() => { talking = false; setTimeout(goBaseIdle, 2200); });
+  const state = beginProcedural('talk', duration);
+  playSemanticClip('talk', { loop: false, speed: m.clipSpeed, fade: 0.55 });
+  if (!reducedMotion) {
+    if (!state || (!Object.keys(state.bones).length && !state.morph)) {
+      softBob({ amp: m.amp, dur: duration, yaw: 0, roll: 0, scalePulse: m.scalePulse });
     } else {
-      // Longer hold so multi-line Talk feels matched to speech length
-      setTimeout(() => { talking = false; goBaseIdle(); }, 7200);
+      scheduleProceduralIdle(state, duration + 180, () => {
+        talking = false;
+        goBaseIdle();
+      });
     }
-  } catch { talking = false; setTimeout(goBaseIdle, 7200); }
+  }
+  if (!state || (!Object.keys(state.bones).length && !state.morph)) setTimeout(() => {
+    talking = false;
+    goBaseIdle();
+  }, duration + 180);
+}
+
+function doSpeak(durationMs = 0) {
+  // Legacy bridge only: Expo Audio owns playback in the React Native layer.
+  doAnimalTalk(durationMs);
 }
 
 /* ——— Bone-attached decorative accessories ——— */
@@ -545,6 +879,14 @@ function indexBones(object) {
   });
 }
 
+function indexMorphs(object) {
+  morphByName = {};
+  object.traverse((o) => {
+    if (!o.isMesh || !o.morphTargetDictionary || !o.morphTargetInfluences) return;
+    Object.entries(o.morphTargetDictionary).forEach(([name, index]) => {
+      morphByName[name] = { mesh: o, index: Number(index) };
+    });
+  });
 /**
  * For models without a named skeleton (horse, parrot, flamingo, stork),
  * we inject empty Object3D nodes positioned at anatomically reasonable
@@ -620,10 +962,376 @@ function injectSyntheticBones(object) {
 }
 
 function findBone(candidates) {
-  for (const n of candidates) {
+  const names = Array.isArray(candidates) ? candidates : [];
+  for (const n of names) {
     if (boneByName[n]) return boneByName[n];
   }
+  for (const n of names) {
+    const lower = String(n).toLowerCase();
+    const exact = Object.entries(boneByName).find(([name]) => name.toLowerCase() === lower);
+    if (exact) return exact[1];
+  }
+  for (const n of names) {
+    const lower = String(n).toLowerCase();
+    const loose = Object.entries(boneByName).find(([name]) => name.toLowerCase().includes(lower));
+    if (loose) return loose[1];
+  }
   return null;
+}
+
+function findRigBone(slot, fallbackPattern) {
+  return findRigBones(slot, fallbackPattern)[0] || null;
+}
+
+/** Resolve every matching channel so both wings and every tail segment move. */
+function findRigBones(slot, fallbackPattern) {
+  const names = Array.isArray(RIG_HINTS[slot]) ? RIG_HINTS[slot] : [];
+  const hits = [];
+  const add = (bone) => {
+    if (bone && !hits.includes(bone)) hits.push(bone);
+  };
+  names.forEach((wanted) => {
+    add(boneByName[wanted]);
+    const lower = String(wanted).toLowerCase();
+    Object.entries(boneByName).forEach(([name, bone]) => {
+      if (name.toLowerCase() === lower) add(bone);
+    });
+  });
+  names.forEach((wanted) => {
+    const lower = String(wanted).toLowerCase();
+    Object.entries(boneByName).forEach(([name, bone]) => {
+      if (name.toLowerCase().includes(lower)) add(bone);
+    });
+  });
+  Object.entries(boneByName).forEach(([name, bone]) => {
+    if (fallbackPattern.test(name)) add(bone);
+  });
+  return hits;
+}
+
+function findMorph(candidates, fallbackPattern) {
+  const names = Array.isArray(candidates) ? candidates : [];
+  for (const n of names) {
+    if (morphByName[n]) return morphByName[n];
+  }
+  for (const n of names) {
+    const lower = String(n).toLowerCase();
+    const exact = Object.entries(morphByName).find(([name]) => name.toLowerCase() === lower);
+    if (exact) return exact[1];
+  }
+  return Object.entries(morphByName).find(([name]) => fallbackPattern.test(name))?.[1] || null;
+}
+
+function findProceduralActionBones(action, slot) {
+  const actionNames = PROCEDURAL_MODEL?.actionTargets?.[action];
+  const anchorNames = PROCEDURAL_MODEL?.motionAnchors?.[slot];
+  if (!Array.isArray(actionNames) || !Array.isArray(anchorNames)) return [];
+  const anchorSet = new Set(anchorNames);
+  return [...new Set(
+    actionNames
+      .filter((name) => anchorSet.has(name))
+      .map((name) => boneByName[name])
+      .filter(Boolean)
+  )];
+}
+
+function proceduralTargets(action) {
+  const slots = {};
+  const add = (slot, pattern, limit = Infinity) => {
+    const named = findProceduralActionBones(action, slot);
+    const bones = (named.length ? named : findRigBones(slot, pattern)).slice(0, limit);
+    if (bones.length) slots[slot] = bones;
+  };
+  if (action === 'talk') {
+    add('head', /head|neck/i);
+    add('jaw', /jaw|mouth/i);
+    add('beak', /beak|bill|mouth/i);
+  } else if (action === 'wave') {
+    add('forelimb', /fore|front|arm|leg/i, 1);
+    if (CHOREOGRAPHY.wave?.channels.some((intent) => intent.target === 'wing')) {
+      add('wing', /wing|flap|arm/i);
+    }
+    if (CHOREOGRAPHY.wave?.channels.some((intent) => intent.target === 'flipper')) {
+      add('flipper', /flipper|wing|flap|arm/i);
+    }
+    add('head', /head|neck/i);
+    add('ear', /ear/i);
+    add('tail', /tail/i);
+  } else if (action === 'play') {
+    add('head', /head|neck/i);
+    add('forelimb', /fore|front|arm|leg/i);
+    if (CHOREOGRAPHY.play?.channels.some((intent) => intent.target === 'wing')) {
+      add('wing', /wing|flap|arm/i);
+    }
+    if (CHOREOGRAPHY.play?.channels.some((intent) => intent.target === 'flipper')) {
+      add('flipper', /flipper|wing|flap|arm/i);
+    }
+    add('tail', /tail/i);
+  } else if (action === 'curious' || action === 'gentle') {
+    add('head', /head|neck/i);
+    add('tail', /tail/i);
+  }
+  const morph = action === 'talk'
+    ? findMorph(RIG_HINTS.talkMorphs, /mouth|jaw|beak|viseme/i)
+    : null;
+  return { slots, morph };
+}
+
+function restoreProcedural(state) {
+  if (!state) return;
+  Object.values(state.bones).flat().forEach((entry) => {
+    entry.bone.position.copy(entry.position);
+    entry.bone.rotation.copy(entry.rotation);
+    entry.bone.scale.copy(entry.scale);
+  });
+  if (state.morph) {
+    state.morph.mesh.morphTargetInfluences[state.morph.index] = state.morph.influence;
+  }
+  if (root) {
+    root.position.copy(state.rootPosition);
+    root.scale.copy(state.rootScale);
+    root.quaternion.copy(state.rootQuaternion);
+  }
+}
+
+function cancelProcedural() {
+  restoreProcedural(proceduralOverlay);
+  proceduralOverlay = null;
+}
+
+function beginProcedural(action, durationMs, loop = false) {
+  cancelProcedural();
+  if (reducedMotion || !root) return null;
+  const targets = proceduralTargets(action);
+  const bones = {};
+  Object.entries(targets.slots).forEach(([slot, targetBones]) => {
+    bones[slot] = targetBones.map((bone) => ({
+      bone,
+      position: bone.position.clone(),
+      rotation: bone.rotation.clone(),
+      scale: bone.scale.clone(),
+    }));
+  });
+  const state = {
+    token: ++proceduralSequence,
+    action,
+    startedAt: performance.now(),
+    durationMs: Math.max(1, durationMs || 1),
+    loop,
+    bones,
+    morph: targets.morph
+      ? {
+          ...targets.morph,
+          influence: targets.morph.mesh.morphTargetInfluences[targets.morph.index] || 0,
+        }
+      : null,
+    rootPosition: root.position.clone(),
+    rootScale: root.scale.clone(),
+    rootQuaternion: root.quaternion.clone(),
+  };
+  proceduralOverlay = state;
+  return state;
+}
+
+function setProceduralRotation(entry, x = 0, y = 0, z = 0) {
+  if (!entry) return;
+  entry.bone.rotation.copy(entry.rotation);
+  entry.bone.rotation.x += x;
+  entry.bone.rotation.y += y;
+  entry.bone.rotation.z += z;
+}
+
+function setProceduralChannel(state, target, vector, intent) {
+  const entries = state.bones[target] || [];
+  entries.forEach((entry, index) => {
+    let multiplier = 1;
+    if (intent?.mirrored && entries.length > 1 && index % 2 === 1) multiplier = -1;
+    // A segmented tail follows the lead segment with a slightly softer reach.
+    if (target === 'tail') multiplier *= Math.max(0.58, 1 - index * 0.11);
+    setProceduralRotation(
+      entry,
+      vector.x * multiplier,
+      vector.y * multiplier,
+      vector.z * multiplier
+    );
+  });
+}
+
+function interpolateChoreography(profile, t) {
+  const samples = Array.isArray(profile?.samples) ? profile.samples : [];
+  if (!samples.length) {
+    return { root: { x: 0, y: 0, z: 0, lift: 0, yaw: 0, roll: 0, scaleY: 1 }, channels: {} };
+  }
+  const scaled = Math.max(0, Math.min(1, t)) * (samples.length - 1);
+  const lowIndex = Math.floor(scaled);
+  const highIndex = Math.min(samples.length - 1, lowIndex + 1);
+  const amount = scaled - lowIndex;
+  const low = samples[lowIndex] || samples[0];
+  const high = samples[highIndex] || low;
+  const lerp = (a, b) => a + (b - a) * amount;
+  const rootSample = {};
+  ['x', 'y', 'z', 'lift', 'yaw', 'roll', 'scaleY'].forEach((key) => {
+    rootSample[key] = lerp(Number(low.root?.[key] || 0), Number(high.root?.[key] || 0));
+  });
+  const channels = {};
+  const names = new Set([
+    ...Object.keys(low.channels || {}),
+    ...Object.keys(high.channels || {}),
+  ]);
+  names.forEach((name) => {
+    const a = low.channels?.[name] || { x: 0, y: 0, z: 0 };
+    const b = high.channels?.[name] || a;
+    channels[name] = {
+      x: lerp(Number(a.x || 0), Number(b.x || 0)),
+      y: lerp(Number(a.y || 0), Number(b.y || 0)),
+      z: lerp(Number(a.z || 0), Number(b.z || 0)),
+    };
+  });
+  return { root: rootSample, channels };
+}
+
+function applyProceduralOverlay(now) {
+  const state = proceduralOverlay;
+  if (!state || !root) return;
+  const elapsed = now - state.startedAt;
+  if (!state.loop && elapsed >= state.durationMs) {
+    if (!state.finished) {
+      restoreProcedural(state);
+      state.finished = true;
+    }
+    return;
+  }
+  const t = state.loop
+    ? (elapsed % state.durationMs) / state.durationMs
+    : Math.max(0, Math.min(1, elapsed / state.durationMs));
+  Object.values(state.bones).flat().forEach((entry) => {
+    entry.bone.position.copy(entry.position);
+    entry.bone.rotation.copy(entry.rotation);
+    entry.bone.scale.copy(entry.scale);
+  });
+
+  if (state.action === 'wave' || state.action === 'play') {
+    // Authored clips are allowed to animate appendages, never the planted root.
+    // Restore the snapshot every frame so no clip or gesture can accumulate
+    // sideways translation, yaw, or roll.
+    const profile = CHOREOGRAPHY[state.action];
+    const sample = reducedMotion
+      ? { root: { x: 0, y: 0, z: 0, lift: 0, yaw: 0, roll: 0, scaleY: 1 }, channels: {} }
+      : interpolateChoreography(profile, t);
+    root.position.copy(state.rootPosition);
+    root.position.y += Math.max(-profile.root.maxLift, Math.min(profile.root.maxLift, sample.root.lift || 0));
+    root.scale.copy(state.rootScale);
+    root.scale.y *= sample.root.scaleY || 1;
+    root.quaternion.copy(state.rootQuaternion);
+    profile.channels.forEach((intent) => {
+      const vector = sample.channels[intent.target];
+      if (vector) setProceduralChannel(state, intent.target, vector, intent);
+    });
+  }
+
+  if (state.action === 'talk') {
+    const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 3);
+    setProceduralChannel(state, 'jaw', { x: -0.04 - pulse * 0.14, y: 0, z: 0 });
+    setProceduralChannel(state, 'beak', { x: -0.03 - pulse * 0.17, y: 0, z: 0 });
+    setProceduralChannel(state, 'head', { x: Math.sin(t * Math.PI * 2 * 3) * 0.045, y: 0, z: 0 });
+    if (state.morph) {
+      state.morph.mesh.morphTargetInfluences[state.morph.index] = Math.min(
+        1,
+        state.morph.influence + pulse * 0.72
+      );
+    }
+  } else if (state.action === 'curious') {
+    const tilt = Math.sin(t * Math.PI * 2) * 0.2;
+    setProceduralChannel(state, 'head', { x: 0, y: 0, z: tilt });
+  } else if (state.action === 'gentle') {
+    const nod = Math.sin(t * Math.PI * 2) * 0.06;
+    setProceduralChannel(state, 'head', { x: nod, y: 0, z: nod * 0.35 });
+    setProceduralChannel(state, 'tail', { x: 0, y: nod * 0.55, z: 0 });
+  }
+}
+
+function applyIdleMicroMotion(now) {
+  Object.values(idleOffsets).forEach((entry) => {
+    entry.bone.rotation.x -= entry.x;
+    entry.bone.rotation.y -= entry.y;
+    entry.bone.rotation.z -= entry.z;
+  });
+  idleOffsets = {};
+  if (reducedMotion || proceduralOverlay || talking || !root) return;
+  const t = now * 0.001;
+  const targets = {
+    head: findRigBone('head', /head|neck/i),
+    ear: findRigBone('ear', /ear/i),
+    tail: findRigBone('tail', /tail/i),
+  };
+  const offsets = {
+    head: { x: Math.sin(t * 1.6) * 0.012, y: 0, z: Math.cos(t * 1.1) * 0.008 },
+    ear: { x: 0, y: 0, z: Math.sin(t * 1.8) * 0.018 },
+    tail: { x: 0, y: Math.sin(t * 1.2) * 0.028, z: 0 },
+  };
+  Object.entries(targets).forEach(([slot, bone]) => {
+    if (!bone) return;
+    const offset = offsets[slot];
+    bone.rotation.x += offset.x;
+    bone.rotation.y += offset.y;
+    bone.rotation.z += offset.z;
+    idleOffsets[slot] = { bone, ...offset };
+  });
+}
+
+function scheduleProceduralIdle(state, delayMs, callback = goBaseIdle) {
+  if (!state) return;
+  setTimeout(() => {
+    if (proceduralOverlay?.token !== state.token) return;
+    cancelProcedural();
+    callback();
+  }, delayMs);
+}
+
+function findProceduralBones(channel) {
+  const names = PROCEDURAL_MODEL?.growthTargets?.[channel];
+  if (!Array.isArray(names)) return [];
+  return names.map((name) => boneByName[name]).filter(Boolean);
+}
+
+function growthChannelBones(channel, slot, fallbackPattern) {
+  const procedural = findProceduralBones(channel);
+  return procedural.length ? procedural : findRigBones(slot, fallbackPattern);
+}
+
+function applyGrowthProportions() {
+  const roots = (bones) => {
+    const unique = [];
+    bones.forEach((bone) => {
+      if (bone && !unique.includes(bone)) unique.push(bone);
+    });
+    return unique.filter((bone) => !unique.some((other) => other !== bone && isBoneDescendant(bone, other)));
+  };
+  const scaleRoots = (bones, multiplier) => {
+    const raw = Number(multiplier);
+    const value = Number.isFinite(raw) ? Math.min(1.12, Math.max(0.45, raw)) : 1;
+    if (!Number.isFinite(value) || value === 1) return;
+    roots(bones).forEach((bone) => bone.scale.multiplyScalar(value));
+  };
+  const head = findProceduralBones('head')[0] ||
+    findBone(['Head', 'head', 'HeadBone', 'b_Head_05']) ||
+    findRigBones('head', /^(head|b_head)/i)[0];
+  if (head) scaleRoots([head], GROWTH_CHANNELS?.head ?? GROWTH_HEAD_SCALE);
+  scaleRoots(growthChannelBones('muzzle', 'jaw', /jaw|muzzle|snout|mouth|bill|beak/i), GROWTH_CHANNELS?.muzzle);
+  scaleRoots(growthChannelBones('neck', 'neck', /neck/i), GROWTH_CHANNELS?.neck);
+  scaleRoots(growthChannelBones('legs', 'legs', /leg|thigh|shin|calf|hock|ankle|foot/i), GROWTH_CHANNELS?.legs);
+  scaleRoots(growthChannelBones('wings', 'wing', /wing|flap/i), GROWTH_CHANNELS?.wings);
+  scaleRoots(growthChannelBones('ears', 'ear', /ear/i), GROWTH_CHANNELS?.ears);
+  scaleRoots(growthChannelBones('tail', 'tail', /tail/i), GROWTH_CHANNELS?.tail);
+}
+
+function isBoneDescendant(candidate, ancestor) {
+  let current = candidate?.parent;
+  while (current) {
+    if (current === ancestor) return true;
+    current = current.parent;
+  }
+  return false;
 }
 
 function softMat(color) {
@@ -801,9 +1509,21 @@ function applyOutfit(next) {
   }
   hud.textContent = '';
 
-  const head = findBone(['b_Head_05']);
-  const neck = findBone(['b_Neck_04']);
-  const hand = findBone(['b_RightHand_08']);
+  const head = findBone([
+    ...(PROCEDURAL_MODEL?.accessoryAnchors?.head ? [PROCEDURAL_MODEL.accessoryAnchors.head] : []),
+    'b_Head_05',
+    ...(RIG_HINTS.head || []),
+  ]);
+  const neck = findBone([
+    ...(PROCEDURAL_MODEL?.accessoryAnchors?.neck ? [PROCEDURAL_MODEL.accessoryAnchors.neck] : []),
+    'b_Neck_04',
+    ...(RIG_HINTS.neck || []),
+  ]);
+  const hand = findBone([
+    ...(PROCEDURAL_MODEL?.accessoryAnchors?.forelimb ? [PROCEDURAL_MODEL.accessoryAnchors.forelimb] : []),
+    'b_RightHand_08',
+    ...(RIG_HINTS.forelimb || []),
+  ]);
 
   if (outfitState.hat && outfitState.hat !== 'none' && head) {
     attachWorld('hat', head, makeHat(outfitState.hat), { up: 0.11, forward: 0.02 }, 0.13);
@@ -827,7 +1547,19 @@ window.__kpCmd = (msg) => {
   if (msg.type === 'react') doReact();
   if (msg.type === 'reactGentle') doReactGentle();
   if (msg.type === 'wave') setExpression('waving');
-  if (msg.type === 'speak') doSpeak(msg.audioUrl || '');
+  if (msg.type === 'call') doAnimalTalk(msg.durationMs);
+  if (msg.type === 'speak') doSpeak(msg.durationMs);
+  if (msg.type === 'dispatch') {
+    const intent = msg.intent;
+    if (intent?.type === 'action') {
+      if (intent.action === 'talk') doAnimalTalk(intent.durationMs);
+      if (intent.action === 'play') doReact();
+      if (intent.action === 'wave') setExpression('waving');
+      if (intent.action === 'gentle') doReactGentle();
+      if (intent.action === 'curious') setExpression('curious');
+      if (intent.action === 'idle') goBaseIdle();
+    }
+  }
   if (msg.type === 'sleep') setExpression('sleepy');
   if (msg.type === 'wake') setExpression('happy');
   if (msg.type === 'setExpression') setExpression(msg.expression || 'happy');
@@ -839,33 +1571,33 @@ window.__kpCmd = (msg) => {
   }
   if (msg.type === 'setOutfit') applyOutfit(msg);
   if (msg.type === 'stop') {
-    if (audioEl) { try { audioEl.pause(); } catch {} audioEl = null; }
+    animToken += 1;
     goBaseIdle();
   }
 };
 
-function frameFullBody(object) {
+function frameFullBody(object, position = [0, 0, 0]) {
   object.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   modelSize.copy(size);
 
-  object.position.x += -center.x;
-  object.position.z += -center.z;
-  object.position.y += -box.min.y;
+  object.position.x += -center.x + (position[0] || 0);
+  object.position.z += -center.z + (position[2] || 0);
+  object.position.y += -box.min.y + (position[1] || 0);
 
   object.updateMatrixWorld(true);
   const box2 = new THREE.Box3().setFromObject(object);
   const size2 = box2.getSize(new THREE.Vector3());
-  const midY = size2.y * 0.42;
+  const midY = size2.y * 0.42 + (position[1] || 0);
 
   // CircleGeometry radius is 2.5 — scale so the pad matches the animal, not a huge fixed floor
-  const desiredR = Math.max(size2.x, size2.z, size2.y * 0.45) * 0.95 + 0.15;
+  const desiredR = ANIMAL.framing?.groundRadius || Math.max(size2.x, size2.z, size2.y * 0.45) * 0.95 + 0.15;
   ground.position.y = 0.01;
   ground.scale.setScalar(desiredR / 2.5);
 
-  const fit = Math.max(size2.x, size2.y, size2.z, 0.35);
+  const fit = ANIMAL.framing?.fit || Math.max(size2.x, size2.y, size2.z, 0.35);
   const dist = fit * 2.15;
   camera.position.set(dist * 0.9, midY + fit * 0.28, dist * 1.05);
   camera.near = Math.max(fit / 200, 0.01);
@@ -877,29 +1609,64 @@ function frameFullBody(object) {
   controls.update();
 }
 
-const loader = new GLTFLoader();
-loader.load(
-  MODEL,
-  (gltf) => {
-    root = gltf.scene;
-    // Normalize every GLB to ~same on-screen height (Fox / Flamingo / Horse differ wildly in raw units)
-    root.scale.setScalar(1);
-    scene.add(root);
-    root.updateMatrixWorld(true);
-    const rawBox = new THREE.Box3().setFromObject(root);
-    const rawSize = rawBox.getSize(new THREE.Vector3());
-    const TARGET_H = 1.55;
-    const norm = TARGET_H / Math.max(rawSize.y, 1e-4);
-    root.scale.setScalar(norm * (MODEL_SCALE || 1));
+function initializeRoot(nextRoot, animations = []) {
+  root = nextRoot;
+  applySpeciesMaterial(root);
+  root.scale.setScalar(1);
+  scene.add(root);
+  root.updateMatrixWorld(true);
+  const rawBox = new THREE.Box3().setFromObject(root);
+  const rawSize = rawBox.getSize(new THREE.Vector3());
+  const TARGET_H = 1.55;
+  const norm = TARGET_H / Math.max(rawSize.y, 1e-4);
+  const uniformScale = norm * (MODEL_SCALE || 1) * GROWTH_SCALE;
+  root.scale.set(
+    uniformScale * GROWTH_BODY_SCALE[0],
+    uniformScale * GROWTH_BODY_SCALE[1],
+    uniformScale * GROWTH_BODY_SCALE[2]
+  );
 
-    mixer = new THREE.AnimationMixer(root);
-    actions = {};
-    clipNames = [];
-    (gltf.animations || []).forEach((clip) => {
-      clipNames.push(clip.name);
-      actions[clip.name] = mixer.clipAction(clip);
-    });
+  mixer = new THREE.AnimationMixer(root);
+  actions = {};
+  clipNames = [];
+  (animations || []).forEach((clip) => {
+    clipNames.push(clip.name);
+    actions[clip.name] = mixer.clipAction(clip);
+  });
 
+  indexBones(root);
+  indexMorphs(root);
+  indexEyeMeshes(root);
+  applyEyeProfile();
+  applyGrowthProportions();
+  frameFullBody(root, GROWTH_POSITION);
+  baseQuat.copy(root.quaternion);
+  basePos.copy(root.position);
+
+  setExpression(expression);
+  applyOutfit(outfitState);
+
+  const readyPayload = JSON.stringify({
+    type: 'ready',
+    clips: clipNames,
+    bones: Object.keys(boneByName),
+    hasSkeleton,
+  });
+  if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(readyPayload);
+  if (window.parent && window.parent !== window) window.parent.postMessage(readyPayload, '*');
+}
+
+if (IS_PROCEDURAL) {
+  initializeRoot(buildProceduralModel(PROCEDURAL_MODEL), []);
+} else {
+  const loader = new GLTFLoader();
+  loader.load(
+    MODEL,
+    (gltf) => initializeRoot(gltf.scene, gltf.animations || []),
+    undefined,
+    () => { hud.textContent = 'Could not load companion'; }
+  );
+}
     indexBones(root);
     injectSyntheticBones(root);  // no-op for Fox (has real bones); adds virtual nodes for other animals
     frameFullBody(root);
@@ -936,6 +1703,9 @@ onResize();
   const dt = clock.getDelta();
   if (mixer && !reducedMotion) mixer.update(dt);
   else if (mixer && reducedMotion) mixer.update(0);
+  const now = performance.now();
+  applyProceduralOverlay(now);
+  applyIdleMicroMotion(now);
   controls.update();
   renderer.render(scene, camera);
 })();

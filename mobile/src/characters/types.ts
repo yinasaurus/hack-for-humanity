@@ -1,3 +1,13 @@
+import type {
+  AnimalActionIntent,
+  AnimalActionCandidateMap,
+  AnimalRigHints,
+  AnimalSemanticAction,
+} from './animalCapabilities';
+
+/** Renderer-owned declarative models that do not require a GLB asset. */
+export type ProceduralCharacterId = 'rabbit-v2' | 'cat-v2';
+
 /**
  * Per-character config so new animals are catalog-only (no animation logic edits).
  */
@@ -20,7 +30,13 @@ export type CharacterDef = {
    * - Relative path string under assets for remote hosting later
    */
   modelPath: string;
+  /** When present, this procedural spec is authoritative over modelPath. */
+  proceduralModel?: ProceduralCharacterId;
   clips: AnimalClipMap;
+  /** Explicit semantic candidates, ordered by preference. */
+  actions?: AnimalActionCandidateMap;
+  /** Bone/morph aliases used by procedural species overlays. */
+  rig?: AnimalRigHints;
   scale?: number;
   position?: [number, number, number];
   rotation?: [number, number, number];
@@ -29,6 +45,8 @@ export type CharacterDef = {
 };
 
 export type AnimalCharacterHandle = {
+  /** Dispatch a semantic renderer intent; legacy helpers below adapt to it. */
+  dispatch: (intent: AnimalIntent) => void;
   /** Play audio and blend into the Talk clip until audio ends. */
   speak: (audioUrl: string) => void;
   /** Stop audio and return to Idle. */
@@ -36,3 +54,5 @@ export type AnimalCharacterHandle = {
   /** Fire the React clip once. */
   react: () => void;
 };
+
+export type AnimalIntent = AnimalActionIntent;

@@ -3,28 +3,15 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../AuthContext';
-import { completeOnboarding, type PetGender } from '../api';
-import type { PetTypeId } from '../pets';
+import { completeOnboarding, getDeviceTimezone, type PetGender } from '../api';
+import { PET_TYPES, type SelectablePetTypeId } from '../pets';
 import { colors, gradients, spacing, tapTarget } from '../theme';
-
-const PETS = [
-  { id: 'panda', label: 'Panda', icon: '🐼' },
-  { id: 'dog', label: 'Dog', icon: '🐶' },
-  { id: 'cat', label: 'Cat', icon: '🐱' },
-  { id: 'capybara', label: 'Capybara', icon: '🦫' },
-  { id: 'cow', label: 'Cow', icon: '🐮' },
-  { id: 'chipmunk', label: 'Chipmunk', icon: '🐿️' },
-  { id: 'monkey', label: 'Monkey', icon: '🐒' },
-  { id: 'rabbit', label: 'Rabbit', icon: '🐰' },
-  { id: 'penguin', label: 'Penguin', icon: '🐧' },
-  { id: 'otter', label: 'Otter', icon: '🦦' },
-] as const satisfies ReadonlyArray<{ id: PetTypeId; label: string; icon: string }>;
 
 export function PetSelectionScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { user, setUser } = useAuth();
-  const [species, setSpecies] = useState<PetTypeId | null>(null);
+  const { user, setUser, setCompanion } = useAuth();
+  const [species, setSpecies] = useState<SelectablePetTypeId | null>(null);
   const [name, setName] = useState('');
   const [gender, setGender] = useState<PetGender | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,8 +27,17 @@ export function PetSelectionScreen() {
     setBusy(true);
     setError(null);
     try {
-      // RootNavigator observes onboarded=true and replaces this screen with Home.
-      await setUser(await completeOnboarding(user.id, species, petName, gender));
+      const result = await completeOnboarding(user.id, {
+        petType: species,
+        petName,
+        petGender: gender,
+        timezone: getDeviceTimezone(),
+      });
+      // Make the server's complete response available before updating
+      // onboarded=true, so Home never renders a default companion during the
+      // navigator transition.
+      setCompanion(result.companion);
+      await setUser(result.user);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save your Buddi.');
     } finally {
@@ -57,7 +53,7 @@ export function PetSelectionScreen() {
           <Text style={styles.title}>Choose your Buddi</Text>
           <Text style={styles.intro}>Pick the friend you’d like beside you, then give them a name.</Text>
           <View style={styles.grid} accessibilityLabel="Choose one pet species">
-            {PETS.map((pet) => {
+            {PET_TYPES.map((pet) => {
               const selected = species === pet.id;
               return (
                 <Pressable key={pet.id} onPress={() => { setSpecies(pet.id); setError(null); }} accessibilityRole="radio" accessibilityLabel={pet.label} accessibilityState={{ checked: selected }} style={[styles.petCard, { width: cardWidth }, selected && styles.petCardSelected]}>

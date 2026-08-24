@@ -5,17 +5,22 @@ import {
   signup as apiSignup,
   saveToken,
   getToken,
+  getDeviceTimezone,
+  syncTimezone,
+  CompanionState,
   User,
 } from './api';
 import { useSettings } from './SettingsContext';
 
 type AuthContextValue = {
   user: User | null;
+  companion: CompanionState | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<User>;
   signUp: (email: string, password: string, name: string) => Promise<User>;
   signOut: () => Promise<void>;
   setUser: (u: User | null) => void;
+  setCompanion: React.Dispatch<React.SetStateAction<CompanionState | null>>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -24,6 +29,9 @@ const STORAGE_KEY = 'companion.user';
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { settings } = useSettings();
   const [user, setUserState] = useState<User | null>(null);
+  // Kept in memory only: it is an onboarding handoff, not a second source of
+  // truth. Home refreshes from the API on focus after a cold start.
+  const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,7 +43,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ]);
         // Need both saved profile and JWT — otherwise show sign-in
         if (raw && token && settings.staySignedIn) {
-          setUserState(JSON.parse(raw));
+          const restoredUser = JSON.parse(raw) as User;
+          setUserState(restoredUser);
+          if (restoredUser.role === 'patient') {
+            // Timezone changes must not prevent a patient from entering the
+            // app; the server can reject this route on older prototypes.
+            void syncTimezone(restoredUser.id, getDeviceTimezone()).catch(() => undefined);
+          }
         } else {
           await AsyncStorage.removeItem(STORAGE_KEY);
           if (!token) await saveToken(null);
@@ -58,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setUser = async (u: User | null) => {
     setUserState(u);
+    if (!u) setCompanion(null);
     if (u && settings.staySignedIn) {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(u));
     } else {
@@ -66,24 +81,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    setCompanion(null);
     const { user: u } = await apiLogin(email.trim().toLowerCase(), password, 'patient');
     await setUser(u);
+    void syncTimezone(u.id, getDeviceTimezone()).catch(() => undefined);
     return u;
   };
 
   const signUp = async (email: string, password: string, name: string) => {
+    setCompanion(null);
     const { user: u } = await apiSignup(email.trim().toLowerCase(), password, name.trim());
     await setUser(u);
+    void syncTimezone(u.id, getDeviceTimezone()).catch(() => undefined);
     return u;
   };
 
   const signOut = async () => {
+    setCompanion(null);
     await saveToken(null);
     await setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, setUser }}>
+    <AuthContext.Provider
+      value={{ user, companion, loading, signIn, signUp, signOut, setUser, setCompanion }}
+    >
       {children}
     </AuthContext.Provider>
   );

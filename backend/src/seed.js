@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { writeDb } from './db.js';
 import { mockAnalyze } from './ai.js';
-import { shiftDay, toDateKey } from './streaks.js';
+import { DEFAULT_TIMEZONE, shiftDay, toDateKey } from './streaks.js';
 import { DEFAULT_APPEARANCE } from './appearance.js';
 
 /**
@@ -22,6 +22,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    timezone: DEFAULT_TIMEZONE,
+    highestConsecutiveStreak: 4,
     ...DEFAULT_APPEARANCE,
     petName: 'Maple',
     petType: 'fox',
@@ -37,6 +39,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    timezone: DEFAULT_TIMEZONE,
+    highestConsecutiveStreak: 14,
     ...DEFAULT_APPEARANCE,
     petType: 'fox',
     clinicalProfile: { heightCm: 178, weightKg: 72, dailyCalorieTarget: 2400, customGoals: [] },
@@ -50,6 +54,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-demo',
     onboarded: true,
+    timezone: DEFAULT_TIMEZONE,
+    highestConsecutiveStreak: 10,
     ...DEFAULT_APPEARANCE,
     petType: 'fox',
     clinicalProfile: { heightCm: 170, weightKg: 64, dailyCalorieTarget: 2200, customGoals: ['Add an afternoon snack when it feels manageable'] },
@@ -64,6 +70,8 @@ const patients = [
     role: 'patient',
     clinicId: 'clinic-other',
     onboarded: true,
+    timezone: DEFAULT_TIMEZONE,
+    highestConsecutiveStreak: 0,
     ...DEFAULT_APPEARANCE,
     petType: 'fox',
     passwordHash: '$2b$10$v.ZZta4JZhcU1dCDcHh70.LkuhZJfOnaBAnn.7T5TcwDWyHp7dYNu',
@@ -142,17 +150,10 @@ writeDb({
   unlocks: {
     'patient-maya': [
       {
-        milestoneDay: 5,
+        milestoneDay: 1,
         type: 'accessory',
-        id: 'soft_scarf',
-        label: 'Soft scarf',
-        unlockedAt: daysAgo(5),
-      },
-      {
-        milestoneDay: 10,
-        type: 'background',
-        id: 'sunny_meadow',
-        label: 'Sunny meadow',
+        id: 'welcome_star',
+        label: 'Welcome star',
         unlockedAt: daysAgo(1),
       },
     ],

@@ -18,6 +18,8 @@ export type AppSettings = {
   togetherMusic: boolean;
   /** Companion voice / speech — off by default; never auto-play on load */
   companionMuted: boolean;
+  /** True only after the person explicitly changes the voice switch. */
+  companionMuteIntentional: boolean;
   staySignedIn: boolean;
   remindersEnabled: boolean;
   reminderFrequency: ReminderFrequency;
@@ -28,6 +30,9 @@ export type AppSettings = {
 const DEFAULTS: AppSettings = {
   togetherMusic: false,
   companionMuted: true,
+  // Older installs used companionMuted=true as a default, so that value is
+  // treated as a legacy preference until the person uses the switch.
+  companionMuteIntentional: false,
   staySignedIn: true,
   remindersEnabled: false,
   reminderFrequency: 'daily',
@@ -52,7 +57,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(KEY);
-        if (raw) setSettings({ ...DEFAULTS, ...JSON.parse(raw) });
+        if (raw) {
+          const stored = JSON.parse(raw) as Partial<AppSettings>;
+          setSettings({
+            ...DEFAULTS,
+            ...stored,
+            // A missing marker is an old default, not an explicit opt-out.
+            companionMuteIntentional: stored.companionMuteIntentional === true,
+          });
+        }
       } finally {
         setLoading(false);
       }

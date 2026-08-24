@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, tapTarget } from '../theme';
+import { BuddiBrand } from '../components/BuddiBrand';
 import { SupportChip } from '../components/SupportChip';
 
 type Props = {
@@ -26,7 +27,7 @@ export function TransparencyScreen({ onDone }: Props) {
           },
         ]}
       >
-        <Text style={styles.brand}>Buddi</Text>
+        <BuddiBrand textStyle={styles.brand} style={styles.brandLockup} />
         <Text style={styles.title} accessibilityRole="header">
           What your clinic sees
         </Text>
@@ -66,6 +67,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'Nunito_800ExtraBold',
     color: colors.sageDeep,
+  },
+  brandLockup: {
     marginBottom: spacing.md,
   },
   title: {

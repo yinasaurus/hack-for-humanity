@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SupportChip } from '../components/SupportChip';
+import { PetAccessoryOverlay } from '../components/PetAccessoryOverlay';
 import { AnimalWebView, characterForLiveCompanion } from '../characters';
 import { CHARACTER_CATALOG } from '../characters/characterCatalog';
 import { colors, gradients, spacing, tapTarget } from '../theme';
@@ -24,10 +25,16 @@ import {
   PET_HELD,
   PET_NECKS,
   PET_SCENES,
-  PET_TYPES,
+  petTypeLabel,
   type PetAppearance,
   type PetTypeId,
 } from '../pets';
+import {
+  canEquipWardrobeItem,
+  unlockedKeepsakeIds,
+  wardrobeLabel,
+  type WardrobeField,
+} from '../wardrobe';
 
 
 type Props = {
@@ -48,21 +55,14 @@ const WEAR_HATS = PET_HATS.filter((h) =>
 );
 const WEAR_FACES = PET_FACES.filter((f) => ['none', 'glasses'].includes(f.id));
 const WEAR_NECKS = PET_NECKS.filter((n) =>
-  ['none', 'scarf', 'ribbon'].includes(n.id)
+  ['none', 'scarf'].includes(n.id)
 );
 const HOLD_ITEMS = PET_HELD.filter((h) =>
-  ['none', 'star', 'heart', 'flower_stem'].includes(h.id)
+  ['none', 'star', 'heart'].includes(h.id)
 );
-
-/** Milestone unlock id → appearance field it relates to (decorative only). */
-const UNLOCK_TO_COSMETIC: Record<string, { field: keyof PetAppearance; value: string }> = {
-  soft_scarf: { field: 'neck', value: 'scarf' },
-  sunny_meadow: { field: 'scene', value: 'sunny_meadow' },
-  flower_crown: { field: 'hat', value: 'flower' },
-  cozy_nook: { field: 'scene', value: 'cozy_nook' },
-  star_pendant: { field: 'held', value: 'star' },
-  quiet_garden: { field: 'scene', value: 'quiet_garden' },
-};
+const WEAR_SCENES = PET_SCENES.filter((scene) =>
+  ['sky', 'sunny_meadow', 'cozy_nook', 'quiet_garden'].includes(scene.id)
+);
 
 function appearanceFromPartial(
   p?: Partial<CompanionState> | null
@@ -90,31 +90,35 @@ function ChipRow<T extends string>({
   options,
   value,
   onChange,
-  unlockedIds,
+  field,
+  unlockIds,
 }: {
   options: readonly { id: T; label: string; blurb?: string }[];
   value: T;
   onChange: (id: T) => void;
-  /** Cosmetic ids unlocked via keepsakes — informational, never punishment-gated */
-  unlockedIds?: Set<string>;
+  field: WardrobeField;
+  unlockIds: ReadonlySet<string>;
 }) {
   return (
     <View style={styles.chipWrap}>
       {options.map((o) => {
         const on = o.id === value;
-        const keepsake = unlockedIds?.has(o.id);
+        const available = canEquipWardrobeItem(field, o.id, unlockIds);
         return (
           <Pressable
             key={o.id}
-            onPress={() => onChange(o.id)}
+            onPress={() => available && onChange(o.id)}
+            disabled={!available}
             accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={`${o.label}${keepsake ? ', unlocked keepsake' : ''}`}
-            style={[styles.chip, on && styles.chipOn]}
+            accessibilityState={{ selected: on, disabled: !available }}
+            accessibilityLabel={`${o.label}, ${available ? 'available' : 'locked future keepsake'}`}
+            style={[styles.chip, !available && styles.chipLocked, on && styles.chipOn]}
           >
-            <Text style={[styles.chipTitle, on && styles.chipTitleOn]}>{o.label}</Text>
+            <Text style={[styles.chipTitle, !available && styles.chipTitleLocked, on && styles.chipTitleOn]}>{o.label}</Text>
             {o.blurb ? <Text style={styles.chipBlurb}>{o.blurb}</Text> : null}
-            {keepsake ? <Text style={styles.keepsakeTag}>Keepsake</Text> : null}
+            <Text style={[styles.inventoryTag, available && styles.inventoryTagAvailable]}>
+              {on ? 'Worn' : available ? 'Available' : 'Locked · future keepsake'}
+            </Text>
           </Pressable>
         );
       })}
@@ -127,7 +131,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
   const { user } = useAuth();
   const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
-  const [helloDayCount, setHelloDayCount] = useState(0);
+  const [growthStage, setGrowthStage] = useState<CompanionState['growthStage']>('baby');
   const [tab, setTab] = useState<TabId>('outfit');
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
@@ -146,7 +150,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
         const c = await fetchCompanion(user.id);
         if (cancelled) return;
         setUnlocks(c.unlocks || []);
-        setHelloDayCount((c.helloDays || []).length);
+        setGrowthStage(c.growthStage || 'baby');
         // Only hydrate from server if the user hasn't started editing
         if (!dirtyRef.current) {
           const next = appearanceFromPartial(c);
@@ -172,20 +176,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
     };
   }, [user]);
 
-  const unlockedCosmeticIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const u of unlocks) {
-      const map = UNLOCK_TO_COSMETIC[u.id];
-      if (map) ids.add(map.value);
-      // Also treat unlock id itself as a tag when it matches a scene/accessory id
-      ids.add(u.id);
-    }
-    return ids;
-  }, [unlocks]);
+  const unlockIds = useMemo(() => unlockedKeepsakeIds(unlocks), [unlocks]);
 
   const keepsakePath = useMemo(
-    () => upcomingKeepsakeSteps(helloDayCount, 4),
-    [helloDayCount]
+    () => upcomingKeepsakeSteps(unlocks.map((unlock) => unlock.milestoneDay), 4),
+    [unlocks]
   );
 
   const patch = <K extends keyof PetAppearance>(key: K, value: PetAppearance[K]) => {
@@ -238,31 +233,40 @@ export function CustomizeScreen({ navigation, route }: Props) {
         ]}
       >
         <Text style={styles.title}>Style</Text>
-        <Text style={styles.sub}>Looks only — never body size.</Text>
         {loadingLook ? (
           <ActivityIndicator color={colors.sageDeep} style={{ marginVertical: 24 }} />
         ) : (
           <>
-            <AnimalWebView
-              key={`live-${liveCharacter.modelPath}`}
-              character={liveCharacter}
-              expression="happy"
-              muted
-              style={styles.preview3d}
-              accessibilityLabel={`${a.petName || 'Companion'} 3D preview`}
-              outfit={{
-                hat: a.hat,
-                face: a.face,
-                neck: a.neck,
-                held: a.held,
-                scene: a.scene,
-              }}
-            />
+            <View style={styles.previewStage}>
+              <AnimalWebView
+                key={`live-${liveCharacter.modelPath}`}
+                character={liveCharacter}
+                growthStage={growthStage}
+                expression="happy"
+                muted
+                style={styles.preview3d}
+                accessibilityLabel={`${a.petName || 'Companion'} 3D preview`}
+                outfit={{
+                  hat: 'none',
+                  face: 'none',
+                  neck: 'none',
+                  held: 'none',
+                  scene: a.scene,
+                }}
+              />
+              <PetAccessoryOverlay
+                size={160}
+                petType={a.petType}
+                hat={a.hat}
+                face={a.face}
+                neck={a.neck}
+                held={a.held}
+              />
+            </View>
             <Text style={styles.previewName} accessibilityLiveRegion="polite">
               {a.petName.trim() || 'Companion'} ·{' '}
-              {PET_TYPES.find((p) => p.id === a.petType)?.label || a.petType}
-              {a.hat !== 'none' ? ` · ${a.hat}` : ''}
-              {a.neck !== 'none' ? ` · ${a.neck}` : ''}
+              {petTypeLabel(a.petType)}
+              {` · ${wardrobeLabel(a)}`}
             </Text>
           </>
         )}
@@ -283,11 +287,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
                 {step.label}
               </Text>
               <Text style={styles.pathAway}>
-                {step.unlocked
-                  ? 'Yours'
-                  : step.hellosAway === 1
-                    ? '~1 hello'
-                    : `~${step.hellosAway} hellos`}
+                {step.unlocked ? 'Yours' : 'A future keepsake'}
               </Text>
             </View>
           ))}
@@ -359,49 +359,62 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {tab === 'outfit' && (
           <>
+            <View style={styles.inventoryIntro} accessibilityRole="summary">
+              <Text style={styles.inventoryTitle}>Wardrobe</Text>
+              <Text style={styles.inventoryBody}>
+                Earned keepsakes stay yours. Locked pieces remain visible here and open automatically in a future chapter.
+              </Text>
+            </View>
             <Text style={styles.section}>Hat</Text>
             <ChipRow
               options={WEAR_HATS}
               value={a.hat}
               onChange={(id) => patch('hat', id)}
-              unlockedIds={unlockedCosmeticIds}
+              field="hat"
+              unlockIds={unlockIds}
             />
             <Text style={styles.section}>Face</Text>
             <ChipRow
               options={WEAR_FACES}
               value={a.face}
               onChange={(id) => patch('face', id)}
-              unlockedIds={unlockedCosmeticIds}
+              field="face"
+              unlockIds={unlockIds}
             />
             <Text style={styles.section}>Neck</Text>
             <ChipRow
               options={WEAR_NECKS}
               value={a.neck}
               onChange={(id) => patch('neck', id)}
-              unlockedIds={unlockedCosmeticIds}
+              field="neck"
+              unlockIds={unlockIds}
             />
             <Text style={styles.section}>Held item</Text>
             <ChipRow
               options={HOLD_ITEMS}
               value={a.held}
               onChange={(id) => patch('held', id)}
-              unlockedIds={unlockedCosmeticIds}
+              field="held"
+              unlockIds={unlockIds}
             />
             <Text style={styles.section}>Scene</Text>
             <View style={styles.swatches}>
-              {PET_SCENES.map((s) => {
+              {WEAR_SCENES.map((s) => {
                 const on = s.id === a.scene;
-                const keepsake = unlockedCosmeticIds.has(s.id);
+                const available = canEquipWardrobeItem('scene', s.id, unlockIds);
                 return (
                   <Pressable
                     key={s.id}
-                    onPress={() => patch('scene', s.id)}
-                    style={[styles.swatchWide, { backgroundColor: s.fill }, on && styles.swatchOn]}
+                    onPress={() => available && patch('scene', s.id)}
+                    disabled={!available}
+                    style={[styles.swatchWide, { backgroundColor: s.fill }, !available && styles.swatchLocked, on && styles.swatchOn]}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: on }}
+                    accessibilityState={{ selected: on, disabled: !available }}
                   >
                     <Text style={styles.swatchLabel}>{s.label}</Text>
-                    {keepsake ? <Text style={styles.keepsakeTag}>Keepsake</Text> : null}
+                    <Text style={[styles.inventoryTag, available && styles.inventoryTagAvailable]}>
+                      {on ? 'In use' : available ? 'Available' : 'Locked · future keepsake'}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -452,22 +465,13 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 160,
     borderRadius: 20,
-    marginTop: 4,
   },
+  previewStage: { width: '100%', height: 160, marginTop: 4, position: 'relative' },
   content: { paddingHorizontal: spacing.lg, paddingTop: 8 },
   title: {
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 26,
     color: colors.ink,
-    alignSelf: 'flex-start',
-  },
-  sub: {
-    fontFamily: 'Nunito_400Regular',
-    fontSize: 14,
-    color: colors.inkSoft,
-    marginTop: 4,
-    marginBottom: 4,
-    lineHeight: 20,
     alignSelf: 'flex-start',
   },
   previewName: {
@@ -528,8 +532,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipOn: { borderColor: colors.sageDeep, backgroundColor: colors.mist },
+  chipLocked: { backgroundColor: 'rgba(255,255,255,0.48)', borderColor: colors.sand, opacity: 0.68 },
   chipTitle: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.ink },
   chipTitleOn: { color: colors.sageDeep },
+  chipTitleLocked: { color: colors.inkSoft },
   chipBlurb: { fontFamily: 'Nunito_400Regular', fontSize: 11, color: colors.inkSoft, marginTop: 2 },
   pathCard: {
     marginTop: 0,
@@ -582,6 +588,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.teal,
   },
+  inventoryIntro: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.mist,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  inventoryTitle: { fontFamily: 'Nunito_800ExtraBold', fontSize: 17, color: colors.ink },
+  inventoryBody: { marginTop: 4, fontFamily: 'Nunito_400Regular', fontSize: 13, lineHeight: 19, color: colors.inkSoft },
+  inventoryTag: { marginTop: 4, fontFamily: 'Nunito_600SemiBold', fontSize: 11, color: colors.inkSoft },
+  inventoryTagAvailable: { color: colors.teal },
   swatches: { gap: 8 },
   swatchWide: {
     borderRadius: 14,
@@ -593,6 +611,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   swatchOn: { borderColor: colors.sageDeep },
+  swatchLocked: { opacity: 0.62 },
   swatchLabel: { fontFamily: 'Nunito_700Bold', fontSize: 14, color: colors.ink },
   cta: {
     marginTop: spacing.lg,

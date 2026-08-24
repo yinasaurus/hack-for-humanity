@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { normalizeTimeZone } from './streaks.js';
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ export function publicUser(user) {
     onboarded: Boolean(user.onboarded),
     createdAt: user.createdAt,
   };
+  if (user.role === 'patient') safe.timezone = normalizeTimeZone(user.timezone);
   for (const key of ['petName', 'petType', 'petGender', 'petColor', 'pattern', 'eyes', 'hat', 'face', 'neck', 'held', 'scene', 'accent']) {
     if (user[key] !== undefined) safe[key] = user[key];
   }
