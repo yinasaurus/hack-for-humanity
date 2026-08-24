@@ -527,7 +527,7 @@ function doSpeak(url) {
   } catch { talking = false; setTimeout(goBaseIdle, 7200); }
 }
 
-/* ——— Bone-attached decorative accessories (Fox skeleton) ——— */
+/* ——— Bone-attached decorative accessories ——— */
 function indexBones(object) {
   boneByName = {};
   hasSkeleton = false;
@@ -543,6 +543,80 @@ function indexBones(object) {
       hasSkeleton = true;
     }
   });
+}
+
+/**
+ * For models without a named skeleton (horse, parrot, flamingo, stork),
+ * we inject empty Object3D nodes positioned at anatomically reasonable
+ * spots derived from the model's normalized bounding box.
+ * These synthetic nodes are registered into boneByName under the same
+ * canonical names the Fox uses, so all accessory code works unchanged.
+ */
+function injectSyntheticBones(object) {
+  if (hasSkeleton) return; // Fox already has real bones
+
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const min = box.min;
+
+  // Detect rough shape: tall+narrow = bird/quadruped vs wide = horse
+  const isQuadruped = size.x > size.y * 0.7; // horse, wide animals
+  const isBird = size.y > size.x * 1.2;     // flamingo, stork, parrot
+
+  // Proportional offsets (fraction of bounding box dimensions)
+  let headOffsetY, headOffsetZ, headOffsetX;
+  let neckOffsetY, neckOffsetZ;
+  let handOffsetY, handOffsetX, handOffsetZ;
+
+  if (isQuadruped) {
+    // Horse: head is at front-top, hand (paw) is front-lower
+    headOffsetY = 0.82;
+    headOffsetZ = 0.38;  // forward
+    headOffsetX = 0.0;
+    neckOffsetY = 0.65;
+    neckOffsetZ = 0.28;
+    handOffsetY = 0.05;
+    handOffsetX = 0.35;
+    handOffsetZ = 0.3;
+  } else if (isBird) {
+    // Tall birds (flamingo, stork): head near top, wing-tip for held
+    headOffsetY = 0.90;
+    headOffsetZ = 0.1;
+    headOffsetX = 0.0;
+    neckOffsetY = 0.72;
+    neckOffsetZ = 0.05;
+    handOffsetY = 0.55;
+    handOffsetX = 0.38;
+    handOffsetZ = 0.05;
+  } else {
+    // Small compact birds (parrot): head at top, wing for held
+    headOffsetY = 0.82;
+    headOffsetZ = 0.15;
+    headOffsetX = 0.0;
+    neckOffsetY = 0.65;
+    neckOffsetZ = 0.08;
+    handOffsetY = 0.50;
+    handOffsetX = 0.30;
+    handOffsetZ = 0.05;
+  }
+
+  function makeBoneAt(x, y, z) {
+    const node = new THREE.Object3D();
+    node.position.set(
+      min.x + size.x * (0.5 + x),
+      min.y + size.y * y,
+      min.z + size.z * (0.5 + z)
+    );
+    // Attach to root so world matrix updates with animation
+    object.add(node);
+    return node;
+  }
+
+  boneByName['b_Head_05']      = makeBoneAt(headOffsetX, headOffsetY, headOffsetZ);
+  boneByName['b_Neck_04']      = makeBoneAt(0, neckOffsetY, neckOffsetZ);
+  boneByName['b_RightHand_08'] = makeBoneAt(handOffsetX, handOffsetY, handOffsetZ);
+  hasSkeleton = true;
 }
 
 function findBone(candidates) {
@@ -827,6 +901,7 @@ loader.load(
     });
 
     indexBones(root);
+    injectSyntheticBones(root);  // no-op for Fox (has real bones); adds virtual nodes for other animals
     frameFullBody(root);
     baseQuat.copy(root.quaternion);
     basePos.copy(root.position);

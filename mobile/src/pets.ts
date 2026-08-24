@@ -16,7 +16,9 @@ export const PET_TYPES = [
   { id: 'otter', label: 'Otter', blurb: 'A warm, playful friend' },
 ] as const;
 
-export type PetTypeId = (typeof PET_TYPES)[number]['id'];
+export type PetTypeId = (typeof PET_TYPES)[number]['id']
+  | 'fox' | 'horse' | 'parrot' | 'flamingo' | 'stork';
+
 
 export const PET_COLORS = [
   { id: 'peach', label: 'Peach', body: '#F6C6A8', cheek: '#F4A88A', resting: '#D7C4B5' },

@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SupportChip } from '../components/SupportChip';
 import { AnimalWebView, characterForLiveCompanion } from '../characters';
+import { CHARACTER_CATALOG } from '../characters/characterCatalog';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { fetchCompanion, updateAppearance, type CompanionState, type Unlock } from '../api';
@@ -25,17 +26,20 @@ import {
   PET_SCENES,
   PET_TYPES,
   type PetAppearance,
+  type PetTypeId,
 } from '../pets';
+
 
 type Props = {
   navigation: { goBack: () => void };
   route?: { params?: Partial<CompanionState> };
 };
 
-/** Top-level categories: animal vs layered outfit (independent fields). */
-type TabId = 'outfit';
+/** Top-level categories: companion animal vs outfit accessories. */
+type TabId = 'companion' | 'outfit';
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'companion', label: 'Companion' },
   { id: 'outfit', label: 'Outfit' },
 ];
 
@@ -313,6 +317,46 @@ export function CustomizeScreen({ navigation, route }: Props) {
           ))}
         </ScrollView>
 
+        {tab === 'companion' && (
+          <>
+            <Text style={styles.section}>3D companion</Text>
+            <Text style={styles.colorHint}>
+              Switch your friend anytime — outfits carry over.
+            </Text>
+            <View style={styles.companionGrid}>
+              {CHARACTER_CATALOG.map((char) => {
+                const on = characterForLiveCompanion(a.petType).id === char.id;
+                return (
+                  <Pressable
+                    key={char.id}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    accessibilityLabel={`Choose ${char.label} as companion`}
+                    style={[styles.companionCard, on && styles.companionCardOn]}
+                    onPress={() => {
+                      // Save the GLB id directly as petType so it resolves cleanly
+                      patch('petType', char.id as PetTypeId);
+                    }}
+                  >
+                    <AnimalWebView
+                      key={char.modelPath}
+                      character={char}
+                      expression="happy"
+                      muted
+                      style={styles.companionThumb}
+                      accessibilityLabel={`${char.label} 3D preview`}
+                    />
+                    <Text style={[styles.companionLabel, on && styles.companionLabelOn]}>
+                      {char.label}
+                    </Text>
+                    {on && <Text style={styles.companionCheck}>✓ Current</Text>}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+
         {tab === 'outfit' && (
           <>
             <Text style={styles.section}>Hat</Text>
@@ -572,5 +616,45 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_600SemiBold',
     color: '#A65D5D',
     fontSize: 14,
+  },
+  companionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 4,
+  },
+  companionCard: {
+    width: '47%',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
+    alignItems: 'center',
+    paddingBottom: 10,
+  },
+  companionCardOn: {
+    borderColor: colors.sageDeep,
+    backgroundColor: colors.white,
+  },
+  companionThumb: {
+    width: '100%',
+    height: 130,
+    borderRadius: 0,
+  },
+  companionLabel: {
+    marginTop: 6,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 14,
+    color: colors.ink,
+  },
+  companionLabelOn: {
+    color: colors.sageDeep,
+  },
+  companionCheck: {
+    marginTop: 2,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 11,
+    color: colors.sageDeep,
   },
 });
