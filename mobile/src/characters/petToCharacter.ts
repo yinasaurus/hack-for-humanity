@@ -33,6 +33,17 @@ export function characterForLiveCompanion(petType?: string): CharacterDef {
   return characterForPetType(petType);
 }
 
-export function liveCompanionSupportsBoneOutfits(petType?: string): boolean {
-  return characterForPetType(petType).id === 'fox';
+/** All characters now support accessories — Fox uses real skeleton bones,
+ *  others use synthetic virtual nodes injected at load time. */
+export function liveCompanionSupportsBoneOutfits(_petType?: string): boolean {
+  return true;
+}
+
+/** Shape hint used for accessory placement tuning. */
+export function characterShapeHint(petType?: string): 'quadruped' | 'tall_bird' | 'compact_bird' | 'fox' {
+  const id = characterForPetType(petType).id;
+  if (id === 'fox') return 'fox';
+  if (id === 'horse') return 'quadruped';
+  if (id === 'flamingo' || id === 'stork') return 'tall_bird';
+  return 'compact_bird'; // parrot
 }

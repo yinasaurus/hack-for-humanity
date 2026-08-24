@@ -440,6 +440,7 @@ export function registerRoutes(app) {
     }
     const existing = readDb().users.find((u) => u.id === req.params.userId && u.role === 'patient');
     if (!existing) return res.status(404).json({ error: 'patient not found' });
+ feature/pets-growth
     if (req.body?.petType != null && req.body.petType !== existing.petType) {
       return res.status(409).json({ error: 'Pet species cannot be changed after onboarding' });
     }
@@ -450,6 +451,9 @@ export function registerRoutes(app) {
     if (lockedChange) {
       return res.status(403).json({ error: 'That wardrobe item is still a future keepsake' });
     }
+
+    // petType changes are now allowed — switching 3D companion model is a cosmetic choice
+ main
     updateDb((d) => {
       const u = d.users.find((x) => x.id === req.params.userId && x.role === 'patient');
       if (!u) return;
