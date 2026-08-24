@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, gradients, spacing } from '../theme';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../SettingsContext';
+import { BuddiBrand } from '../components/BuddiBrand';
 import { SupportChip } from '../components/SupportChip';
 
 export function WelcomeScreen() {
@@ -22,8 +23,8 @@ export function WelcomeScreen() {
   const { signIn, signUp } = useAuth();
   const { settings, updateSettings } = useSettings();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [email, setEmail] = useState('maya@demo.local');
-  const [password, setPassword] = useState('demo');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -80,7 +81,7 @@ export function WelcomeScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.brand}>Buddi</Text>
+          <BuddiBrand size="large" textStyle={styles.brand} />
           <Text style={styles.tagline}>Your gentle meal companion.</Text>
 
           <Pressable style={styles.demoBtn} onPress={demoLogin} disabled={busy}>
@@ -115,7 +116,7 @@ export function WelcomeScreen() {
                   value={name}
                   onChangeText={setName}
                   style={styles.input}
-                  placeholder="Maya"
+                  placeholder="Name"
                   placeholderTextColor={colors.inkSoft}
                 />
               </>
@@ -127,7 +128,7 @@ export function WelcomeScreen() {
               value={email}
               onChangeText={setEmail}
               style={styles.input}
-              placeholder="you@example.com"
+              placeholder="Email"
               placeholderTextColor={colors.inkSoft}
             />
             <Text style={styles.label}>Password</Text>
@@ -136,7 +137,7 @@ export function WelcomeScreen() {
               value={password}
               onChangeText={setPassword}
               style={styles.input}
-              placeholder="••••••••"
+              placeholder="Password"
               placeholderTextColor={colors.inkSoft}
             />
             {mode === 'signup' ? (
@@ -147,7 +148,7 @@ export function WelcomeScreen() {
                   value={confirm}
                   onChangeText={setConfirm}
                   style={styles.input}
-                  placeholder="••••••••"
+                  placeholder="Password"
                   placeholderTextColor={colors.inkSoft}
                 />
               </>

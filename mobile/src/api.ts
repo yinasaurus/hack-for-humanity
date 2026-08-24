@@ -84,6 +84,42 @@ export type CompanionState = {
 
 export type AuthResult = { user: User; token: string };
 
+/** Full response returned after the patient chooses their first companion. */
+export type OnboardingResult = {
+  user: User;
+  companion: CompanionState;
+};
+
+export type OnboardingInput = Omit<Partial<PetAppearance>, 'petType' | 'petName'> & {
+  petType: string;
+  petName: string;
+  petGender?: PetGender;
+  timezone?: string;
+};
+
+/** Used when the device cannot expose a valid IANA timezone. */
+export const DEFAULT_TIMEZONE = 'Asia/Singapore';
+
+/**
+ * Resolve the device timezone without making onboarding depend on a native
+ * module. Intl is available in Expo's native and web runtimes; invalid values
+ * are rejected so the API always receives an IANA timezone identifier.
+ */
+export function getDeviceTimezone(): string {
+  try {
+    const candidate = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (typeof candidate === 'string' && candidate.trim()) {
+      // Constructing a formatter is the platform-supported validity check for
+      // IANA identifiers. Some browsers return an empty/legacy value here.
+      new Intl.DateTimeFormat('en-US', { timeZone: candidate }).format();
+      return candidate;
+    }
+  } catch {
+    // Fall through to the stable product default.
+  }
+  return DEFAULT_TIMEZONE;
+}
+
 async function parseJson(res: Response) {
   const text = await res.text();
   try {
@@ -152,20 +188,59 @@ export async function markOnboarded(userId: string): Promise<User> {
   return data.user;
 }
 
-export async function completeOnboarding(
+export function completeOnboarding(
+  userId: string,
+  input: OnboardingInput
+): Promise<OnboardingResult>;
+/** Legacy call shape retained for the unused older onboarding screen. */
+export function completeOnboarding(
   userId: string,
   petType: string,
   petName: string,
-  petGender: PetGender
-): Promise<User> {
+  petGender: PetGender,
+  timezone?: string
+): Promise<User>;
+export async function completeOnboarding(
+  userId: string,
+  inputOrPetType: OnboardingInput | string,
+  legacyPetName?: string,
+  legacyPetGender?: PetGender,
+  legacyTimezone?: string
+): Promise<OnboardingResult | User> {
+  const legacyCall = typeof inputOrPetType === 'string';
+  const input: OnboardingInput = legacyCall
+    ? {
+        petType: inputOrPetType,
+        petName: legacyPetName || '',
+        petGender: legacyPetGender || 'female',
+        timezone: legacyTimezone,
+      }
+    : inputOrPetType;
+  const timezone = input.timezone || getDeviceTimezone();
   const res = await fetch(`${API_BASE}/api/patient/${userId}/onboarding`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ petType, petName, petGender }),
+    body: JSON.stringify({ ...input, petGender: input.petGender || 'female', timezone }),
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not save your companion');
   assertNoNutritionLeak(data);
+  return legacyCall ? data.user : { user: data.user, companion: data.companion };
+}
+
+/**
+ * Keep the backend's local-calendar day boundary current when a patient signs
+ * in on a device whose timezone changed after onboarding. This is deliberately
+ * best-effort at call sites so an unavailable sync route never blocks access.
+ */
+export async function syncTimezone(userId: string, timezone = getDeviceTimezone()): Promise<User> {
+  const res = await fetch(`${API_BASE}/api/patient/${userId}/timezone`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ timezone }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not sync timezone');
   return data.user;
 }
 

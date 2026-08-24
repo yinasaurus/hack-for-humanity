@@ -23,8 +23,8 @@ import {
   enableGentleReminders,
   isExpoGo,
 } from '../notifications';
+import { BuddiBrand } from '../components/BuddiBrand';
 import { SupportChip } from '../components/SupportChip';
-import * as Speech from 'expo-speech';
 
 type Props = {
   navigation: {
@@ -40,6 +40,7 @@ export function SettingsScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const { settings, updateSettings } = useSettings();
   const [note, setNote] = useState<string | null>(null);
+  const [companionRequestNote, setCompanionRequestNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const applyReminderSchedule = async (patch: {
@@ -106,7 +107,7 @@ export function SettingsScreen({ navigation }: Props) {
           <Text style={styles.back}>← Back</Text>
         </Pressable>
 
-        <Text style={styles.brand}>Buddi</Text>
+        <BuddiBrand size="compact" textStyle={styles.brand} />
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.sub}>{user?.email}</Text>
 
@@ -134,19 +135,12 @@ export function SettingsScreen({ navigation }: Props) {
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Mute voice</Text>
-              <Text style={styles.rowBody}>Off until you tap Talk.</Text>
+              <Text style={styles.rowBody}>Talk plays only after a tap. Turn this on to keep it quiet.</Text>
             </View>
             <Switch
               value={settings.companionMuted}
               onValueChange={(v) => {
-                if (v) {
-                  try {
-                    Speech.stop();
-                  } catch {
-                    /* ignore */
-                  }
-                }
-                updateSettings({ companionMuted: v });
+                updateSettings({ companionMuted: v, companionMuteIntentional: true });
               }}
               trackColor={{ true: colors.sage, false: '#D8D0C8' }}
               accessibilityLabel="Mute companion voice"
@@ -176,6 +170,27 @@ export function SettingsScreen({ navigation }: Props) {
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
+          <Pressable
+            onPress={() =>
+              setCompanionRequestNote(
+                'Please ask your care team to help change your companion. Your progress and keepsakes will stay safe.'
+              )
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Request companion change"
+            style={styles.linkRow}
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Request companion change</Text>
+              <Text style={styles.rowBody}>Your care team can help with this.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          {companionRequestNote ? (
+            <Text style={styles.companionRequestNote} accessibilityRole="alert">
+              {companionRequestNote}
+            </Text>
+          ) : null}
         </View>
 
         {/* Reminders */}
@@ -418,6 +433,13 @@ const styles = StyleSheet.create({
     color: colors.sageDeep,
     marginBottom: 10,
     fontSize: 13,
+  },
+  companionRequestNote: {
+    marginTop: 12,
+    fontFamily: 'Nunito_600SemiBold',
+    color: colors.sageDeep,
+    fontSize: 13,
+    lineHeight: 18,
   },
   aiLine: {
     fontFamily: 'Nunito_400Regular',

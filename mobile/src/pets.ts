@@ -1,22 +1,65 @@
 /**
- * Full cosmetic wardrobe for companions.
- * NEVER changes body size, weight, or proportions — only looks & accessories.
+ * Companion appearance and cosmetic wardrobe.
+ * Appearance fields never change body size, weight, or proportions. Growth
+ * stage sizing is supplied separately by the live 3D renderer.
  */
 
+/**
+ * New companions must have a one-to-one identity with the live 3D catalog.
+ * Keep this list in lockstep with `characters/characterCatalog.ts`.
+ */
 export const PET_TYPES = [
-  { id: 'panda', label: 'Panda', blurb: 'A soft, playful friend' },
-  { id: 'dog', label: 'Dog', blurb: 'A loyal, sunny friend' },
-  { id: 'cat', label: 'Cat', blurb: 'A calm, curious friend' },
-  { id: 'capybara', label: 'Capybara', blurb: 'A mellow, easygoing friend' },
-  { id: 'cow', label: 'Cow', blurb: 'A sweet, steady friend' },
-  { id: 'chipmunk', label: 'Chipmunk', blurb: 'A bright, busy friend' },
-  { id: 'monkey', label: 'Monkey', blurb: 'A cheerful, clever friend' },
-  { id: 'rabbit', label: 'Rabbit', blurb: 'A gentle, cozy friend' },
-  { id: 'penguin', label: 'Penguin', blurb: 'A cool, caring friend' },
-  { id: 'otter', label: 'Otter', blurb: 'A warm, playful friend' },
+  { id: 'fox', label: 'Fox', icon: '🦊', blurb: 'A bright, clever friend' },
+  { id: 'horse', label: 'Horse', icon: '🐴', blurb: 'A steady, kind friend' },
+  { id: 'parrot', label: 'Parrot', icon: '🦜', blurb: 'A colorful, curious friend' },
+  { id: 'flamingo', label: 'Flamingo', icon: '🦩', blurb: 'A graceful, sunny friend' },
+  { id: 'stork', label: 'Stork', icon: '🪽', blurb: 'A calm, caring friend' },
+  { id: 'dog', label: 'Dog', icon: '🐶', blurb: 'A loyal, sunny friend' },
+  { id: 'cat', label: 'Cat', icon: '🐱', blurb: 'A calm, curious friend' },
+  { id: 'panda', label: 'Panda', icon: '🐼', blurb: 'A soft, playful friend' },
+  { id: 'penguin', label: 'Penguin', icon: '🐧', blurb: 'A cool, caring friend' },
+  { id: 'rabbit', label: 'Rabbit', icon: '🐰', blurb: 'A gentle, cozy friend' },
 ] as const;
 
-export type PetTypeId = (typeof PET_TYPES)[number]['id'];
+export type SelectablePetTypeId = (typeof PET_TYPES)[number]['id'];
+
+/**
+ * IDs used by the first prototype. They remain valid/readable for existing
+ * profiles, but are intentionally not offered to new patients.
+ */
+export const LEGACY_PET_TYPES = [
+  { id: 'capybara', label: 'Capybara', icon: '🦫', blurb: 'A mellow, easygoing friend' },
+  { id: 'cow', label: 'Cow', icon: '🐮', blurb: 'A sweet, steady friend' },
+  { id: 'chipmunk', label: 'Chipmunk', icon: '🐿️', blurb: 'A bright, busy friend' },
+  { id: 'monkey', label: 'Monkey', icon: '🐒', blurb: 'A cheerful, clever friend' },
+  { id: 'hamster', label: 'Hamster', icon: '🐹', blurb: 'A tiny, cozy friend' },
+  { id: 'otter', label: 'Otter', icon: '🦦', blurb: 'A warm, playful friend' },
+] as const;
+
+export type LegacyPetTypeId = (typeof LEGACY_PET_TYPES)[number]['id'];
+
+/** Older names from the Bun/Pup prototype are also kept renderable. */
+export type LegacyPetAliasId = 'bun' | 'pup' | 'kit' | 'bean' | 'chick';
+export type PetTypeId = SelectablePetTypeId | LegacyPetTypeId | LegacyPetAliasId;
+
+const LEGACY_ALIAS_LABELS: Record<LegacyPetAliasId, string> = {
+  bun: 'Bunny',
+  pup: 'Puppy',
+  kit: 'Kitten',
+  bean: 'Bean',
+  chick: 'Chick',
+};
+
+export const PET_TYPE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(PET_TYPES.map((pet) => [pet.id, pet.label])),
+  ...Object.fromEntries(LEGACY_PET_TYPES.map((pet) => [pet.id, pet.label])),
+  ...LEGACY_ALIAS_LABELS,
+};
+
+/** Patient-safe readable label for stored catalog or legacy IDs. */
+export function petTypeLabel(id: string | undefined): string {
+  return (id && PET_TYPE_LABELS[id]) || id || 'Companion';
+}
 
 export const PET_COLORS = [
   { id: 'peach', label: 'Peach', body: '#F6C6A8', cheek: '#F4A88A', resting: '#D7C4B5' },
@@ -140,7 +183,7 @@ export type PetAppearance = {
 
 export const DEFAULT_APPEARANCE: PetAppearance = {
   petName: 'Companion',
-  petType: 'panda',
+  petType: 'fox',
   petColor: 'peach',
   pattern: 'solid',
   eyes: 'round',

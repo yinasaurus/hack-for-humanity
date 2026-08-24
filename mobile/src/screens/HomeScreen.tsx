@@ -10,16 +10,24 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Speech from 'expo-speech';
 import { HelloCalendar } from '../components/HelloCalendar';
 import { MilestoneCelebration } from '../components/MilestoneCelebration';
 import { CheckupCelebration } from '../components/CheckupCelebration';
 import { SupportChip } from '../components/SupportChip';
-import { AnimalWebView, characterForLiveCompanion } from '../characters';
+import { BuddiBrand } from '../components/BuddiBrand';
+import {
+  AnimalWebView,
+  animalPresentationFor,
+  characterForLiveCompanion,
+  companionVitalityOpacity,
+  createAnimalIntent,
+  isGrowthMilestoneDay,
+} from '../characters';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { useSettings } from '../SettingsContext';
@@ -43,41 +51,23 @@ import {
   type CompanionExpression,
   type CompanionPresence,
 } from '../companionMood';
-import { nextCompanionTalk } from '../companionTalk';
+import { companionTalkFrame, selectCompanionTalk } from '../companionTalk';
+import { startCompanionTalkReveal } from '../companionTalkTimeline';
+import {
+  PLAY_TARGETS,
+  advancePlayStep,
+  animalTalkBubble,
+} from '../companionInteraction';
 import type { AnimalWebHandle } from '../characters';
-import { PET_TYPES } from '../pets';
-
-/** Speak multi-sentence lines in sequence (Android TTS truncates long blobs). */
-function speakCompanionLines(full: string, onEnd: () => void) {
-  const parts = full
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const queue = parts.length ? parts : [full];
-  let i = 0;
-  const next = () => {
-    if (i >= queue.length) {
-      onEnd();
-      return;
-    }
-    const chunk = queue[i++];
-    Speech.speak(chunk, {
-      rate: 0.88,
-      pitch: 1.02,
-      onDone: next,
-      onStopped: onEnd,
-      onError: onEnd,
-    });
-  };
-  try {
-    Speech.stop();
-  } catch {
-    /* ignore */
-  }
-  next();
-}
+import { petTypeLabel } from '../pets';
+import { PetAccessoryOverlay } from '../components/PetAccessoryOverlay';
+import { BondingHeartBurst } from '../components/BondingHeartBurst';
+import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useAnimalAudio } from '../audio/useAnimalAudio';
+import type { BondingHeartIntensity } from '../companionBonding';
 
 const CLINICIAN_REMINDER_SYNC_KEY = 'kindplate.clinicianReminderSyncId';
+const GROWTH_CHAPTERS = ['baby', 'little', 'growing', 'playful', 'adventurer', 'grown'] as const;
 
 async function syncClinicianReminder(reminder: CompanionState['clinicianReminder']) {
   if (!reminder?.note) {
@@ -107,21 +97,41 @@ type Props = {
 
 export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { width } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
+  const {
+    user,
+    companion: handoffCompanion,
+    setCompanion: setContextCompanion,
+  } = useAuth();
   const { settings, updateSettings } = useSettings();
-  const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [companion, setLocalCompanion] = useState<CompanionState | null>(handoffCompanion);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showMilestone, setShowMilestone] = useState(false);
   const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
+  const [showGrowthCelebration, setShowGrowthCelebration] = useState(false);
+  const growthCelebrationPending = useRef(false);
+  const growthCelebrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [checkupMoment, setCheckupMoment] = useState<CheckupCelebrationPending | null>(null);
   const [showCheckup, setShowCheckup] = useState(false);
   const [helloBanner, setHelloBanner] = useState(false);
   const [napping, setNapping] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [talkLine, setTalkLine] = useState<string | null>(null);
-  const [heartBurst, setHeartBurst] = useState(0);
+  const [visibleTalkLine, setVisibleTalkLine] = useState<string | null>(null);
+  const [talkWordByWord, setTalkWordByWord] = useState(false);
+  const [talkAudioDurationMs, setTalkAudioDurationMs] = useState<number | null>(null);
+  const [playActive, setPlayActive] = useState(false);
+  const [playStep, setPlayStep] = useState(0);
+  const [heartBurst, setHeartBurst] = useState<{
+    id: number;
+    intensity: BondingHeartIntensity;
+  } | null>(null);
+  const heartBurstId = useRef(0);
   const petRef = useRef<AnimalWebHandle | null>(null);
+  const talkRequest = useRef(0);
+  const previousTalkPhraseIdRef = useRef<string | null>(null);
   /** Server presence band — happy | resting only (quiet hours, not a miss penalty) */
   const [presence, setPresence] = useState<CompanionPresence>('happy');
   /** Client presentation — may include waving / excited / curious / sleepy */
@@ -131,17 +141,78 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const nappingRef = useRef(false);
   nappingRef.current = napping;
 
-  const muted = settings.companionMuted;
+  useEffect(() => {
+    if (!talkLine) {
+      setVisibleTalkLine(null);
+      return;
+    }
+    if (!talkWordByWord) {
+      setVisibleTalkLine(talkLine);
+      return;
+    }
+    setVisibleTalkLine(null);
+    return startCompanionTalkReveal(
+      talkLine,
+      talkAudioDurationMs,
+      (frame) => setVisibleTalkLine(frame)
+    ).cancel;
+  }, [talkAudioDurationMs, talkLine, talkWordByWord]);
+
+  // The original default was muted=true. A Talk tap migrates that legacy
+  // default to audible playback; only an explicit switch action suppresses
+  // the call. This preserves both accessibility and a real sound-off control.
+  const muted = settings.companionMuted && settings.companionMuteIntentional;
+  const animalAudio = useAnimalAudio(muted);
+
+  const updateCompanion = useCallback(
+    (next: CompanionState) => {
+      setLocalCompanion(next);
+      setContextCompanion(next);
+    },
+    [setContextCompanion]
+  );
+
+  const stopTalk = useCallback(() => {
+    talkRequest.current += 1;
+    animalAudio.stop();
+    if (expressionTimer.current) {
+      clearTimeout(expressionTimer.current);
+      expressionTimer.current = null;
+    }
+    petRef.current?.stopSpeaking();
+    setSpeaking(false);
+    setTalkLine(null);
+    setVisibleTalkLine(null);
+    setTalkWordByWord(false);
+    setTalkAudioDurationMs(null);
+  }, [animalAudio]);
+
+  const showHeartBurst = useCallback((intensity: BondingHeartIntensity = 'small') => {
+    heartBurstId.current += 1;
+    setHeartBurst({ id: heartBurstId.current, intensity });
+  }, []);
+
+  const finishHeartBurst = useCallback((burstId: number) => {
+    setHeartBurst((current) => current?.id === burstId ? null : current);
+  }, []);
+
+  // Onboarding hands the complete companion response through AuthContext so
+  // the selected species is visible during the navigator transition. A cold
+  // start still begins with null and is filled by the authoritative API load.
+  useEffect(() => {
+    if (handoffCompanion) setLocalCompanion(handoffCompanion);
+  }, [handoffCompanion]);
 
   const happyPetFeedback = useCallback(() => {
+    stopTalk();
     setNapping(false);
     clearExpressionTimer();
     setExpression('happy');
-    setHeartBurst((value) => value + 1);
+    showHeartBurst('small');
     petRef.current?.wake();
     petRef.current?.react();
     expressionTimer.current = setTimeout(() => setExpression('happy'), 2600);
-  }, []);
+  }, [showHeartBurst, stopTalk]);
 
   const rubResponder = useMemo(() => {
     let distance = 0;
@@ -198,7 +269,10 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     setError(null);
     try {
       const data = await fetchCompanion(user.id);
-      setCompanion(data);
+      updateCompanion(data);
+      if (data.newlyUnlocked?.some((unlock) => isGrowthMilestoneDay(unlock.milestoneDay))) {
+        growthCelebrationPending.current = true;
+      }
       void syncClinicianReminder(data.clinicianReminder).catch(() => {
         /* Expo Go / permission — in-app card still shows */
       });
@@ -227,7 +301,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [user, newUnlocks.length]);
+  }, [newUnlocks.length, updateCompanion, user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -236,12 +310,33 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     }, [load])
   );
 
+  // Navigation away or a focused-screen interruption stops both the native
+  // call and the renderer's Talk intent before the next screen takes over.
+  useFocusEffect(
+    useCallback(() => () => stopTalk(), [stopTalk])
+  );
+
+  useEffect(() => {
+    if (muted) stopTalk();
+  }, [muted, stopTalk]);
+
   useEffect(() => {
     if (newUnlocks.length) {
       setPendingUnlocks(newUnlocks);
       setShowMilestone(true);
+      if (newUnlocks.some((unlock) => isGrowthMilestoneDay(unlock.milestoneDay))) {
+        growthCelebrationPending.current = true;
+      }
     }
   }, [newUnlocks]);
+
+  useEffect(() => {
+    return () => {
+      if (growthCelebrationTimer.current) {
+        clearTimeout(growthCelebrationTimer.current);
+      }
+    };
+  }, []);
 
   // Soft hello after a meal check-in (even when no keepsake unlocked)
   useEffect(() => {
@@ -338,6 +433,8 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const quietHours = presence === 'resting';
   const cozyLook = quietHours || napping;
   const gradient = cozyLook ? gradients.homeResting : gradients.home;
+  const petOverlaySize = Math.min(320, Math.max(240, width - spacing.lg * 2));
+  const growthIndex = GROWTH_CHAPTERS.indexOf(companion?.growthStage || 'baby');
 
   return (
     <LinearGradient colors={[...gradient]} style={styles.root}>
@@ -350,6 +447,17 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           setPendingUnlocks([]);
           navigation.setParams?.({ newUnlocks: undefined });
           settleAfterGesture(napping);
+          if (growthCelebrationPending.current) {
+            growthCelebrationPending.current = false;
+            setShowGrowthCelebration(true);
+            if (growthCelebrationTimer.current) {
+              clearTimeout(growthCelebrationTimer.current);
+            }
+            growthCelebrationTimer.current = setTimeout(() => {
+              setShowGrowthCelebration(false);
+              growthCelebrationTimer.current = null;
+            }, 4200);
+          }
           if (companion?.checkupCelebration?.id && !checkupMoment) {
             setCheckupMoment(companion.checkupCelebration);
             setShowCheckup(true);
@@ -375,7 +483,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           if (user && id) {
             void acknowledgeCheckupCelebration(user.id, id)
               .then((next) => {
-                setCompanion(next);
+                updateCompanion(next);
               })
               .catch(() => {
                 /* still dismiss locally so it does not loop in-session */
@@ -395,9 +503,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
       >
         <View style={styles.topRow}>
-          <Text style={[styles.brand, cozyLook && styles.brandResting]} accessibilityRole="header">
-            Buddi
-          </Text>
+          <BuddiBrand
+            textStyle={[styles.brand, cozyLook && styles.brandResting]}
+          />
           <View style={styles.topActions}>
             <SupportChip placement="inline" />
             <Pressable
@@ -425,6 +533,15 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           </View>
         ) : null}
 
+        {showGrowthCelebration ? (
+          <View style={styles.growthBanner} accessibilityRole="summary">
+            <Text style={styles.growthBannerTitle}>Buddi grew!</Text>
+            <Text style={styles.growthBannerBody}>
+              A new chapter for {companion?.petName || 'your companion'}.
+            </Text>
+          </View>
+        ) : null}
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {companion && (
@@ -432,37 +549,106 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             <View
               {...rubResponder.panHandlers}
               accessibilityLabel={`Rub ${companion.petName} to make them happy`}
-              style={[styles.hero3d, { opacity: ({ bright: 1, fatigued: 0.82, dim: 0.58, dormant: 0.35 } as const)[companion.vitality || 'bright'] }]}
+              style={[
+                styles.hero3d,
+                { opacity: companionVitalityOpacity(companion.vitality) },
+              ]}
             >
               <AnimalWebView
                 ref={petRef}
                 key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
                 character={characterForLiveCompanion(companion.petType)}
+                growthStage={companion.growthStage}
                 expression={expression}
                 muted={muted}
                 style={styles.hero3d}
                 accessibilityLabel={`${companion.petName} companion, vitality ${companion.vitality || 'bright'}`}
                 outfit={{
-                  hat: companion.hat,
-                  face: companion.face,
-                  neck: companion.neck,
-                  held: companion.held,
+                  hat: 'none',
+                  face: 'none',
+                  neck: 'none',
+                  held: 'none',
                   scene: companion.scene,
                 }}
               />
-              {heartBurst > 0 ? (
-                <View key={heartBurst} pointerEvents="none" style={styles.hearts}>
-                  <Text style={[styles.heart, styles.heartLeft]}>♥</Text>
-                  <Text style={[styles.heart, styles.heartCenter]}>♥</Text>
-                  <Text style={[styles.heart, styles.heartRight]}>♥</Text>
-                </View>
+              <PetAccessoryOverlay
+                size={petOverlaySize}
+                petType={companion.petType}
+                hat={companion.hat}
+                face={companion.face}
+                neck={companion.neck}
+                held={companion.held}
+              />
+              {heartBurst ? (
+                <BondingHeartBurst
+                  key={heartBurst.id}
+                  burstId={heartBurst.id}
+                  intensity={heartBurst.intensity}
+                  reducedMotion={reducedMotion}
+                  onFinished={finishHeartBurst}
+                />
+              ) : null}
+              {playActive ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Catch the glow with ${companion.petName}, step ${playStep + 1} of ${PLAY_TARGETS.length}`}
+                  onPress={() => {
+                    const result = advancePlayStep(playStep);
+                    clearExpressionTimer();
+                    setNapping(false);
+                    setExpression('excited');
+                    showHeartBurst(result.complete ? 'celebration' : 'small');
+                    petRef.current?.wake();
+                    petRef.current?.react();
+                    if (result.complete) {
+                      setPlayActive(false);
+                      setPlayStep(0);
+                      setTalkLine(`${companion.petName} caught the glow — nice teamwork!`);
+                    } else {
+                      setPlayStep(result.nextStep);
+                      setTalkLine(`${companion.petName} is chasing it…`);
+                    }
+                    expressionTimer.current = setTimeout(() => {
+                      settleAfterGesture(false);
+                    }, 1500);
+                  }}
+                  style={[
+                    styles.playGlowHit,
+                    {
+                      left: PLAY_TARGETS[playStep].left,
+                      top: PLAY_TARGETS[playStep].top,
+                    },
+                  ]}
+                >
+                  <View style={styles.playGlowOuter}>
+                    <Text style={styles.playGlowStar}>✦</Text>
+                  </View>
+                </Pressable>
               ) : null}
             </View>
             <Text style={styles.petName}>{companion.petName}</Text>
             <Text style={styles.petSpecies}>
-              {PET_TYPES.find((pet) => pet.id === companion.petType)?.label || companion.petType}
+              {petTypeLabel(companion.petType)}
               {' · '}{({ baby: 'Baby', little: 'Little', growing: 'Growing', playful: 'Playful', adventurer: 'Adventurer', grown: 'Grown' } as const)[companion.growthStage || 'baby']}
             </Text>
+            <View
+              style={styles.growthPath}
+              accessibilityRole="progressbar"
+              accessibilityLabel={`${companion.petName} is in the ${companion.growthStage || 'baby'} growth chapter`}
+              accessibilityValue={{ min: 1, max: GROWTH_CHAPTERS.length, now: growthIndex + 1 }}
+            >
+              {GROWTH_CHAPTERS.map((stage, index) => (
+                <View
+                  key={stage}
+                  style={[
+                    styles.growthDot,
+                    { width: 7 + index * 2, height: 7 + index * 2, borderRadius: 8 },
+                    index <= growthIndex && styles.growthDotReached,
+                    index === growthIndex && styles.growthDotCurrent,
+                  ]}
+                />
+              ))}
+            </View>
             <Text style={styles.petCaption}>
               {expressionCaption(companion.petName, expression)}
             </Text>
@@ -476,7 +662,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
             {talkLine ? (
               <View style={styles.speechBubble} accessibilityRole="summary">
-                <Text style={styles.speechBubbleText}>{talkLine}</Text>
+                <Text style={styles.speechBubbleText} accessibilityLiveRegion="polite">
+                  {talkWordByWord
+                    ? visibleTalkLine ?? companionTalkFrame(talkLine, 1)
+                    : visibleTalkLine ?? talkLine}
+                </Text>
               </View>
             ) : null}
 
@@ -502,7 +692,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                     onPress={() => {
                       if (!user) return;
                       void skipCarePlanToday(user.id)
-                        .then((next) => setCompanion(next))
+                        .then((next) => updateCompanion(next))
                         .catch(() => {});
                     }}
                   >
@@ -527,34 +717,84 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 accessibilityRole="button"
                 accessibilityLabel={`Talk with ${companion.petName}`}
                 onPress={() => {
+                  stopTalk();
+                  const selectedTalk = selectCompanionTalk({
+                    petName: companion.petName,
+                    previousId: previousTalkPhraseIdRef.current,
+                  });
+                  previousTalkPhraseIdRef.current = selectedTalk.id;
                   setNapping(false);
                   clearExpressionTimer();
                   setExpression('happy');
-                  const line = nextCompanionTalk(companion.petName);
-                  setTalkLine(line);
-                  petRef.current?.wake();
-                  petRef.current?.speak('');
-                  // User tapped Talk — always speak (never auto-plays on its own).
-                  if (muted) {
+                  const renderedSpecies = characterForLiveCompanion(companion.petType).id;
+                  const explicitlyMuted = settings.companionMuted && settings.companionMuteIntentional;
+                  if (settings.companionMuted && !settings.companionMuteIntentional) {
                     void updateSettings({ companionMuted: false });
                   }
+                  const line = animalTalkBubble(
+                    animalPresentationFor(renderedSpecies).voice.caption,
+                    selectedTalk.text
+                  );
+                  setTalkAudioDurationMs(null);
+                  setVisibleTalkLine(null);
+                  setTalkWordByWord(true);
+                  setTalkLine(
+                    explicitlyMuted ? `${line} Voice is muted in Settings.` : line
+                  );
+                  showHeartBurst('small');
+                  petRef.current?.wake();
+                  const requestId = ++talkRequest.current;
                   setSpeaking(true);
-                  speakCompanionLines(line, () => setSpeaking(false));
-                  expressionTimer.current = setTimeout(() => {
-                    settleAfterGesture(false);
-                  }, 7800);
+                  void animalAudio
+                    .play(renderedSpecies, 'talk')
+                    .then((result) => {
+                      if (requestId !== talkRequest.current) return;
+                      setTalkAudioDurationMs(result.durationMs > 0 ? result.durationMs : null);
+                      if (!result.played && !explicitlyMuted) {
+                        setTalkLine(
+                          `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
+                        );
+                      }
+                      // A verified recording supplies the renderer's semantic
+                      // duration. Missing or muted calls stay silent while
+                      // retaining a calm visual Talk fallback.
+                      petRef.current?.dispatch(createAnimalIntent('talk', result.durationMs));
+                      const visualDuration = result.durationMs > 0
+                        ? result.durationMs
+                        : reducedMotion
+                          ? 500
+                          : 1200;
+                      expressionTimer.current = setTimeout(() => {
+                        if (requestId !== talkRequest.current) return;
+                        setSpeaking(false);
+                        settleAfterGesture(false);
+                      }, visualDuration + 180);
+                    })
+                    .catch(() => {
+                      if (requestId !== talkRequest.current) return;
+                      setTalkAudioDurationMs(null);
+                      setTalkLine(
+                        `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
+                      );
+                      petRef.current?.dispatch(createAnimalIntent('talk'));
+                      setSpeaking(false);
+                      settleAfterGesture(false);
+                    });
                 }}
               >
-                <Text style={styles.petBtnText}>{speaking ? 'Talking…' : 'Talk'}</Text>
+                <Text style={styles.petBtnText}>{speaking ? `${companion.petName} says…` : 'Talk'}</Text>
               </Pressable>
               <Pressable
                 style={styles.petBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Wave hello"
                 onPress={() => {
+                  stopTalk();
                   setNapping(false);
                   clearExpressionTimer();
                   setExpression('waving');
+                  showHeartBurst('small');
+                  petRef.current?.wave();
                   expressionTimer.current = setTimeout(() => {
                     settleAfterGesture(false);
                   }, 2600);
@@ -563,23 +803,30 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 <Text style={styles.petBtnText}>Wave</Text>
               </Pressable>
               <Pressable
-                style={styles.petBtn}
+                style={[styles.petBtn, playActive && styles.petBtnActive]}
                 accessibilityRole="button"
-                accessibilityLabel="Gentle curious play"
+                accessibilityLabel={playActive ? 'End glow chase' : `Play glow chase with ${companion.petName}`}
                 onPress={() => {
+                  stopTalk();
                   setNapping(false);
                   clearExpressionTimer();
-                  setExpression('curious');
-                  setTalkLine('Let’s play!');
-                  setHeartBurst((value) => value + 1);
                   petRef.current?.wake();
-                  petRef.current?.react();
-                  expressionTimer.current = setTimeout(() => {
+                  if (playActive) {
+                    setTalkWordByWord(false);
+                    setPlayActive(false);
+                    setPlayStep(0);
+                    setTalkLine('We can play again anytime.');
                     settleAfterGesture(false);
-                  }, 3200);
+                  } else {
+                    setTalkWordByWord(false);
+                    setPlayActive(true);
+                    setPlayStep(0);
+                    setExpression('curious');
+                    setTalkLine(`Tap the glow so ${companion.petName} can chase it — no timer.`);
+                  }
                 }}
               >
-                <Text style={styles.petBtnText}>Play</Text>
+                <Text style={styles.petBtnText}>{playActive ? 'End play' : 'Play together'}</Text>
               </Pressable>
             </View>
           </View>
@@ -665,6 +912,28 @@ const styles = StyleSheet.create({
     color: colors.sageDeep,
     lineHeight: 22,
   },
+  growthBanner: {
+    marginTop: spacing.sm,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(232,240,246,0.9)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  growthBannerTitle: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 17,
+    color: colors.teal,
+  },
+  growthBannerBody: {
+    marginTop: 2,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.inkSoft,
+  },
   brand: {
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 22,
@@ -722,27 +991,59 @@ const styles = StyleSheet.create({
     height: 320,
     borderRadius: 28,
   },
-  vitality_bright: { opacity: 1 },
-  vitality_fatigued: { opacity: 0.82 },
-  vitality_dim: { opacity: 0.58 },
-  vitality_dormant: { opacity: 0.35 },
   petName: {
     marginTop: 10,
     fontFamily: 'Nunito_800ExtraBold',
     fontSize: 24,
     color: colors.ink,
   },
-  hearts: { ...StyleSheet.absoluteFillObject },
-  heart: { position: 'absolute', color: colors.coral, fontSize: 30, textShadowColor: colors.white, textShadowRadius: 5 },
-  heartLeft: { left: '22%', top: '30%', transform: [{ rotate: '-12deg' }] },
-  heartCenter: { left: '47%', top: '15%' },
-  heartRight: { right: '20%', top: '34%', transform: [{ rotate: '12deg' }] },
+  playGlowHit: {
+    position: 'absolute',
+    width: 68,
+    height: 68,
+    marginLeft: -34,
+    marginTop: -34,
+    zIndex: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playGlowOuter: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF0B8',
+    borderWidth: 2,
+    borderColor: colors.white,
+    shadowColor: '#E8C86F',
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 7,
+  },
+  playGlowStar: {
+    color: colors.sageDeep,
+    fontSize: 28,
+    lineHeight: 32,
+  },
   petSpecies: {
     marginTop: 2,
     fontFamily: 'Nunito_600SemiBold',
     fontSize: 14,
     color: colors.sageDeep,
   },
+  growthPath: {
+    minHeight: 26,
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  growthDot: { backgroundColor: colors.sand, borderWidth: 1, borderColor: colors.border },
+  growthDotReached: { backgroundColor: colors.sage },
+  growthDotCurrent: { backgroundColor: colors.sageDeep, borderColor: colors.white, borderWidth: 2 },
   styleLinkHit: {
     marginTop: 4,
     minHeight: 36,
@@ -838,6 +1139,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  petBtnActive: {
+    backgroundColor: colors.teal,
   },
   petBtnText: {
     fontFamily: 'Nunito_700Bold',
