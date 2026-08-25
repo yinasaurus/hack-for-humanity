@@ -13,20 +13,17 @@ You need **low-poly animals in `.glb`**, preferably with animation clips you can
 ## Models currently used by Buddi
 
 - Fox, horse, dog, and panda: the smoother textured Mesh2Motion model-variation family.
-- Cat: Buddi's renderer-neutral `cat-v2` procedural model, revised from the
-  user-supplied standing grey-tabby reference. It has a slim horizontal torso,
-  four grounded legs, narrow face and muzzle, yellow-green irises with vertical
-  pupils, upright ears, bilateral whiskers, restrained tabby markings, and a
-  long three-link tail. No remote GLB is authoritative.
 - Penguin: Quaternius / FreeModels, CC0.
-- Rabbit: Buddi's renderer-neutral `rabbit-v2` procedural model, revised from the user-supplied seated-rabbit reference. It uses an ivory low-poly/faceted hierarchy with a wedge muzzle, glossy black eyes, charcoal ear insets, broad rear haunches, long planted feet, and named pivots for growth/actions/accessories; no remote GLB is authoritative. Hamster and Bun remain legacy stored ids that safely fall back to Rabbit.
+- Cat, sloth, capybara, hamster, koala, bear, raccoon, duck, sheep, seal:
+  Animals by molochdadev [CC-BY] via Poly Pizza — converted OBJ/FBX packs bundled
+  under `assets/characters/` (see `ATTRIBUTION.md`). Static meshes; Buddi drives
+  motion with the procedural choreography overlay.
 - Parrot, flamingo, and stork: Three.js example models.
 
-The exact model identity and primitive palettes live in
-`src/characters/rabbitProceduralModel.ts` and
-`src/characters/catProceduralModel.ts`; the Rabbit and Cat catalog entries set
-their `proceduralModel` ids and keep their legacy `modelPath` fields empty so a
-remote model cannot silently replace either original specification.
+Rabbit is retired from onboarding; the `rabbit-v2` procedural catalog entry
+remains so existing Bun/Rabbit profiles still render. Legacy `cat-v2` remains
+in `src/characters/catProceduralModel.ts` for the procedural build seam/tests;
+the catalog points Cat at `bundled:cat`.
 
 ---
 

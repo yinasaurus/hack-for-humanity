@@ -1,10 +1,12 @@
 /**
- * Renderer-neutral specification for Buddi's original seated Cat v2.
+ * Renderer-neutral specification for Buddi's original standing Cat v2.
  *
- * Cat v2 deliberately uses the same declarative seam as Rabbit v2: a renderer
- * builds smooth primitives below the named pivots, while growth, action, and
- * accessory code only deals in stable semantic names. The model is original
- * to Buddi and is not a traced or imported photo/GLB.
+ * Cat v2 uses the same declarative seam as Rabbit v2: a renderer builds
+ * low-poly primitives below named pivots, while growth, action, and accessory
+ * code only deal in stable semantic names.
+ *
+ * Visual authority: warm gold/tan low-poly cat face/ears/tail reference, rebuilt
+ * in a standing/walking pose (horizontal torso, four planted legs).
  */
 
 import type {
@@ -27,6 +29,7 @@ export type CatPartName =
   | 'Muzzle_L'
   | 'Muzzle_R'
   | 'Nose'
+  | 'Mouth'
   | 'Eye_L'
   | 'Eye_R'
   | 'Pupil_L'
@@ -51,25 +54,8 @@ export type CatPartName =
   | 'Hindlimb_R'
   | 'HindFoot_L'
   | 'HindFoot_R'
-  | 'TailBase'
-  | 'TailMid'
-  | 'TailTip'
-  | 'StripeForehead'
-  | 'StripeCheek_L'
-  | 'StripeCheek_R'
-  | 'StripeBody_L_1'
-  | 'StripeBody_L_2'
-  | 'StripeBody_L_3'
-  | 'StripeBody_R_1'
-  | 'StripeBody_R_2'
-  | 'StripeBody_R_3'
-  | 'StripeForeleg_L'
-  | 'StripeForeleg_R'
-  | 'StripeHindleg_L'
-  | 'StripeHindleg_R'
-  | 'StripeTailBase'
-  | 'StripeTailMid'
-  | 'StripeTailTip';
+  | 'Tail'
+  | 'TailTip';
 
 export type CatMotionAnchor =
   | 'root'
@@ -97,7 +83,6 @@ export type CatGrowthChannel =
 export type CatMaterialId =
   | 'fur'
   | 'cream'
-  | 'stripe'
   | 'whisker'
   | 'innerEar'
   | 'nose'
@@ -123,7 +108,7 @@ const part = (
   scale: ProceduralVector3,
   pivot: ProceduralVector3 = v(0, 0, 0),
   rotation: ProceduralVector3 = v(0, 0, 0),
-  segments = 32
+  segments = 8
 ): ProceduralPartSpec => ({
   name,
   parent,
@@ -136,23 +121,26 @@ const part = (
   segments,
 });
 
+/** Warm gold/tan body with pink ear/nose accents — matched to the face reference. */
 const CAT_MATERIALS: Readonly<Record<CatMaterialId, ProceduralMaterialSpec>> = {
-  fur: { color: '#626A70', roughness: 0.9, metalness: 0, clearcoat: 0.025 },
-  cream: { color: '#7E878B', roughness: 0.9, metalness: 0, clearcoat: 0.025 },
-  stripe: { color: '#4B5257', roughness: 0.88, metalness: 0, clearcoat: 0.02 },
-  whisker: { color: '#ECECE7', roughness: 0.7, metalness: 0, clearcoat: 0.02 },
-  innerEar: { color: '#9D7475', roughness: 0.8, metalness: 0, clearcoat: 0.04 },
-  nose: { color: '#A86F62', roughness: 0.26, metalness: 0, clearcoat: 0.16 },
-  eye: { color: '#B6B04D', roughness: 0.16, metalness: 0, clearcoat: 0.34 },
-  pupil: { color: '#111315', roughness: 0.08, metalness: 0, clearcoat: 0.42 },
-  catchlight: { color: '#FFFDF4', roughness: 0.08, metalness: 0, clearcoat: 0.32 },
+  fur: { color: '#E0B878', roughness: 0.88, metalness: 0, clearcoat: 0.02, flatShading: true },
+  cream: { color: '#F2D4B0', roughness: 0.86, metalness: 0, clearcoat: 0.02, flatShading: true },
+  whisker: { color: '#E8D2B0', roughness: 0.75, metalness: 0, clearcoat: 0.02, flatShading: true },
+  innerEar: { color: '#E8A090', roughness: 0.8, metalness: 0, clearcoat: 0.04, flatShading: true },
+  nose: { color: '#E89A8C', roughness: 0.35, metalness: 0, clearcoat: 0.1, flatShading: true },
+  eye: { color: '#101315', roughness: 0.1, metalness: 0, clearcoat: 0.4, flatShading: true },
+  pupil: { color: '#0A0B0C', roughness: 0.08, metalness: 0, clearcoat: 0.42, flatShading: true },
+  catchlight: { color: '#FFF8EC', roughness: 0.08, metalness: 0, clearcoat: 0.3, flatShading: true },
 };
 
 /**
- * Standing silver-tabby silhouette derived from the supplied 3D reference:
- * horizontal torso, four grounded legs, narrow adult-feline face, yellow-green
- * irises with vertical pupils, upright ears, long tapered tail, and restrained
- * charcoal stripes. Cosmetic markings never participate in choreography.
+ * Standing gold low-poly cat: horizontal torso, four planted legs, large
+ * forward face (black eyes + pink nose + whiskers), upright pink-inset ears,
+ * and exactly one tail chain rooted in the rump.
+ *
+ * Pivot convention: `position` is the mesh center in parent space; `pivot` is
+ * the joint offset from that center. Builder places the bone at position+pivot
+ * and the mesh at -pivot so joints rotate without detaching shells.
  */
 export const CAT_PROCEDURAL_MODEL: CatProceduralModelSpec = {
   id: 'cat-v2',
@@ -161,91 +149,95 @@ export const CAT_PROCEDURAL_MODEL: CatProceduralModelSpec = {
   groundY: 0,
   materials: CAT_MATERIALS,
   parts: [
-    part('CatRoot', null, 'group', null, v(0, 0, 0), v(1, 1, 1), v(0, 0, 0), v(0, 0.18, 0), 1),
-    part('Body', 'CatRoot', 'ellipsoid', 'fur', v(0, 0.98, -0.04), v(0.38, 0.34, 0.78)),
-    part('Chest', 'Body', 'ellipsoid', 'fur', v(0, 0.01, 0.54), v(0.32, 0.34, 0.34)),
-    part('Haunch_L', 'Body', 'ellipsoid', 'fur', v(-0.18, -0.02, -0.47), v(0.27, 0.32, 0.32)),
-    part('Haunch_R', 'Body', 'ellipsoid', 'fur', v(0.18, -0.02, -0.47), v(0.27, 0.32, 0.32)),
-    part('Neck', 'Body', 'capsule', 'fur', v(0, 0.18, 0.58), v(0.25, 0.32, 0.23), v(0, -0.14, 0), v(-0.12, 0, 0)),
-    part('Head', 'Neck', 'ellipsoid', 'fur', v(0, 0.27, 0.24), v(0.29, 0.26, 0.39), v(0, -0.14, -0.06)),
-    part('Jaw', 'Head', 'ellipsoid', 'cream', v(0, -0.075, 0.3), v(0.18, 0.09, 0.15), v(0, 0.045, -0.025)),
-    part('Muzzle_L', 'Jaw', 'ellipsoid', 'cream', v(-0.072, 0, 0.105), v(0.1, 0.07, 0.1)),
-    part('Muzzle_R', 'Jaw', 'ellipsoid', 'cream', v(0.072, 0, 0.105), v(0.1, 0.07, 0.1)),
-    part('Nose', 'Jaw', 'sphere', 'nose', v(0, 0.005, 0.34), v(0.052, 0.042, 0.04)),
-    part('Whisker_L_1', 'Muzzle_L', 'cylinder', 'whisker', v(-0.085, 0.04, 0.07), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, -0.18, -0.42)),
-    part('Whisker_L_2', 'Muzzle_L', 'cylinder', 'whisker', v(-0.09, 0, 0.07), v(0.004, 0.14, 0.004), v(0, 0, 0), v(0, -0.12, -0.22)),
-    part('Whisker_L_3', 'Muzzle_L', 'cylinder', 'whisker', v(-0.085, -0.04, 0.07), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, -0.08, -0.03)),
-    part('Whisker_R_1', 'Muzzle_R', 'cylinder', 'whisker', v(0.085, 0.04, 0.07), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, 0.18, 0.42)),
-    part('Whisker_R_2', 'Muzzle_R', 'cylinder', 'whisker', v(0.09, 0, 0.07), v(0.004, 0.14, 0.004), v(0, 0, 0), v(0, 0.12, 0.22)),
-    part('Whisker_R_3', 'Muzzle_R', 'cylinder', 'whisker', v(0.085, -0.04, 0.07), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, 0.08, 0.03)),
-    part('Eye_L', 'Head', 'ellipsoid', 'eye', v(-0.12, 0.05, 0.31), v(0.055, 0.064, 0.028)),
-    part('Eye_R', 'Head', 'ellipsoid', 'eye', v(0.12, 0.05, 0.31), v(0.055, 0.064, 0.028)),
-    part('Pupil_L', 'Eye_L', 'ellipsoid', 'pupil', v(0, 0, 0.029), v(0.014, 0.049, 0.01)),
-    part('Pupil_R', 'Eye_R', 'ellipsoid', 'pupil', v(0, 0, 0.029), v(0.014, 0.049, 0.01)),
-    part('EyeHighlight_L', 'Pupil_L', 'sphere', 'catchlight', v(-0.006, 0.018, 0.013), v(0.01, 0.012, 0.008)),
-    part('EyeHighlight_R', 'Pupil_R', 'sphere', 'catchlight', v(-0.006, 0.018, 0.013), v(0.01, 0.012, 0.008)),
-    part('Ear_L', 'Head', 'cone', 'fur', v(-0.15, 0.28, -0.02), v(0.13, 0.31, 0.1), v(0, -0.13, 0), v(0, 0, -0.07)),
-    part('Ear_R', 'Head', 'cone', 'fur', v(0.15, 0.28, -0.02), v(0.13, 0.31, 0.1), v(0, -0.13, 0), v(0, 0, 0.07)),
-    part('InnerEar_L', 'Ear_L', 'ellipsoid', 'innerEar', v(0, 0.025, 0.095), v(0.064, 0.19, 0.02)),
-    part('InnerEar_R', 'Ear_R', 'ellipsoid', 'innerEar', v(0, 0.025, 0.095), v(0.064, 0.19, 0.02)),
-    part('Forelimb_L', 'Chest', 'capsule', 'fur', v(-0.17, -0.48, 0.08), v(0.085, 0.56, 0.085), v(0, 0.24, 0)),
-    part('Forelimb_R', 'Chest', 'capsule', 'fur', v(0.17, -0.48, 0.08), v(0.085, 0.56, 0.085), v(0, 0.24, 0)),
-    part('ForePaw_L', 'Forelimb_L', 'ellipsoid', 'cream', v(0, -0.72, 0.07), v(0.12, 0.08, 0.17)),
-    part('ForePaw_R', 'Forelimb_R', 'ellipsoid', 'cream', v(0, -0.72, 0.07), v(0.12, 0.08, 0.17)),
-    part('Hindlimb_L', 'Haunch_L', 'capsule', 'fur', v(0, -0.44, 0.02), v(0.11, 0.52, 0.11), v(0, 0.22, 0)),
-    part('Hindlimb_R', 'Haunch_R', 'capsule', 'fur', v(0, -0.44, 0.02), v(0.11, 0.52, 0.11), v(0, 0.22, 0)),
-    part('HindFoot_L', 'Hindlimb_L', 'ellipsoid', 'cream', v(0, -0.66, 0.08), v(0.15, 0.09, 0.2)),
-    part('HindFoot_R', 'Hindlimb_R', 'ellipsoid', 'cream', v(0, -0.66, 0.08), v(0.15, 0.09, 0.2)),
-    part('TailBase', 'Body', 'ellipsoid', 'fur', v(0.14, 0.08, -0.68), v(0.08, 0.09, 0.35), v(0, 0, 0.28), v(0, -0.5, -0.04)),
-    part('TailMid', 'TailBase', 'ellipsoid', 'fur', v(0.16, 0.025, -0.4), v(0.068, 0.075, 0.3), v(0, 0, 0.25), v(0, -0.38, -0.04)),
-    part('TailTip', 'TailMid', 'ellipsoid', 'fur', v(0.14, 0.03, -0.34), v(0.052, 0.058, 0.24), v(0, 0, 0.2), v(0, -0.28, -0.03)),
-    part('StripeForehead', 'Head', 'ellipsoid', 'stripe', v(0, 0.13, 0.36), v(0.026, 0.12, 0.012)),
-    part('StripeCheek_L', 'Head', 'ellipsoid', 'stripe', v(-0.29, -0.01, 0.18), v(0.012, 0.035, 0.12), v(0, 0, 0), v(0.18, 0, 0.18)),
-    part('StripeCheek_R', 'Head', 'ellipsoid', 'stripe', v(0.29, -0.01, 0.18), v(0.012, 0.035, 0.12), v(0, 0, 0), v(0.18, 0, -0.18)),
-    part('StripeBody_L_1', 'Body', 'ellipsoid', 'stripe', v(-0.37, 0.07, 0.24), v(0.012, 0.12, 0.045), v(0, 0, 0), v(-0.2, 0, -0.12)),
-    part('StripeBody_L_2', 'Body', 'ellipsoid', 'stripe', v(-0.38, 0.07, 0), v(0.012, 0.13, 0.045)),
-    part('StripeBody_L_3', 'Body', 'ellipsoid', 'stripe', v(-0.37, 0.07, -0.24), v(0.012, 0.12, 0.045), v(0, 0, 0), v(0.2, 0, 0.12)),
-    part('StripeBody_R_1', 'Body', 'ellipsoid', 'stripe', v(0.37, 0.07, 0.24), v(0.012, 0.12, 0.045), v(0, 0, 0), v(-0.2, 0, 0.12)),
-    part('StripeBody_R_2', 'Body', 'ellipsoid', 'stripe', v(0.38, 0.07, 0), v(0.012, 0.13, 0.045)),
-    part('StripeBody_R_3', 'Body', 'ellipsoid', 'stripe', v(0.37, 0.07, -0.24), v(0.012, 0.12, 0.045), v(0, 0, 0), v(0.2, 0, -0.12)),
-    part('StripeForeleg_L', 'Forelimb_L', 'ellipsoid', 'stripe', v(0, 0.08, 0.105), v(0.085, 0.045, 0.014)),
-    part('StripeForeleg_R', 'Forelimb_R', 'ellipsoid', 'stripe', v(0, 0.08, 0.105), v(0.085, 0.045, 0.014)),
-    part('StripeHindleg_L', 'Hindlimb_L', 'ellipsoid', 'stripe', v(0, 0.05, 0.145), v(0.11, 0.05, 0.014)),
-    part('StripeHindleg_R', 'Hindlimb_R', 'ellipsoid', 'stripe', v(0, 0.05, 0.145), v(0.11, 0.05, 0.014)),
-    part('StripeTailBase', 'TailBase', 'ellipsoid', 'stripe', v(0, 0, 0.078), v(0.05, 0.07, 0.012)),
-    part('StripeTailMid', 'TailMid', 'ellipsoid', 'stripe', v(0, 0, 0.068), v(0.045, 0.058, 0.01)),
-    part('StripeTailTip', 'TailTip', 'ellipsoid', 'stripe', v(0, 0, 0.052), v(0.038, 0.045, 0.008)),
+    part('CatRoot', null, 'group', null, v(0, 0, 0), v(1, 1, 1), v(0, 0, 0), v(0, 0.2, 0), 1),
+
+    // Horizontal standing torso — egg-loaf length along Z.
+    part('Body', 'CatRoot', 'polyhedron', 'fur', v(0, 0.7, 0), v(0.34, 0.3, 0.66), v(0, 0, 0), v(0, 0, 0), 8),
+    part('Chest', 'Body', 'polyhedron', 'fur', v(0, 0.02, 0.46), v(0.3, 0.3, 0.28), v(0, 0, 0), v(0, 0, 0), 8),
+    // Haunches merge into the rump (overlap body — never floating side blobs).
+    part('Haunch_L', 'Body', 'polyhedron', 'fur', v(-0.2, -0.02, -0.4), v(0.24, 0.28, 0.28), v(0, 0, 0), v(0, 0, 0), 8),
+    part('Haunch_R', 'Body', 'polyhedron', 'fur', v(0.2, -0.02, -0.4), v(0.24, 0.28, 0.28), v(0, 0, 0), v(0, 0, 0), 8),
+
+    // Short thick neck bridging into a large round head.
+    part('Neck', 'Body', 'polyhedron', 'fur', v(0, 0.18, 0.5), v(0.22, 0.18, 0.2), v(0, -0.06, 0), v(-0.15, 0, 0), 8),
+    part('Head', 'Neck', 'polyhedron', 'fur', v(0, 0.24, 0.2), v(0.34, 0.32, 0.34), v(0, -0.12, -0.02), v(0, 0, 0), 8),
+    part('Jaw', 'Head', 'polyhedron', 'cream', v(0, -0.1, 0.24), v(0.18, 0.1, 0.16), v(0, 0.04, -0.02), v(0, 0, 0), 8),
+    part('Muzzle_L', 'Jaw', 'polyhedron', 'cream', v(-0.06, 0, 0.1), v(0.08, 0.06, 0.08), v(0, 0, 0), v(0, 0, 0), 6),
+    part('Muzzle_R', 'Jaw', 'polyhedron', 'cream', v(0.06, 0, 0.1), v(0.08, 0.06, 0.08), v(0, 0, 0), v(0, 0, 0), 6),
+    // Pink triangular nose + simple mouth crease.
+    part('Nose', 'Jaw', 'cone', 'nose', v(0, 0.02, 0.18), v(0.05, 0.04, 0.04), v(0, 0, 0), v(1.2, 0, 0), 3),
+    part('Mouth', 'Jaw', 'box', 'nose', v(0, -0.04, 0.14), v(0.04, 0.01, 0.02), v(0, 0, 0), v(0, 0, 0), 1),
+
+    // Large forward black eyes (reference beady gloss).
+    part('Eye_L', 'Head', 'polyhedron', 'eye', v(-0.12, 0.06, 0.32), v(0.085, 0.085, 0.07), v(0, 0, 0), v(0, 0, 0), 8),
+    part('Eye_R', 'Head', 'polyhedron', 'eye', v(0.12, 0.06, 0.32), v(0.085, 0.085, 0.07), v(0, 0, 0), v(0, 0, 0), 8),
+    part('Pupil_L', 'Eye_L', 'polyhedron', 'pupil', v(0, 0, 0.05), v(0.03, 0.03, 0.02), v(0, 0, 0), v(0, 0, 0), 6),
+    part('Pupil_R', 'Eye_R', 'polyhedron', 'pupil', v(0, 0, 0.05), v(0.03, 0.03, 0.02), v(0, 0, 0), v(0, 0, 0), 6),
+    part('EyeHighlight_L', 'Pupil_L', 'sphere', 'catchlight', v(-0.01, 0.012, 0.014), v(0.014, 0.014, 0.01), v(0, 0, 0), v(0, 0, 0), 6),
+    part('EyeHighlight_R', 'Pupil_R', 'sphere', 'catchlight', v(-0.01, 0.012, 0.014), v(0.014, 0.014, 0.01), v(0, 0, 0), v(0, 0, 0), 6),
+
+    // Thin horizontal whiskers from each cheek.
+    part('Whisker_L_1', 'Muzzle_L', 'cylinder', 'whisker', v(-0.1, 0.03, 0.02), v(0.004, 0.12, 0.004), v(0, 0, 0), v(0, 0, -1.45), 6),
+    part('Whisker_L_2', 'Muzzle_L', 'cylinder', 'whisker', v(-0.11, 0, 0.02), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, 0, -1.57), 6),
+    part('Whisker_L_3', 'Muzzle_L', 'cylinder', 'whisker', v(-0.1, -0.03, 0.02), v(0.004, 0.12, 0.004), v(0, 0, 0), v(0, 0, -1.7), 6),
+    part('Whisker_R_1', 'Muzzle_R', 'cylinder', 'whisker', v(0.1, 0.03, 0.02), v(0.004, 0.12, 0.004), v(0, 0, 0), v(0, 0, 1.45), 6),
+    part('Whisker_R_2', 'Muzzle_R', 'cylinder', 'whisker', v(0.11, 0, 0.02), v(0.004, 0.13, 0.004), v(0, 0, 0), v(0, 0, 1.57), 6),
+    part('Whisker_R_3', 'Muzzle_R', 'cylinder', 'whisker', v(0.1, -0.03, 0.02), v(0.004, 0.12, 0.004), v(0, 0, 0), v(0, 0, 1.7), 6),
+
+    // Upright triangular ears with pink inner panels, slight outward lean.
+    part('Ear_L', 'Head', 'cone', 'fur', v(-0.14, 0.3, -0.04), v(0.12, 0.26, 0.08), v(0, -0.2, 0), v(0.05, 0, -0.18), 3),
+    part('Ear_R', 'Head', 'cone', 'fur', v(0.14, 0.3, -0.04), v(0.12, 0.26, 0.08), v(0, -0.2, 0), v(0.05, 0, 0.18), 3),
+    part('InnerEar_L', 'Ear_L', 'cone', 'innerEar', v(0, 0.02, 0.055), v(0.07, 0.16, 0.02), v(0, 0, 0), v(0, 0, 0), 3),
+    part('InnerEar_R', 'Ear_R', 'cone', 'innerEar', v(0, 0.02, 0.055), v(0.07, 0.16, 0.02), v(0, 0, 0), v(0, 0, 0), 3),
+
+    // Four standing column legs parented to Body — shoulders/hips inside the torso.
+    // Box half-height == scale.y; pivot at +scale.y puts the joint at the top.
+    // Body at y=0.7 → limb center at -0.35 → bottoms plant at y≈0.
+    part('Forelimb_L', 'Body', 'box', 'fur', v(-0.18, -0.35, 0.38), v(0.09, 0.35, 0.09), v(0, 0.35, 0), v(0, 0, 0), 4),
+    part('Forelimb_R', 'Body', 'box', 'fur', v(0.18, -0.35, 0.38), v(0.09, 0.35, 0.09), v(0, 0.35, 0), v(0, 0, 0), 4),
+    part('ForePaw_L', 'Forelimb_L', 'polyhedron', 'cream', v(0, -0.68, 0.04), v(0.11, 0.07, 0.14), v(0, 0, 0), v(0, 0, 0), 6),
+    part('ForePaw_R', 'Forelimb_R', 'polyhedron', 'cream', v(0, -0.68, 0.04), v(0.11, 0.07, 0.14), v(0, 0, 0), v(0, 0, 0), 6),
+    // Slight mid-stride offset on hind right for a walking-ready stance.
+    part('Hindlimb_L', 'Body', 'box', 'fur', v(-0.16, -0.34, -0.36), v(0.1, 0.34, 0.1), v(0, 0.34, 0), v(0, 0, 0), 4),
+    part('Hindlimb_R', 'Body', 'box', 'fur', v(0.16, -0.34, -0.42), v(0.1, 0.34, 0.1), v(0, 0.34, 0), v(0, 0, 0), 4),
+    part('HindFoot_L', 'Hindlimb_L', 'polyhedron', 'cream', v(0, -0.66, 0.06), v(0.12, 0.07, 0.16), v(0, 0, 0), v(0, 0, 0), 6),
+    part('HindFoot_R', 'Hindlimb_R', 'polyhedron', 'cream', v(0, -0.66, 0.06), v(0.12, 0.07, 0.16), v(0, 0, 0), v(0, 0, 0), 6),
+
+    // Exactly one tail: root + tip along -Z, slight upward curve, rooted in rump.
+    part('Tail', 'Body', 'polyhedron', 'fur', v(0, 0.14, -0.82), v(0.07, 0.08, 0.36), v(0, 0, 0.3), v(0.35, 0, 0), 8),
+    part('TailTip', 'Tail', 'polyhedron', 'fur', v(0, 0.04, -0.4), v(0.05, 0.055, 0.22), v(0, 0, 0.16), v(0.25, 0, 0), 8),
   ],
   motionAnchors: {
     root: ['CatRoot'],
     head: ['Head'],
     jaw: ['Jaw'],
-    muzzle: ['Muzzle_L', 'Muzzle_R', 'Nose', 'Whisker_L_1', 'Whisker_L_2', 'Whisker_L_3', 'Whisker_R_1', 'Whisker_R_2', 'Whisker_R_3'],
+    muzzle: ['Muzzle_L', 'Muzzle_R', 'Nose', 'Mouth', 'Whisker_L_1', 'Whisker_L_2', 'Whisker_L_3', 'Whisker_R_1', 'Whisker_R_2', 'Whisker_R_3'],
     neck: ['Neck'],
-    ear: ['Ear_L', 'Ear_R', 'InnerEar_L', 'InnerEar_R'],
+    ear: ['Ear_L', 'Ear_R'],
     forelimb: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R'],
     hindlimb: ['Hindlimb_L', 'Hindlimb_R', 'HindFoot_L', 'HindFoot_R'],
-    tail: ['TailBase', 'TailMid', 'TailTip'],
+    tail: ['Tail', 'TailTip'],
     eye: ['Eye_L', 'Eye_R', 'Pupil_L', 'Pupil_R', 'EyeHighlight_L', 'EyeHighlight_R'],
   },
   growthTargets: {
     body: ['Body', 'Chest', 'Haunch_L', 'Haunch_R'],
     head: ['Head', 'Jaw'],
-    muzzle: ['Muzzle_L', 'Muzzle_R', 'Nose', 'Whisker_L_1', 'Whisker_L_2', 'Whisker_L_3', 'Whisker_R_1', 'Whisker_R_2', 'Whisker_R_3'],
+    muzzle: ['Muzzle_L', 'Muzzle_R', 'Nose', 'Mouth', 'Whisker_L_1', 'Whisker_L_2', 'Whisker_L_3', 'Whisker_R_1', 'Whisker_R_2', 'Whisker_R_3'],
     neck: ['Neck'],
     legs: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R', 'Hindlimb_L', 'Hindlimb_R', 'HindFoot_L', 'HindFoot_R'],
     wings: [],
-    ears: ['Ear_L', 'Ear_R', 'InnerEar_L', 'InnerEar_R'],
-    tail: ['TailBase', 'TailMid', 'TailTip', 'StripeTailBase', 'StripeTailMid', 'StripeTailTip'],
+    ears: ['Ear_L', 'Ear_R'],
+    // Scale only the root tail bone so Tip inherits — never duplicate limbs.
+    tail: ['Tail'],
     eyes: ['Eye_L', 'Eye_R', 'Pupil_L', 'Pupil_R', 'EyeHighlight_L', 'EyeHighlight_R'],
   },
   actionTargets: {
-    idle: ['Head', 'Ear_L', 'Ear_R', 'TailBase', 'TailMid', 'TailTip'],
-    talk: ['Head', 'Jaw', 'Muzzle_L', 'Muzzle_R', 'Nose'],
-    wave: ['Forelimb_L', 'ForePaw_L', 'Head', 'Ear_L', 'Ear_R', 'TailBase', 'TailMid', 'TailTip'],
-    play: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R', 'Hindlimb_L', 'Hindlimb_R', 'Head', 'Ear_L', 'Ear_R', 'TailBase', 'TailMid', 'TailTip'],
+    idle: ['Head', 'Ear_L', 'Ear_R', 'Tail', 'TailTip'],
+    talk: ['Head', 'Jaw', 'Muzzle_L', 'Muzzle_R', 'Nose', 'Mouth'],
+    wave: ['Forelimb_L'],
+    play: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R', 'Hindlimb_L', 'Hindlimb_R', 'Head', 'Ear_L', 'Ear_R', 'Tail', 'TailTip'],
     curious: ['Head', 'Ear_L', 'Ear_R'],
-    gentle: ['Head', 'Jaw', 'TailBase', 'TailMid', 'TailTip'],
+    gentle: ['Head', 'Jaw', 'Tail', 'TailTip'],
   },
   accessoryAnchors: {
     head: 'Head',
@@ -253,10 +245,10 @@ export const CAT_PROCEDURAL_MODEL: CatProceduralModelSpec = {
     forelimb: 'ForePaw_L',
   },
   framing: {
-    fit: 0.92,
-    groundRadius: 0.96,
-    background: '#EEF1F0',
-    ground: '#A8AFAE',
+    fit: 0.9,
+    groundRadius: 0.98,
+    background: '#F5EDE0',
+    ground: '#C4B49A',
   },
 };
 

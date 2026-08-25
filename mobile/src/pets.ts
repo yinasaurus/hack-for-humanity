@@ -18,21 +18,28 @@ export const PET_TYPES = [
   { id: 'cat', label: 'Cat', icon: '🐱', blurb: 'A calm, curious friend' },
   { id: 'panda', label: 'Panda', icon: '🐼', blurb: 'A soft, playful friend' },
   { id: 'penguin', label: 'Penguin', icon: '🐧', blurb: 'A cool, caring friend' },
-  { id: 'rabbit', label: 'Rabbit', icon: '🐰', blurb: 'A gentle, cozy friend' },
+  { id: 'capybara', label: 'Capybara', icon: '🦫', blurb: 'A mellow, easygoing friend' },
+  { id: 'hamster', label: 'Hamster', icon: '🐹', blurb: 'A tiny, cozy friend' },
+  { id: 'koala', label: 'Koala', icon: '🐨', blurb: 'A soft, sleepy friend' },
+  { id: 'bear', label: 'Bear', icon: '🧸', blurb: 'A warm, cuddly friend' },
+  { id: 'raccoon', label: 'Raccoon', icon: '🦝', blurb: 'A curious, playful friend' },
+  { id: 'duck', label: 'Duck', icon: '🦆', blurb: 'A cheerful, paddling friend' },
+  { id: 'sheep', label: 'Sheep', icon: '🐑', blurb: 'A gentle, fluffy friend' },
+  { id: 'seal', label: 'Seal', icon: '🦭', blurb: 'A soft, splashy friend' },
+  { id: 'sloth', label: 'Sloth', icon: '🦥', blurb: 'A slow, cozy friend' },
 ] as const;
 
 export type SelectablePetTypeId = (typeof PET_TYPES)[number]['id'];
 
 /**
- * IDs used by the first prototype. They remain valid/readable for existing
+ * IDs used by earlier prototypes. They remain valid/readable for existing
  * profiles, but are intentionally not offered to new patients.
  */
 export const LEGACY_PET_TYPES = [
-  { id: 'capybara', label: 'Capybara', icon: '🦫', blurb: 'A mellow, easygoing friend' },
+  { id: 'rabbit', label: 'Rabbit', icon: '🐰', blurb: 'A gentle, cozy friend' },
   { id: 'cow', label: 'Cow', icon: '🐮', blurb: 'A sweet, steady friend' },
   { id: 'chipmunk', label: 'Chipmunk', icon: '🐿️', blurb: 'A bright, busy friend' },
   { id: 'monkey', label: 'Monkey', icon: '🐒', blurb: 'A cheerful, clever friend' },
-  { id: 'hamster', label: 'Hamster', icon: '🐹', blurb: 'A tiny, cozy friend' },
   { id: 'otter', label: 'Otter', icon: '🦦', blurb: 'A warm, playful friend' },
 ] as const;
 
@@ -105,6 +112,7 @@ export const PET_HATS = [
   { id: 'bow', label: 'Bow' },
   { id: 'flower', label: 'Flower' },
   { id: 'beanie', label: 'Beanie' },
+  { id: 'party_hat', label: 'Party hat' },
   { id: 'leaf', label: 'Leaf' },
   { id: 'cloud_hat', label: 'Cloud' },
   { id: 'beret', label: 'Beret' },

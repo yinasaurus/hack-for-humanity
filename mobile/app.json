@@ -20,7 +20,9 @@
       "package": "com.kindplate.app",
       "adaptiveIcon": {
         "backgroundColor": "#F7F4EF",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
         "CAMERA",

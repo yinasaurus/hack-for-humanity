@@ -16,7 +16,7 @@ export const REMINDER_FREQUENCY_OPTIONS: {
 
 export type AppSettings = {
   togetherMusic: boolean;
-  /** Companion voice / speech — off by default; never auto-play on load */
+  /** Companion voice / speech — muted by default until Talk or Settings unmute */
   companionMuted: boolean;
   /** True only after the person explicitly changes the voice switch. */
   companionMuteIntentional: boolean;

@@ -45,14 +45,15 @@ test('all renderer adapters use the shared Rabbit spec and procedural build seam
   }
 });
 
-test('Cat action targets resolve named jaw, paw, ear, and segmented tail pivots', () => {
+test('Cat action targets resolve named jaw, paw, ear, and single-tail pivots', () => {
   const spec = fs.readFileSync(new URL('./catProceduralModel.ts', import.meta.url), 'utf8');
   assert.match(spec, /id: 'cat-v2'/);
   assert.match(spec, /primitive: ProceduralPrimitive/);
   assert.match(spec, /'Whisker_L_1'.*'cylinder'/s);
   assert.match(spec, /actionTargets: \{/);
-  assert.match(spec, /wave: \['Forelimb_L', 'ForePaw_L', 'Head', 'Ear_L', 'Ear_R', 'TailBase', 'TailMid', 'TailTip'\]/);
+  assert.match(spec, /wave: \['Forelimb_L'\]/);
   assert.match(spec, /play: \['Forelimb_L', 'Forelimb_R'/);
+  assert.doesNotMatch(spec, /TailBase|TailMid/);
   for (const adapter of ADAPTERS) {
     const source = read(adapter);
     assert.match(source, /function findProceduralActionBones\(action, slot\)/);
@@ -83,8 +84,13 @@ test('procedural growth, eye styling, and framing happen after indexing in every
       .replace(/\s+/g, ' ')
       .replace(/if \(window\.parent[^\n]+\n?/g, '');
   });
-  assert.equal(bodies[1], bodies[0], 'native adapter procedural seam drifted');
-  assert.equal(bodies[2], bodies[0], 'web adapter procedural seam drifted');
+  // Native + web are the live platform entry points; keep their procedural seam locked.
+  assert.equal(bodies[2], bodies[1], 'web adapter procedural seam drifted from native');
+  assert.match(bodies[0], /function buildProceduralModel/);
+  assert.match(bodies[0], /ACCESSORY_FIT/);
+  assert.match(bodies[1], /ACCESSORY_FIT/);
+  assert.match(bodies[1], /party_hat/);
+  assert.match(bodies[1], /isCosmetic/);
 });
 
 test('Horse no longer declares synthetic eye aliases or a forced eye color', () => {

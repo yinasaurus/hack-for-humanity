@@ -1,12 +1,18 @@
 # Buddi animal-call provenance
 
-These ten selectable species have local Talk cues. The existing cues are AAC-LC
-64 kbps M4A, mono, 44.1 kHz, with 40 ms linear fades; Rabbit is a verified
-mono 44.1 kHz WAV because Expo SDK 57 supports that format consistently across
-the native and web targets. Checksums below are SHA-256 values of the exact
-bundled files, not of the source downloads. Playback is explicit Talk only;
-the separate Play slots remain intentionally silent until friendly cues can be
-licensed and reviewed independently.
+These selectable species have local Talk cues. The existing cues are AAC-LC
+64 kbps M4A, mono, 44.1 kHz, with 40 ms linear fades. Checksums below are
+SHA-256 values of the exact bundled files, not of the source downloads.
+Playback is explicit Talk only; the separate Play slots remain intentionally
+silent until friendly cues can be licensed and reviewed independently.
+
+Koala, bear, raccoon, and sloth stay silent in the audio manifest until a
+verified same-species CC0/CC-BY recording is bundled — they still animate and
+can use speech captions.
+
+The former `rabbit-talk.wav` file remains in this folder for auditability of
+legacy Bun/Rabbit profiles; Rabbit is retired from selectable onboarding and
+is no longer referenced by the live audio manifest.
 
 | Species | Bundled file (duration; bytes) | Verified source page (and acquisition file) | Author / uploader | License | Modifications | SHA-256 | Retrieved |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -19,11 +25,11 @@ licensed and reviewed independently.
 | Cat | `cat-talk.m4a` (0.612 s; 5,469) | [Freesound source page](https://freesound.org/people/swatkamus/sounds/260179/); [HQ MP3 preview used for acquisition](https://cdn.freesound.org/previews/260/260179_4400688-hq.mp3) | swatkamus | CC0 | Trimmed the complete 0.546 s small-cat meow after removing MP3 encoder padding; added 0.080 s trailing silence; downmixed to mono 44.1 kHz; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `f4a62aeb03e4112f497c304248daa5321d87dfb9c6b0f538163419e8f73bbbfa` | 2026-08-24 |
 | Panda | `panda-talk.m4a` (2.000 s; 20,575) | [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Giant_panda_twittering.ogg); [OGG download](https://upload.wikimedia.org/wikipedia/commons/b/b8/Giant_panda_twittering.ogg) | Mizunoryu (uploader; page credits “Myself” for the own-work recording) | Public Domain | Trimmed 0.200–2.200 s of the public-domain giant-panda twittering call; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `4731cbcbc8637960009bd876ad66587f089700f6a4d4d974ebab18c16219933f` | 2026-08-24 |
 | Penguin | `penguin-talk.m4a` (0.464 s; 8,329) | [OpenGameArt source page](https://opengameart.org/content/penguin-sounds); [source ZIP](https://opengameart.org/sites/default/files/penguin.zip) | AntumDeluge (extracted from a recording by Bidone) | CC0 | Complete 0.464 s `penguin_01` clip; source page states background noise was removed; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `4eb9f128eb4c11b1317414bf944cc673e41a215f65045f5f062e7f114dc2afc1` | 2026-08-24 |
-| Rabbit | `rabbit-talk.wav` (2.000 s; 176,444) | [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Rabbit_oinks_and_squeaks.wav); [original Freesound page](https://freesound.org/people/kessir/sounds/372075/) | kessir (Freesound recording; Wikimedia Commons mirror) | CC0 | Trimmed the first 2.000 s of the rabbit oink/squeak recording; decoded to mono 44.1 kHz signed 16-bit PCM; bundled as WAV for Expo SDK 57 cross-platform playback. | `f1972981c62348f1aef83b63110cdf18d3bfb84fb15132d205e4d61175f95553` | 2026-08-24 |
-
-The former `hamster-talk.m4a` file and provenance remain in this folder only
-for auditability of legacy records; the selectable manifest does not reference
-that file.
+| Sheep | `sheep-talk.m4a` (1.820 s; 15,787) | [Freesound page](https://freesound.org/people/Chipsplease/sounds/669765/); [HQ MP3 preview](https://cdn.freesound.org/previews/669/669765_14629129-hq.mp3) | Chipsplease | CC0 | Trimmed ~1.80 s of the recorded sheep baa; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `d9f875599df44b957f4c7da221c19a19d2b2202976904df98ca53d9d75837037` | 2026-08-25 |
+| Duck | `duck-talk.m4a` (0.410 s; 4,250) | [Freesound page](https://freesound.org/people/Breviceps/sounds/445960/); [HQ MP3 preview](https://cdn.freesound.org/previews/445/445960_9159316-hq.mp3) | Breviceps | CC0 | Complete ~0.38 s cartoon duck quack; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `c8464ad52fc956c04b7e1561efdf84f3fbd0dc4f557eb9d9081e22d18627442b` | 2026-08-25 |
+| Hamster | `hamster-talk.m4a` (1.520 s; 13,348) | [Freesound page](https://freesound.org/people/lusania/sounds/815243/); [HQ MP3 preview](https://cdn.freesound.org/previews/815/815243_17523460-hq.mp3) | lusania | CC0 | Trimmed ~1.50 s of the recorded hamster squeak; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `e65e4145cd5ac99a2fa9e82e34e6984bae25ba13708a636c42162cddc4825c76` | 2026-08-25 |
+| Seal | `seal-talk.m4a` (1.820 s; 16,056) | [Freesound page](https://freesound.org/people/florianreichelt/sounds/450751/); [HQ MP3 preview](https://cdn.freesound.org/previews/450/450751_6253486-hq.mp3) | florianreichelt | CC0 | Trimmed ~1.80 s of the recorded seal call; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `b9dab2322e462d8877f5a49f659eed049660578285f130f8e92a388d9c0b7424` | 2026-08-25 |
+| Capybara | `capybara-talk.m4a` (1.820 s; 15,957) | [Freesound page](https://freesound.org/people/%D0%9A%D0%B0%D0%BF%D1%8B%D0%B1%D0%B0%D1%80%D0%B0_12345/sounds/849980/); [HQ MP3 preview](https://cdn.freesound.org/previews/849/849980_18656191-hq.mp3) | Капибара_12345 | CC0 | Trimmed ~1.80 s of the recorded capybara call; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A. | `5ac6176c71f96a0a3507f3ec340b12eced1dc17e6cb3fb2efd23da5f6133073f` | 2026-08-25 |
 
 ## Review notes
 

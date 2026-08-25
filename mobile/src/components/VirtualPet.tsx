@@ -664,6 +664,14 @@ function HatOverlay({ hatId, bodyColor }: { hatId: string; bodyColor: string }) 
           <Circle cx={0} cy={-14} r={5} fill={darken(c1, 8)} opacity={0.85} />
         </G>
       );
+    case 'party_hat':
+      return (
+        <G transform="translate(100, 62)">
+          <Polygon points="0,-28 18,8 -18,8" fill="#E07A7A" opacity={0.92} />
+          <Rect x={-20} y={6} width={40} height={6} rx={2} fill={c3} opacity={0.9} />
+          <Circle cx={0} cy={-30} r={4} fill={c3} opacity={0.95} />
+        </G>
+      );
     case 'crown_soft':
       return (
         <G transform="translate(100, 74)">

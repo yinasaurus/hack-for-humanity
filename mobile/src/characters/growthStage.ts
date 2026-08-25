@@ -267,12 +267,17 @@ export const SPECIES_GROWTH_PROFILES: Record<string, SpeciesGrowthProfile> = {
     baby: channels({ body: body(1.04, 0.95, 1.04), head: 1.1, muzzle: 1.04, neck: 0.9, legs: 0.7, wings: 1, ears: 0.72, tail: 0.8, eyes: 1.06 }),
     grown: channels({ body: body(1.02, 1.04, 0.99), head: 1, muzzle: 1, neck: 1, legs: 1, wings: 1, ears: 1, tail: 1, eyes: 1 }),
   },
-  // Hamster remains a readable legacy id and receives the compact rabbit-like
-  // safety profile until an old record is rendered through Rabbit.
+  // Hamster is a selectable Poly Pizza companion with a compact growth profile.
   hamster: {
     headBaseline: 0.99,
     ageHeadEmphasis: 0.55,
     baby: channels({ body: body(1.04, 0.95, 1.04), head: 1.08, muzzle: 1.04, legs: 0.74, ears: 0.8, tail: 0.86, eyes: 1.05 }),
+    grown: channels({ body: body(1.02, 1.04, 0.99), head: 1, muzzle: 1, legs: 1, ears: 1, tail: 1, eyes: 1 }),
+  },
+  sloth: {
+    headBaseline: 0.99,
+    ageHeadEmphasis: 0.55,
+    baby: channels({ body: body(1.03, 0.95, 1.03), head: 1.08, muzzle: 1.04, legs: 0.8, ears: 0.9, tail: 0.9, eyes: 1.04 }),
     grown: channels({ body: body(1.02, 1.04, 0.99), head: 1, muzzle: 1, legs: 1, ears: 1, tail: 1, eyes: 1 }),
   },
 };

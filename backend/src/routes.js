@@ -195,7 +195,8 @@ export function toPatientCompanionState(userId, dbOverride = null) {
 }
 
 async function saveCheckInFromBuffer(user, buffer, mimeType) {
-  // Meal gate runs before we log — non-food photos must not create a check-in.
+  // Gate runs before we log — non-food/drink photos must not create a check-in.
+  // Drinks count the same as meals (clinician estimates include them).
   // (This waits on vision; client still captures smaller JPEGs to keep it quicker.)
   const analysis = await analyzeFoodPhoto({
     imageBase64: buffer.toString('base64'),

@@ -11,9 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SupportChip } from '../components/SupportChip';
-import { PetAccessoryOverlay } from '../components/PetAccessoryOverlay';
 import { AnimalWebView, characterForLiveCompanion } from '../characters';
-import { CHARACTER_CATALOG } from '../characters/characterCatalog';
 import { colors, gradients, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
 import { fetchCompanion, updateAppearance, type CompanionState, type Unlock } from '../api';
@@ -25,6 +23,7 @@ import {
   PET_HELD,
   PET_NECKS,
   PET_SCENES,
+  PET_TYPES,
   petTypeLabel,
   type PetAppearance,
   type PetTypeId,
@@ -51,7 +50,7 @@ const TABS: { id: TabId; label: string }[] = [
 ];
 
 const WEAR_HATS = PET_HATS.filter((h) =>
-  ['none', 'bow', 'flower', 'beanie', 'crown_soft'].includes(h.id)
+  ['none', 'bow', 'flower', 'beanie', 'party_hat', 'crown_soft'].includes(h.id)
 );
 const WEAR_FACES = PET_FACES.filter((f) => ['none', 'glasses'].includes(f.id));
 const WEAR_NECKS = PET_NECKS.filter((n) =>
@@ -239,7 +238,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
           <>
             <View style={styles.previewStage}>
               <AnimalWebView
-                key={`live-${liveCharacter.modelPath}`}
+                key={`live-${liveCharacter.id}`}
                 character={liveCharacter}
                 growthStage={growthStage}
                 expression="happy"
@@ -247,20 +246,12 @@ export function CustomizeScreen({ navigation, route }: Props) {
                 style={styles.preview3d}
                 accessibilityLabel={`${a.petName || 'Companion'} 3D preview`}
                 outfit={{
-                  hat: 'none',
-                  face: 'none',
-                  neck: 'none',
-                  held: 'none',
+                  hat: a.hat,
+                  face: a.face,
+                  neck: a.neck,
+                  held: a.held,
                   scene: a.scene,
                 }}
-              />
-              <PetAccessoryOverlay
-                size={160}
-                petType={a.petType}
-                hat={a.hat}
-                face={a.face}
-                neck={a.neck}
-                held={a.held}
               />
             </View>
             <Text style={styles.previewName} accessibilityLiveRegion="polite">
@@ -324,30 +315,26 @@ export function CustomizeScreen({ navigation, route }: Props) {
               Switch your friend anytime — outfits carry over.
             </Text>
             <View style={styles.companionGrid}>
-              {CHARACTER_CATALOG.map((char) => {
-                const on = characterForLiveCompanion(a.petType).id === char.id;
+              {PET_TYPES.map((pet) => {
+                const on = a.petType === pet.id;
                 return (
                   <Pressable
-                    key={char.id}
+                    key={pet.id}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: on }}
-                    accessibilityLabel={`Choose ${char.label} as companion`}
+                    accessibilityLabel={`Choose ${pet.label} as companion`}
                     style={[styles.companionCard, on && styles.companionCardOn]}
                     onPress={() => {
-                      // Save the GLB id directly as petType so it resolves cleanly
-                      patch('petType', char.id as PetTypeId);
+                      patch('petType', pet.id as PetTypeId);
                     }}
                   >
-                    <AnimalWebView
-                      key={char.modelPath}
-                      character={char}
-                      expression="happy"
-                      muted
-                      style={styles.companionThumb}
-                      accessibilityLabel={`${char.label} 3D preview`}
-                    />
+                    <View style={styles.companionThumb}>
+                      <Text style={styles.companionIcon} importantForAccessibility="no">
+                        {pet.icon}
+                      </Text>
+                    </View>
                     <Text style={[styles.companionLabel, on && styles.companionLabelOn]}>
-                      {char.label}
+                      {pet.label}
                     </Text>
                     {on && <Text style={styles.companionCheck}>✓ Current</Text>}
                   </Pressable>
@@ -658,8 +645,15 @@ const styles = StyleSheet.create({
   },
   companionThumb: {
     width: '100%',
-    height: 130,
+    height: 110,
     borderRadius: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cream,
+  },
+  companionIcon: {
+    fontSize: 52,
+    lineHeight: 60,
   },
   companionLabel: {
     marginTop: 6,

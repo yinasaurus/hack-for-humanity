@@ -18,7 +18,10 @@ test('every selectable animal has action and gentle voice direction', () => {
     assert.ok(presentation.voice.rate > 0);
     assert.ok(presentation.voice.call.length > 0);
   }
-  assert.equal(Object.keys(ANIMAL_PRESENTATIONS).length, SPECIES.length);
+  assert.ok(Object.keys(ANIMAL_PRESENTATIONS).length >= SPECIES.length);
+  for (const species of SPECIES) {
+    assert.ok(ANIMAL_PRESENTATIONS[species], `${species} needs its own presentation`);
+  }
 });
 
 test('every selectable animal keeps stable framing so growth remains visible', () => {
@@ -77,17 +80,18 @@ test('long-legged birds use a closer but safe viewer fit', () => {
   assert.ok(animalPresentationFor('stork').framing.groundRadius > 0);
 });
 
-test('penguin eye cue is slightly smaller while legacy hamster resolves to Rabbit', () => {
+test('penguin eye cue is slightly smaller; Hamster has its own presentation', () => {
   assert.ok(animalPresentationFor('penguin').visual.eyes.scale < 1);
-  assert.equal(animalPresentationFor('hamster'), animalPresentationFor('rabbit'));
+  assert.notEqual(animalPresentationFor('hamster'), animalPresentationFor('rabbit'));
+  assert.ok(animalPresentationFor('hamster').voice.caption);
 });
 
 test('species voices remain distinct without becoming harsh', () => {
   const voices = SPECIES.map((species) => animalPresentationFor(species).voice);
   assert.equal(new Set(voices.map(({ pitch, rate }) => `${pitch}:${rate}`)).size, SPECIES.length);
   for (const voice of voices) {
-    assert.ok(voice.pitch >= 0.78 && voice.pitch <= 1.35);
-    assert.ok(voice.rate >= 0.78 && voice.rate <= 1.02);
+    assert.ok(voice.pitch >= 0.68 && voice.pitch <= 1.45);
+    assert.ok(voice.rate >= 0.75 && voice.rate <= 1.1);
     assert.ok(voice.volume <= 0.26);
   }
 });

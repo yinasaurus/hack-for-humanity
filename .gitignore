@@ -10,3 +10,10 @@ dashboard/dist/
 mobile/.expo/
 mobile/.tmp-export-test/
 **/coverage/
+
+# Large source archives / conversion scratch (keep local)
+*.zip
+animal rigging/
+mobile/.tmp-animal-audio/
+mobile/.tmp-poly-animals/
+mobile/.tmp-models/

@@ -4,13 +4,11 @@ import {
   AppState,
   type AppStateStatus,
   Pressable,
-  PanResponder,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -58,9 +56,13 @@ import {
   advancePlayStep,
   animalTalkBubble,
 } from '../companionInteraction';
+import {
+  REACTION_MS,
+  shouldAutoPlayCompanionVoice,
+  talkVisualDurationMs,
+} from '../companionReactions';
 import type { AnimalWebHandle } from '../characters';
 import { petTypeLabel } from '../pets';
-import { PetAccessoryOverlay } from '../components/PetAccessoryOverlay';
 import { BondingHeartBurst } from '../components/BondingHeartBurst';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useAnimalAudio } from '../audio/useAnimalAudio';
@@ -97,7 +99,6 @@ type Props = {
 
 export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const {
     user,
@@ -140,6 +141,10 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const appState = useRef(AppState.currentState);
   const nappingRef = useRef(false);
   nappingRef.current = napping;
+  const celebrateRef = useRef(Boolean(celebrate));
+  celebrateRef.current = Boolean(celebrate);
+  const speakingRef = useRef(false);
+  speakingRef.current = speaking;
 
   useEffect(() => {
     if (!talkLine) {
@@ -203,43 +208,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     if (handoffCompanion) setLocalCompanion(handoffCompanion);
   }, [handoffCompanion]);
 
-  const happyPetFeedback = useCallback(() => {
-    stopTalk();
-    setNapping(false);
-    clearExpressionTimer();
-    setExpression('happy');
-    showHeartBurst('small');
-    petRef.current?.wake();
-    petRef.current?.react();
-    expressionTimer.current = setTimeout(() => setExpression('happy'), 2600);
-  }, [showHeartBurst, stopTalk]);
-
-  const rubResponder = useMemo(() => {
-    let distance = 0;
-    let previousX = 0;
-    let previousY = 0;
-    let fired = false;
-    return PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_event, gesture) =>
-        Math.abs(gesture.dx) + Math.abs(gesture.dy) > 5,
-      onPanResponderGrant: () => {
-        distance = 0;
-        previousX = 0;
-        previousY = 0;
-        fired = false;
-      },
-      onPanResponderMove: (_event, gesture) => {
-        distance += Math.abs(gesture.dx - previousX) + Math.abs(gesture.dy - previousY);
-        previousX = gesture.dx;
-        previousY = gesture.dy;
-        if (!fired && distance >= 48) {
-          fired = true;
-          happyPetFeedback();
-        }
-      },
-    });
-  }, [happyPetFeedback]);
-
   const clearExpressionTimer = () => {
     if (expressionTimer.current) {
       clearTimeout(expressionTimer.current);
@@ -252,16 +220,145 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     setExpression(nap ? 'sleepy' : 'happy');
   }, []);
 
-  /** Greeting wave — App open / foreground only (not check-in logic) */
+  /** Lightweight anytime play — bounce/trick, never gated or required. */
+  const runPlayBonding = useCallback(() => {
+    stopTalk();
+    setNapping(false);
+    clearExpressionTimer();
+    setExpression('excited');
+    showHeartBurst('small');
+    petRef.current?.wake();
+    petRef.current?.react();
+    expressionTimer.current = setTimeout(() => {
+      settleAfterGesture(false);
+    }, REACTION_MS.play);
+  }, [settleAfterGesture, showHeartBurst, stopTalk]);
+
+  /** Greeting wave — app open / return / Wave button. Animation always runs. */
   const playGreetingWave = useCallback(
     (nap: boolean) => {
+      // Don't interrupt a check-in hello or an in-progress Talk.
+      if (celebrateRef.current || speakingRef.current) return;
       clearExpressionTimer();
+      setNapping(false);
       setExpression('waving');
+      showHeartBurst('small');
+      petRef.current?.wake();
+      petRef.current?.wave();
+      // Soft chirp only when voice is unmuted; wave never depends on sound.
+      if (
+        companion &&
+        shouldAutoPlayCompanionVoice({
+          companionMuted: settings.companionMuted,
+          companionMuteIntentional: settings.companionMuteIntentional,
+        })
+      ) {
+        const species = characterForLiveCompanion(companion.petType).id;
+        void animalAudio.play(species, 'talk');
+      }
       expressionTimer.current = setTimeout(() => {
         settleAfterGesture(nap);
-      }, 2600);
+      }, REACTION_MS.wave);
     },
-    [settleAfterGesture]
+    [
+      animalAudio,
+      companion,
+      settings.companionMuteIntentional,
+      settings.companionMuted,
+      settleAfterGesture,
+      showHeartBurst,
+    ]
+  );
+
+  /**
+   * Talk with optional cute call. Visual mouth/head always runs; audio is
+   * skipped when muted. Button source may migrate legacy soft-mute.
+   */
+  const runTalk = useCallback(
+    (source: 'button' | 'checkin' | 'tap') => {
+      if (!companion) return;
+      stopTalk();
+      const selectedTalk = selectCompanionTalk({
+        petName: companion.petName,
+        previousId: previousTalkPhraseIdRef.current,
+      });
+      previousTalkPhraseIdRef.current = selectedTalk.id;
+      setNapping(false);
+      clearExpressionTimer();
+      setExpression('happy');
+      const renderedSpecies = characterForLiveCompanion(companion.petType).id;
+      const explicitlyMuted =
+        settings.companionMuted && settings.companionMuteIntentional;
+      if (
+        source === 'button' &&
+        settings.companionMuted &&
+        !settings.companionMuteIntentional
+      ) {
+        void updateSettings({ companionMuted: false });
+      }
+      const line = animalTalkBubble(
+        animalPresentationFor(renderedSpecies).voice.caption,
+        selectedTalk.text
+      );
+      const showBubble = source !== 'tap';
+      setTalkAudioDurationMs(null);
+      setVisibleTalkLine(null);
+      setTalkWordByWord(showBubble);
+      if (showBubble) {
+        setTalkLine(
+          explicitlyMuted && source === 'button'
+            ? `${line} Voice is muted in Settings.`
+            : line
+        );
+      } else {
+        setTalkLine(null);
+      }
+      showHeartBurst(source === 'checkin' ? 'celebration' : 'small');
+      petRef.current?.wake();
+      const requestId = ++talkRequest.current;
+      setSpeaking(true);
+      void animalAudio
+        .play(renderedSpecies, 'talk')
+        .then((result) => {
+          if (requestId !== talkRequest.current) return;
+          setTalkAudioDurationMs(result.durationMs > 0 ? result.durationMs : null);
+          if (!result.played && source === 'button' && !explicitlyMuted) {
+            setTalkLine(
+              `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
+            );
+          }
+          petRef.current?.dispatch(createAnimalIntent('talk', result.durationMs));
+          const visualDuration = talkVisualDurationMs(result.durationMs, reducedMotion);
+          expressionTimer.current = setTimeout(() => {
+            if (requestId !== talkRequest.current) return;
+            setSpeaking(false);
+            settleAfterGesture(false);
+          }, visualDuration + 180);
+        })
+        .catch(() => {
+          if (requestId !== talkRequest.current) return;
+          setTalkAudioDurationMs(null);
+          if (source === 'button') {
+            setTalkLine(
+              `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
+            );
+          }
+          petRef.current?.dispatch(createAnimalIntent('talk'));
+          setSpeaking(false);
+          settleAfterGesture(false);
+        });
+    },
+    [
+      animalAudio,
+      companion,
+      reducedMotion,
+      settings.companionMuteIntentional,
+      settings.companionMuted,
+      settleAfterGesture,
+      showHeartBurst,
+      stopTalk,
+      updateSettings,
+    ]
   );
 
   const load = useCallback(async () => {
@@ -338,20 +435,25 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     };
   }, []);
 
-  // Soft hello after a meal check-in (even when no keepsake unlocked)
+  // Soft hello after a meal check-in — excited gesture, then a warm talk chirp.
   useEffect(() => {
     if (!celebrate) return;
     setHelloBanner(true);
     setNapping(false);
     clearExpressionTimer();
     setExpression('excited');
-    expressionTimer.current = setTimeout(() => {
-      settleAfterGesture(nappingRef.current);
+    const talkTimer = setTimeout(() => {
+      runTalk('checkin');
+    }, REACTION_MS.celebrateTalkDelay);
+    const bannerTimer = setTimeout(() => {
       setHelloBanner(false);
       navigation.setParams?.({ celebrate: undefined });
     }, 4200);
-    return () => clearExpressionTimer();
-  }, [celebrate, navigation, settleAfterGesture]);
+    return () => {
+      clearTimeout(talkTimer);
+      clearTimeout(bannerTimer);
+    };
+  }, [celebrate, navigation, runTalk]);
 
   useEffect(() => {
     if (!companion) return;
@@ -382,9 +484,20 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     setExpression('excited');
   }, [showCheckup]);
 
-  // App foreground → waving greeting (not tied to check-ins)
+  // Return to Home → greeting wave (nav focus). Chirp only if unmuted.
+  // Skip when a check-in hello is about to talk so wave doesn't interrupt it.
+  useFocusEffect(
+    useCallback(() => {
+      const id = setTimeout(() => {
+        if (celebrateRef.current) return;
+        playGreetingWave(nappingRef.current);
+      }, REACTION_MS.focusWaveDelay);
+      return () => clearTimeout(id);
+    }, [playGreetingWave])
+  );
+
+  // App foreground while already on Home → wave again.
   useEffect(() => {
-    playGreetingWave(nappingRef.current);
     const onChange = (next: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && next === 'active') {
         playGreetingWave(nappingRef.current);
@@ -394,7 +507,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     const sub = AppState.addEventListener('change', onChange);
     return () => {
       sub.remove();
-      clearExpressionTimer();
     };
   }, [playGreetingWave]);
 
@@ -433,7 +545,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   const quietHours = presence === 'resting';
   const cozyLook = quietHours || napping;
   const gradient = cozyLook ? gradients.homeResting : gradients.home;
-  const petOverlaySize = Math.min(320, Math.max(240, width - spacing.lg * 2));
   const growthIndex = GROWTH_CHAPTERS.indexOf(companion?.growthStage || 'baby');
 
   return (
@@ -547,8 +658,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
         {companion && (
           <View style={styles.hero}>
             <View
-              {...rubResponder.panHandlers}
-              accessibilityLabel={`Rub ${companion.petName} to make them happy`}
+              accessibilityLabel={`${companion.petName}. Drag to look around, tap to play, hold to talk.`}
               style={[
                 styles.hero3d,
                 { opacity: companionVitalityOpacity(companion.vitality) },
@@ -556,28 +666,22 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             >
               <AnimalWebView
                 ref={petRef}
-                key={`home-${companion.petType}-${companion.hat}-${companion.neck}`}
+                key={`home-${companion.petType}-${companion.hat}-${companion.face}-${companion.neck}-${companion.held}`}
                 character={characterForLiveCompanion(companion.petType)}
                 growthStage={companion.growthStage}
                 expression={expression}
                 muted={muted}
                 style={styles.hero3d}
                 accessibilityLabel={`${companion.petName} companion, vitality ${companion.vitality || 'bright'}`}
+                onPetTap={runPlayBonding}
+                onPetLongPress={() => runTalk('tap')}
                 outfit={{
-                  hat: 'none',
-                  face: 'none',
-                  neck: 'none',
-                  held: 'none',
+                  hat: companion.hat,
+                  face: companion.face,
+                  neck: companion.neck,
+                  held: companion.held,
                   scene: companion.scene,
                 }}
-              />
-              <PetAccessoryOverlay
-                size={petOverlaySize}
-                petType={companion.petType}
-                hat={companion.hat}
-                face={companion.face}
-                neck={companion.neck}
-                held={companion.held}
               />
               {heartBurst ? (
                 <BondingHeartBurst
@@ -716,71 +820,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 style={styles.petBtn}
                 accessibilityRole="button"
                 accessibilityLabel={`Talk with ${companion.petName}`}
-                onPress={() => {
-                  stopTalk();
-                  const selectedTalk = selectCompanionTalk({
-                    petName: companion.petName,
-                    previousId: previousTalkPhraseIdRef.current,
-                  });
-                  previousTalkPhraseIdRef.current = selectedTalk.id;
-                  setNapping(false);
-                  clearExpressionTimer();
-                  setExpression('happy');
-                  const renderedSpecies = characterForLiveCompanion(companion.petType).id;
-                  const explicitlyMuted = settings.companionMuted && settings.companionMuteIntentional;
-                  if (settings.companionMuted && !settings.companionMuteIntentional) {
-                    void updateSettings({ companionMuted: false });
-                  }
-                  const line = animalTalkBubble(
-                    animalPresentationFor(renderedSpecies).voice.caption,
-                    selectedTalk.text
-                  );
-                  setTalkAudioDurationMs(null);
-                  setVisibleTalkLine(null);
-                  setTalkWordByWord(true);
-                  setTalkLine(
-                    explicitlyMuted ? `${line} Voice is muted in Settings.` : line
-                  );
-                  showHeartBurst('small');
-                  petRef.current?.wake();
-                  const requestId = ++talkRequest.current;
-                  setSpeaking(true);
-                  void animalAudio
-                    .play(renderedSpecies, 'talk')
-                    .then((result) => {
-                      if (requestId !== talkRequest.current) return;
-                      setTalkAudioDurationMs(result.durationMs > 0 ? result.durationMs : null);
-                      if (!result.played && !explicitlyMuted) {
-                        setTalkLine(
-                          `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
-                        );
-                      }
-                      // A verified recording supplies the renderer's semantic
-                      // duration. Missing or muted calls stay silent while
-                      // retaining a calm visual Talk fallback.
-                      petRef.current?.dispatch(createAnimalIntent('talk', result.durationMs));
-                      const visualDuration = result.durationMs > 0
-                        ? result.durationMs
-                        : reducedMotion
-                          ? 500
-                          : 1200;
-                      expressionTimer.current = setTimeout(() => {
-                        if (requestId !== talkRequest.current) return;
-                        setSpeaking(false);
-                        settleAfterGesture(false);
-                      }, visualDuration + 180);
-                    })
-                    .catch(() => {
-                      if (requestId !== talkRequest.current) return;
-                      setTalkAudioDurationMs(null);
-                      setTalkLine(
-                        `${line} I couldn't make a sound just now. Check this site's sound and your device volume, then try Talk again.`
-                      );
-                      petRef.current?.dispatch(createAnimalIntent('talk'));
-                      setSpeaking(false);
-                      settleAfterGesture(false);
-                    });
-                }}
+                onPress={() => runTalk('button')}
               >
                 <Text style={styles.petBtnText}>{speaking ? `${companion.petName} says…` : 'Talk'}</Text>
               </Pressable>
@@ -788,17 +828,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 style={styles.petBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Wave hello"
-                onPress={() => {
-                  stopTalk();
-                  setNapping(false);
-                  clearExpressionTimer();
-                  setExpression('waving');
-                  showHeartBurst('small');
-                  petRef.current?.wave();
-                  expressionTimer.current = setTimeout(() => {
-                    settleAfterGesture(false);
-                  }, 2600);
-                }}
+                onPress={() => playGreetingWave(false)}
               >
                 <Text style={styles.petBtnText}>Wave</Text>
               </Pressable>
@@ -818,11 +848,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                     setTalkLine('We can play again anytime.');
                     settleAfterGesture(false);
                   } else {
+                    runPlayBonding();
                     setTalkWordByWord(false);
                     setPlayActive(true);
                     setPlayStep(0);
-                    setExpression('curious');
-                    setTalkLine(`Tap the glow so ${companion.petName} can chase it — no timer.`);
+                    setTalkLine(`Tap the glow so ${companion.petName} can chase it — or just tap ${companion.petName} anytime.`);
                   }
                 }}
               >
@@ -847,9 +877,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           style={[styles.primary, cozyLook && styles.primaryResting]}
           onPress={() => navigation.navigate('CheckIn')}
           accessibilityRole="button"
-          accessibilityLabel="Take a meal photo check-in"
+          accessibilityLabel="Take a check-in photo of food or drink"
         >
-          <Text style={styles.primaryText}>Meal photo</Text>
+          <Text style={styles.primaryText}>Check-in photo</Text>
         </Pressable>
         <Text style={styles.skipHint}>Optional · skip anytime</Text>
 

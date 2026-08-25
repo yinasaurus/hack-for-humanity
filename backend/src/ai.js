@@ -61,7 +61,7 @@ Return JSON only:
 - confidence ("high" | "medium" | "low")
 - notes (short string)
 
-If isMeal is false: foodType "Not a meal photo", all macros 0, confidence "high", possibleScreenPhoto false.
+If isMeal is false: foodType "Not a meal or drink photo", all macros 0, confidence "high", possibleScreenPhoto false.
 Do NOT invent food when unsure — set isMeal false.
 Do NOT diagnose eating disorders. Do NOT judge portions.`;
 
@@ -129,9 +129,9 @@ export async function analyzeFoodPhoto({ imageBase64, mimeType = 'image/jpeg' })
   }
 }
 
-/** Friendly patient-facing copy when a photo is not a meal (no scores, no guilt). */
+/** Friendly patient-facing copy when a photo is not food/drink (no scores, no guilt). */
 export const NOT_A_MEAL_ERROR =
-  'That photo doesn’t look like a meal. When you’re ready, try again with your food — no pressure.';
+  'That photo doesn’t look like food or a drink. When you’re ready, try again — no pressure.';
 
 /** Live vision failed (quota, network, etc.) — do not invent a meal. */
 export const VISION_UNAVAILABLE_ERROR =

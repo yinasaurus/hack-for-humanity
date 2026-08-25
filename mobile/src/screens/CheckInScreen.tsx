@@ -63,8 +63,9 @@ export function CheckInScreen({ navigation }: Props) {
       <View style={styles.centered}>
         <Text style={styles.title}>Camera access</Text>
         <Text style={styles.body}>
-          Buddi needs the camera so you can take a photo of your meal. Photos
-          are not chosen from your library — only a live photo from this screen.
+          Buddi needs the camera so you can take a photo of your meal or drink.
+          Photos are not chosen from your library — only a live photo from this
+          screen.
         </Text>
         <Pressable
           style={styles.cta}
@@ -150,7 +151,7 @@ export function CheckInScreen({ navigation }: Props) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save photo';
       const softMeal =
-        /not (appear to be )?a meal|doesn’t look like a meal|does not appear to be a meal/i.test(
+        /not (appear to be )?a meal|doesn’t look like a meal|doesn’t look like food|does not appear to be a meal|food or a drink/i.test(
           msg
         );
       const hint =
@@ -159,7 +160,7 @@ export function CheckInScreen({ navigation }: Props) {
         msg.toLowerCase().includes('connect')
           ? `\n\nCheck Wi‑Fi/hotspot and API ${API_BASE}`
           : softMeal
-            ? '\n\nTry a meal photo, or skip.'
+            ? '\n\nTry a food or drink photo, or skip.'
             : '';
       setError(`${msg}${hint}`);
       setStatus(null);
@@ -208,9 +209,9 @@ export function CheckInScreen({ navigation }: Props) {
       ]}
     >
       <Text style={styles.header} accessibilityRole="header">
-        Meal photo
+        Check-in photo
       </Text>
-      <Text style={styles.sub}>Live camera only · skip anytime</Text>
+      <Text style={styles.sub}>Food or drink · live camera · skip anytime</Text>
 
       <View style={styles.cameraWrap}>
         <CameraView
@@ -240,7 +241,7 @@ export function CheckInScreen({ navigation }: Props) {
         onPress={capture}
         disabled={busy || !cameraReady}
         accessibilityRole="button"
-        accessibilityLabel={cameraReady ? 'Capture meal photo' : 'Wait for camera'}
+        accessibilityLabel={cameraReady ? 'Capture check-in photo' : 'Wait for camera'}
         accessibilityState={{ disabled: busy || !cameraReady }}
       >
         {busy ? (

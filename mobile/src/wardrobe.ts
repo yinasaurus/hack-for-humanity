@@ -24,6 +24,7 @@ export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
   { field: 'hat', value: 'bow', unlockId: 'ribbon_ball' },
   { field: 'scene', value: 'quiet_garden', unlockId: 'quiet_garden' },
   { field: 'hat', value: 'beanie', unlockId: 'cozy_beanie' },
+  { field: 'hat', value: 'party_hat', unlockId: null },
   { field: 'face', value: 'glasses', unlockId: 'round_glasses' },
   { field: 'hat', value: 'crown_soft', unlockId: 'soft_crown' },
   { field: 'held', value: 'heart', unlockId: 'pocket_heart' },

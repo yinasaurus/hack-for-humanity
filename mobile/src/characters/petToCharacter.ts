@@ -5,11 +5,9 @@ import { CHARACTER_CATALOG, getCharacter } from './characterCatalog.ts';
 
 /** Retired onboarding ids → their closest available catalog animals. */
 const LEGACY_PET_TO_CHARACTER: Record<string, string> = {
-  capybara: 'horse',
   cow: 'horse',
   chipmunk: 'fox',
   monkey: 'fox',
-  hamster: 'rabbit',
   bun: 'rabbit',
   pup: 'horse',
   kit: 'fox',
@@ -19,9 +17,8 @@ const LEGACY_PET_TO_CHARACTER: Record<string, string> = {
 };
 
 /**
- * New petType values are one-to-one animal ids (including Rabbit). Retired
- * ids stay readable and render through this map; Hamster intentionally falls
- * back to the Rabbit model rather than crashing or showing a bird.
+ * New petType values are one-to-one animal ids. Retired ids stay readable and
+ * render through this map. Capybara and Hamster are selectable catalog animals.
  */
 export function characterForPetType(petType?: string): CharacterDef {
   const raw = petType || 'fox';

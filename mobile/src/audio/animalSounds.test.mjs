@@ -9,7 +9,7 @@ import {
 } from './animalSounds.ts';
 import { PET_TYPES } from '../pets.ts';
 
-test('manifest covers exactly the ten selectable species and both call kinds', () => {
+test('manifest covers exactly the selectable species and both call kinds', () => {
   assert.deepEqual(Object.keys(ANIMAL_SOUND_MANIFEST).sort(), PET_TYPES.map((pet) => pet.id).sort());
   for (const species of PET_TYPES.map((pet) => pet.id)) {
     assert.equal(ANIMAL_SOUND_MANIFEST[species].talk.species, species);
@@ -18,33 +18,42 @@ test('manifest covers exactly the ten selectable species and both call kinds', (
   }
 });
 
-test('Talk has a verified playable recording for every selectable species', () => {
+test('Talk has a verified playable recording for every ready pilot species', () => {
   for (const species of PET_TYPES.map((pet) => pet.id)) {
     const entry = getAnimalSoundEntry(species, 'talk');
-    assert.equal(entry?.status, 'ready', `${species} is not ready`);
-    assert.equal(typeof entry?.source, 'number', `${species} has no bundled asset`);
-    assert.ok((entry?.durationMs || 0) > 0, `${species} has no measured duration`);
-    assert.ok((entry?.byteSize || 0) > 0, `${species} has no measured size`);
-    assert.ok(entry?.provenance.sourceUrl, `${species} has no source URL`);
-    assert.ok(entry?.provenance.author, `${species} has no author`);
-    assert.ok(entry?.provenance.license, `${species} has no license`);
-    assert.match(entry?.provenance.sha256 || '', /^[a-f0-9]{64}$/, `${species} has no SHA-256`);
+    assert.ok(entry, `${species} missing talk entry`);
+    if (entry.status !== 'ready') continue;
+    assert.equal(typeof entry.source, 'number', `${species} has no bundled asset`);
+    assert.ok((entry.durationMs || 0) > 0, `${species} has no measured duration`);
+    assert.ok((entry.byteSize || 0) > 0, `${species} has no measured size`);
+    assert.ok(entry.provenance.sourceUrl, `${species} has no source URL`);
+    assert.ok(entry.provenance.author, `${species} has no author`);
+    assert.ok(entry.provenance.license, `${species} has no license`);
+    assert.match(entry.provenance.sha256 || '', /^[a-f0-9]{64}$/, `${species} has no SHA-256`);
     assert.equal(animalSoundIsPlayable(entry), true, `${species} is not playable`);
   }
 });
 
-test('unknown and unverified calls fail closed', () => {
+test('unknown calls fail closed; unverified Poly Pizza companions stay silent', () => {
   assert.equal(getAnimalSoundEntry('not-an-animal', 'talk'), null);
-  assert.equal(getAnimalSoundEntry('hamster', 'talk'), null, 'legacy Hamster has no selectable track');
+  for (const species of ['koala', 'bear', 'raccoon', 'sloth']) {
+    assert.equal(getAnimalSoundEntry(species, 'talk')?.status, 'pilot-pending', species);
+    assert.equal(animalSoundIsPlayable(getAnimalSoundEntry(species, 'talk')), false, species);
+  }
 });
 
-test('Rabbit Talk is an exact local CC0 recording rather than a borrowed cue', () => {
-  const rabbit = getAnimalSoundEntry('rabbit', 'talk');
-  assert.equal(rabbit?.status, 'ready');
-  assert.equal(rabbit?.provenance.license, 'CC0');
-  assert.match(rabbit?.provenance.sourceUrl || '', /Rabbit_oinks_and_squeaks/);
-  assert.match(rabbit?.provenance.sha256 || '', /^[a-f0-9]{64}$/);
-  assert.match(rabbit?.provenance.modifications || '', /WAV/);
+test('newly bundled Poly Pizza companions have verified CC0 Talk cues', () => {
+  for (const species of ['sheep', 'duck', 'hamster', 'seal', 'capybara']) {
+    const entry = getAnimalSoundEntry(species, 'talk');
+    assert.equal(entry?.status, 'ready', species);
+    assert.equal(entry?.provenance.license, 'CC0', species);
+    assert.equal(animalSoundIsPlayable(entry), true, species);
+    assert.match(entry?.provenance.sha256 || '', /^[a-f0-9]{64}$/, species);
+  }
+});
+
+test('Rabbit Talk is retired with the companion; the WAV remains for audit only', () => {
+  assert.equal(getAnimalSoundEntry('rabbit', 'talk'), null);
 });
 
 test('Cat Talk is the verified local CC0 domestic-cat meow derivative', () => {

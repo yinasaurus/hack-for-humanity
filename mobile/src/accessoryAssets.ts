@@ -16,6 +16,7 @@ export const HAT_IMAGES: Partial<Record<string, ImageSourcePropType>> = {
   bow: require('../assets/accessories/bow.png'),
   flower: require('../assets/accessories/flower.png'),
   beanie: require('../assets/accessories/beanie.png'),
+  party_hat: require('../assets/accessories/crown_soft.png'),
   crown_soft: require('../assets/accessories/crown_soft.png'),
   // closest visual stand-ins for remaining hat ids
   leaf: require('../assets/accessories/flower.png'),

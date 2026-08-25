@@ -10,6 +10,8 @@ import {
 import { animalPresentationFor } from './animalPresentation';
 import { RABBIT_PROCEDURAL_MODEL } from './rabbitProceduralModel';
 import { CAT_PROCEDURAL_MODEL } from './catProceduralModel';
+import { accessoryFitForSpecies, HEAD_LANDMARK_HINTS } from './petAccessories';
+import { useResolvedModelPath } from './useResolvedModelPath';
 import { colors } from '../theme';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
@@ -50,6 +52,10 @@ type Props = {
   accessibilityLabel?: string;
   /** Decorative outfit — bone-parented when the GLB has head/neck/hand bones */
   outfit?: AnimalOutfit;
+  /** Short tap on the canvas (not a drag/orbit). */
+  onPetTap?: () => void;
+  /** Long-press on the canvas without dragging. */
+  onPetLongPress?: () => void;
 };
 
 export type AnimalWebHandle = AnimalCharacterHandle & {
@@ -75,6 +81,8 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     muted = true,
     accessibilityLabel = 'Companion character',
     outfit,
+    onPetTap,
+    onPetLongPress,
   },
   ref
 ) {
@@ -84,10 +92,22 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   const startQuiet = isQuietBand(active);
   const readyRef = useRef(false);
   const pendingCommandsRef = useRef<PendingAnimalCommand[]>([]);
+  const resolvedModelPath = useResolvedModelPath(character.modelPath);
+  const renderCharacter = useMemo(
+    () =>
+      resolvedModelPath === null
+        ? character
+        : { ...character, modelPath: resolvedModelPath },
+    [character, resolvedModelPath]
+  );
 
   const html = useMemo(
-    () => buildHtml(character, startQuiet, reducedMotion, growthStage),
+    () =>
+      resolvedModelPath === null
+        ? ''
+        : buildHtml(renderCharacter, startQuiet, reducedMotion, growthStage),
     [
+      renderCharacter,
       character.id,
       character.modelPath,
       character.proceduralModel,
@@ -99,6 +119,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       character.scale,
       growthStage,
       reducedMotion,
+      resolvedModelPath,
     ]
   );
 
@@ -205,6 +226,10 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
             scene: outfit?.scene || 'sky',
           });
           post('setExpression', { expression: active });
+        } else if (msg?.type === 'petTap') {
+          onPetTap?.();
+        } else if (msg?.type === 'petLongPress') {
+          onPetLongPress?.();
         }
       } catch {
         /* ignore */
@@ -215,9 +240,19 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       window.addEventListener('message', onWindowMessage);
       return () => window.removeEventListener('message', onWindowMessage);
     }
-  }, [active, outfit]);
+  }, [active, outfit, onPetTap, onPetLongPress]);
 
-  if (!character.modelPath && !character.proceduralModel) {
+  if (resolvedModelPath === null) {
+    return (
+      <View
+        style={[styles.wrap, style, styles.empty]}
+        accessible
+        accessibilityLabel={`${accessibilityLabel}, loading`}
+      />
+    );
+  }
+
+  if (!character.proceduralModel && !resolvedModelPath) {
     return (
       <View
         style={[styles.wrap, style, styles.empty]}
@@ -235,7 +270,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       accessibilityRole="image"
     >
       <iframe
-        key={`${character.proceduralModel || character.modelPath}-${growthStage}`}
+        key={`${character.proceduralModel || resolvedModelPath || character.modelPath}-${growthStage}`}
         ref={iframeRef}
         srcDoc={html}
         style={webIframeStyle}
@@ -284,6 +319,8 @@ function buildHtml(
     eyes: 1,
   };
   const animal = animalPresentationFor(character.id);
+  const accessoryFit = accessoryFitForSpecies(character.id);
+  const landmarkHints = JSON.stringify(HEAD_LANDMARK_HINTS);
   const bgAwake = proceduralModel?.framing.background || '#F7F4EF';
   const bgSleep = proceduralModel ? '#D5E1E5' : '#E4EBF2';
   const bgExcited = proceduralModel ? '#E1E7D9' : '#E8E4D8';
@@ -331,6 +368,8 @@ const GROWTH_BODY_SCALE = ${JSON.stringify(growthChannels.body)};
 const GROWTH_HEAD_SCALE = ${growthChannels.head};
 const GROWTH_CHANNELS = ${JSON.stringify(growthChannels)};
 const ANIMAL = ${JSON.stringify(animal)};
+const ACCESSORY_FIT = ${JSON.stringify(accessoryFit)};
+const LANDMARK_HINTS = ${landmarkHints};
 const PROCEDURAL_MODEL = ${JSON.stringify(proceduralModel)};
 const IS_PROCEDURAL = Boolean(PROCEDURAL_MODEL);
 const GROUND_COLOR = ${JSON.stringify(groundColor)};
@@ -489,7 +528,16 @@ function indexEyeMeshes(object) {
   object.traverse((mesh) => {
     if (!mesh.isMesh || !mesh.name) return;
     const normalized = eyeAliasKey(mesh.name);
-    if (aliases.has(normalized) || declared.has(normalized)) eyeMeshes.push(mesh);
+    // Procedural shells are named PartName_Mesh; strip the suffix for matching.
+    const withoutMesh = normalized.endsWith('mesh') ? normalized.slice(0, -4) : normalized;
+    if (
+      aliases.has(normalized) ||
+      aliases.has(withoutMesh) ||
+      declared.has(normalized) ||
+      declared.has(withoutMesh)
+    ) {
+      eyeMeshes.push(mesh);
+    }
   });
 }
 
@@ -551,6 +599,7 @@ function proceduralGeometry(part) {
     geometry.rotateX(Math.PI / 2);
     return geometry;
   }
+  // sphere + ellipsoid share SphereGeometry; non-uniform scale makes the oval.
   return new THREE.SphereGeometry(1, segments, rings);
 }
 
@@ -582,7 +631,8 @@ function buildProceduralModel(spec) {
   (spec?.parts || []).forEach((part) => {
     if (!part.material || !nodes[part.name]) return;
     const mesh = new THREE.Mesh(proceduralGeometry(part), proceduralMaterial(spec.materials[part.material]));
-    mesh.name = part.name;
+    // Keep mesh names distinct from pivot bones so lookups never grab the shell.
+    mesh.name = part.name + '_Mesh';
     mesh.position.set(
       -Number(part.pivot?.[0] || 0),
       -Number(part.pivot?.[1] || 0),
@@ -749,6 +799,19 @@ function doWaveGreeting() {
   const state = beginProcedural('wave', m.durationMs);
   playSemanticClip('wave', { loop: false, speed: m.clipSpeed, fade: 0.65 });
   if (!state) return;
+  // Paw wave requires a real shoulder/forelimb joint. Never fake it with a
+  // whole-body yaw/roll — that reads as the pet spinning, not waving.
+  const hasWaveLimb = Boolean(
+    state.bones.forelimb?.length ||
+    state.bones.wing?.length ||
+    state.bones.flipper?.length
+  );
+  if (!hasWaveLimb) {
+    setTimeout(() => {
+      if (expression === 'waving') goBaseIdle();
+    }, m.durationMs + 100);
+    return;
+  }
   scheduleProceduralIdle(state, m.durationMs + 100, () => {
     if (expression === 'waving') goBaseIdle();
   });
@@ -846,7 +909,7 @@ function doAnimalTalk(durationMs = 0) {
   playSemanticClip('talk', { loop: false, speed: m.clipSpeed, fade: 0.55 });
   if (!reducedMotion) {
     if (!state || (!Object.keys(state.bones).length && !state.morph)) {
-      softBob({ amp: m.amp, dur: duration, yaw: 0, roll: 0, scalePulse: m.scalePulse });
+      softBob({ amp: m.amp, dur: duration, yaw: (m.yaw || 0.06) * 0.55, roll: (m.roll || 0.03) * 0.55, scalePulse: m.scalePulse });
     } else {
       scheduleProceduralIdle(state, duration + 180, () => {
         talking = false;
@@ -918,8 +981,9 @@ function findRigBone(slot, fallbackPattern) {
 function findRigBones(slot, fallbackPattern) {
   const names = Array.isArray(RIG_HINTS[slot]) ? RIG_HINTS[slot] : [];
   const hits = [];
+  const isCosmetic = (name) => /stripe|mark|decal|freckle/i.test(String(name || ''));
   const add = (bone) => {
-    if (bone && !hits.includes(bone)) hits.push(bone);
+    if (bone && !hits.includes(bone) && !isCosmetic(bone.name)) hits.push(bone);
   };
   names.forEach((wanted) => {
     add(boneByName[wanted]);
@@ -931,10 +995,12 @@ function findRigBones(slot, fallbackPattern) {
   names.forEach((wanted) => {
     const lower = String(wanted).toLowerCase();
     Object.entries(boneByName).forEach(([name, bone]) => {
+      if (isCosmetic(name)) return;
       if (name.toLowerCase().includes(lower)) add(bone);
     });
   });
   Object.entries(boneByName).forEach(([name, bone]) => {
+    if (isCosmetic(name)) return;
     if (fallbackPattern.test(name)) add(bone);
   });
   return hits;
@@ -966,6 +1032,37 @@ function findProceduralActionBones(action, slot) {
   )];
 }
 
+/**
+ * Pick the single front-leg shoulder joint for a paw wave.
+ * Prefer Mesh2Motion Front_Leg_Shoulder_L / procedural Forelimb_L; never Armature,
+ * spine, hind legs, or foot tips (wrong pivot → detaching / ankle-flail look).
+ */
+function preferWaveForelimbBones(bones) {
+  const list = Array.isArray(bones) ? bones.filter(Boolean) : [];
+  if (!list.length) return [];
+  const score = (bone) => {
+    const n = String(bone.name || '').toLowerCase();
+    let s = 0;
+    if (/armature|^root$|hips|spine|stomach|pelvis|back_leg|hind|neck|head|ear|tail|chin|nose/.test(n)) s -= 200;
+    if (/front_leg_shoulder_l|forelimb_l/.test(n)) s += 120;
+    if (/front_leg_shoulder_r|forelimb_r/.test(n)) s += 90;
+    if (/front_leg_upper_l/.test(n)) s += 100;
+    if (/front_leg_upper_r/.test(n)) s += 70;
+    if (/shoulder/.test(n) && /front|fore|l$|_l_/.test(n)) s += 80;
+    if (/front_leg|forelimb|forearm|frontleg/.test(n)) s += 40;
+    if (/_l$|_l_|left/.test(n)) s += 12;
+    if (/_r$|_r_|right/.test(n)) s += 4;
+    // Tip/ankle/paw are children — rotating them waves from the wrong pivot.
+    if (/paw|foot|ankle|tip|lower|hand/.test(n)) s -= 50;
+    return s;
+  };
+  const ranked = list
+    .map((bone) => ({ bone, score: score(bone) }))
+    .sort((a, b) => b.score - a.score);
+  if (!ranked.length || ranked[0].score < 20) return [];
+  return [ranked[0].bone];
+}
+
 function proceduralTargets(action) {
   const slots = {};
   const add = (slot, pattern, limit = Infinity) => {
@@ -978,24 +1075,26 @@ function proceduralTargets(action) {
     add('jaw', /jaw|mouth/i);
     add('beak', /beak|bill|mouth/i);
   } else if (action === 'wave') {
-    add('forelimb', /fore|front|arm|leg/i, 1);
+    // Shoulder-only; do not pull head/ear/tail into a greeting wave.
+    const fore = preferWaveForelimbBones([
+      ...findProceduralActionBones(action, 'forelimb'),
+      ...findRigBones('forelimb', /front_leg_shoulder|forelimb_[lr]|front_leg_upper/i),
+    ]);
+    if (fore.length) slots.forelimb = fore;
     if (CHOREOGRAPHY.wave?.channels.some((intent) => intent.target === 'wing')) {
-      add('wing', /wing|flap|arm/i);
+      add('wing', /wing|flap/i);
     }
     if (CHOREOGRAPHY.wave?.channels.some((intent) => intent.target === 'flipper')) {
-      add('flipper', /flipper|wing|flap|arm/i);
+      add('flipper', /flipper|wing|flap/i);
     }
-    add('head', /head|neck/i);
-    add('ear', /ear/i);
-    add('tail', /tail/i);
   } else if (action === 'play') {
     add('head', /head|neck/i);
-    add('forelimb', /fore|front|arm|leg/i);
+    add('forelimb', /front_leg_upper|front_leg_shoulder|forelimb/i);
     if (CHOREOGRAPHY.play?.channels.some((intent) => intent.target === 'wing')) {
-      add('wing', /wing|flap|arm/i);
+      add('wing', /wing|flap/i);
     }
     if (CHOREOGRAPHY.play?.channels.some((intent) => intent.target === 'flipper')) {
-      add('flipper', /flipper|wing|flap|arm/i);
+      add('flipper', /flipper|wing|flap/i);
     }
     add('tail', /tail/i);
   } else if (action === 'curious' || action === 'gentle') {
@@ -1267,55 +1366,61 @@ function isBoneDescendant(candidate, ancestor) {
 function softMat(color) {
   return new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.72,
-    metalness: 0.05,
+    roughness: 0.78,
+    metalness: 0.04,
+    flatShading: true,
   });
 }
 
 function makeHat(kind) {
   const g = new THREE.Group();
-  if (kind === 'beanie') {
+  if (kind === 'party_hat') {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.72, 1.35, 6), softMat(0xE07A7A));
+    cone.position.y = 0.85;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.74, 0.74, 0.12, 6), softMat(0xF5E6A8));
+    band.position.y = 0.22;
+    const pom = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), softMat(0xF5E6A8));
+    pom.position.y = 1.55;
+    g.add(cone, band, pom);
+  } else if (kind === 'beanie') {
     const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58),
+      new THREE.SphereGeometry(1, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.58),
       softMat(0x6fae8f)
     );
     cap.rotation.x = Math.PI;
     cap.position.y = 0.35;
-    const brim = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.12, 10, 24), softMat(0x5F7A6B));
-    brim.rotation.x = Math.PI / 2;
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.02, 0.18, 8), softMat(0x5F7A6B));
     brim.position.y = 0.2;
     g.add(cap, brim);
   } else if (kind === 'bow') {
     const m = softMat(0xE8A0A8);
-    const L = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), m);
+    const L = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.22), m);
     const R = L.clone();
-    L.position.x = -0.55; R.position.x = 0.55;
-    L.scale.set(1, 0.7, 0.45); R.scale.set(1, 0.7, 0.45);
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), softMat(0xD4848C));
+    L.position.x = -0.42; R.position.x = 0.42;
+    const knot = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), softMat(0xD4848C));
     g.add(L, R, knot);
   } else if (kind === 'flower') {
-    const center = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), softMat(0xF5E6A8));
+    const center = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 0), softMat(0xF5E6A8));
     for (let i = 0; i < 5; i++) {
-      const p = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), softMat(0xF0C4C8));
+      const p = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3, 0), softMat(0xF0C4C8));
       const a = (i / 5) * Math.PI * 2;
-      p.position.set(Math.cos(a) * 0.55, 0.05, Math.sin(a) * 0.55);
+      p.position.set(Math.cos(a) * 0.5, 0.05, Math.sin(a) * 0.5);
       p.scale.set(1, 0.45, 1);
       g.add(p);
     }
     g.add(center);
   } else if (kind === 'crown_soft') {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.1, 8, 24), softMat(0xE8C48A));
-    band.rotation.x = Math.PI / 2;
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.16, 8), softMat(0xE8C48A));
     band.position.y = 0.15;
     g.add(band);
     for (let i = 0; i < 5; i++) {
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 6), softMat(0xF5E6A8));
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 5), softMat(0xF5E6A8));
       const a = (i / 5) * Math.PI * 2;
-      tip.position.set(Math.cos(a) * 0.85, 0.4, Math.sin(a) * 0.85);
+      tip.position.set(Math.cos(a) * 0.75, 0.42, Math.sin(a) * 0.75);
       g.add(tip);
     }
   } else {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), softMat(0xB8D9C4));
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), softMat(0xB8D9C4));
     cap.rotation.x = Math.PI;
     g.add(cap);
   }
@@ -1325,12 +1430,20 @@ function makeHat(kind) {
 function makeFace(kind) {
   const g = new THREE.Group();
   if (kind === 'glasses') {
-    const m = softMat(0x445566);
-    const L = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.06, 8, 16), m);
-    const R = L.clone();
-    L.position.x = -0.42; R.position.x = 0.42;
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.06), m);
-    g.add(L, R, bridge);
+    const m = softMat(0x3A4652);
+    const rim = (x) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.055, 6, 10), m);
+      ring.position.set(x, 0, 0);
+      return ring;
+    };
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.05), m);
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.04), m);
+    const armR = armL.clone();
+    armL.position.set(-0.62, 0, -0.18);
+    armR.position.set(0.62, 0, -0.18);
+    armL.rotation.y = 0.35;
+    armR.rotation.y = -0.35;
+    g.add(rim(-0.4), rim(0.4), bridge, armL, armR);
   }
   return g;
 }
@@ -1381,6 +1494,85 @@ function clearAcc(slot) {
   }
 }
 
+function worldPosOf(obj) {
+  const v = new THREE.Vector3();
+  if (!obj) return v;
+  obj.updateWorldMatrix(true, false);
+  return v.setFromMatrixPosition(obj.matrixWorld);
+}
+
+/** Mesh2Motion Head bones are muzzle-aligned — never trust bone local +Y as "up". */
+function resolveHeadFrame(headBone) {
+  const head = worldPosOf(headBone);
+  const earL = findBone(LANDMARK_HINTS.earL || []);
+  const earR = findBone(LANDMARK_HINTS.earR || []);
+  const muzzleBone = findBone(LANDMARK_HINTS.muzzle || []);
+  const crownBone = findBone(LANDMARK_HINTS.crown || []);
+  const earLPos = earL ? worldPosOf(earL) : null;
+  const earRPos = earR ? worldPosOf(earR) : null;
+  const muzzlePos = muzzleBone ? worldPosOf(muzzleBone) : null;
+  const crownHint = crownBone ? worldPosOf(crownBone) : null;
+
+  let span = 0.22;
+  let crown = head.clone();
+  if (earLPos && earRPos) {
+    span = Math.max(span, earLPos.distanceTo(earRPos));
+    crown = earLPos.clone().add(earRPos).multiplyScalar(0.5);
+  } else if (crownHint) {
+    crown = crownHint.clone();
+    span = Math.max(span, crown.distanceTo(head) * 1.4);
+  }
+  if (muzzlePos) span = Math.max(span, muzzlePos.distanceTo(head) * 1.55);
+
+  let forward = new THREE.Vector3(0, 0, 1);
+  if (muzzlePos && muzzlePos.distanceTo(head) > 1e-5) {
+    forward.subVectors(muzzlePos, head).normalize();
+  } else if (crownHint && crownHint.distanceTo(head) > 1e-5) {
+    forward.subVectors(crownHint, head).normalize();
+  }
+
+  const up = new THREE.Vector3();
+  const earUp = crown.clone().sub(head);
+  if (earLPos && earRPos && earUp.length() > 1e-5 && Math.abs(earUp.clone().normalize().dot(forward)) < 0.92) {
+    up.copy(earUp).addScaledVector(forward, -earUp.dot(forward)).normalize();
+  } else {
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(worldUp.dot(forward)) > 0.95) {
+      up.set(0, 0, 1).addScaledVector(forward, -forward.z).normalize();
+    } else {
+      up.copy(worldUp).addScaledVector(forward, -worldUp.dot(forward)).normalize();
+    }
+  }
+
+  const right = new THREE.Vector3().crossVectors(up, forward).normalize();
+  forward.crossVectors(right, up).normalize();
+  up.crossVectors(forward, right).normalize();
+  right.crossVectors(up, forward).normalize();
+
+  return { origin: head, crown, up, forward, right, span };
+}
+
+function attachOriented(slot, bone, mesh, worldTarget, worldSize, basis, tilt = 0) {
+  clearAcc(slot);
+  if (!bone || !mesh) return;
+  bone.updateWorldMatrix(true, false);
+  bone.add(mesh);
+
+  const inv = new THREE.Matrix4().copy(bone.matrixWorld).invert();
+  const boneQuat = new THREE.Quaternion();
+  const boneScale = new THREE.Vector3();
+  bone.matrixWorld.decompose(new THREE.Vector3(), boneQuat, boneScale);
+
+  mesh.position.copy(worldTarget).applyMatrix4(inv);
+  const anatQuat = new THREE.Quaternion().setFromRotationMatrix(
+    new THREE.Matrix4().makeBasis(basis.right, basis.up, basis.forward)
+  );
+  mesh.quaternion.copy(boneQuat.clone().invert().multiply(anatQuat));
+  if (tilt) mesh.rotateX(-tilt);
+  mesh.scale.setScalar((worldSize || 0.12) / Math.max(boneScale.x, 1e-4));
+  acc[slot] = mesh;
+}
+
 function attachWorld(slot, bone, mesh, worldOffset, worldSize) {
   clearAcc(slot);
   if (!bone || !mesh) return;
@@ -1409,6 +1601,62 @@ function attachWorld(slot, bone, mesh, worldOffset, worldSize) {
   acc[slot] = mesh;
 }
 
+function attachHeadAccessory(slot, head, mesh, fit) {
+  if (!head || !mesh || !fit) return clearAcc(slot);
+  const frame = resolveHeadFrame(head);
+  const base = slot === 'hat' ? frame.crown.clone() : frame.origin.clone();
+  if (slot === 'face') {
+    base.addScaledVector(frame.crown.clone().sub(frame.origin), 0.22);
+  }
+  const target = base
+    .addScaledVector(frame.up, (fit.up || 0) * frame.span)
+    .addScaledVector(frame.forward, (fit.forward || 0) * frame.span)
+    .addScaledVector(frame.right, (fit.right || 0) * frame.span);
+  const size = Math.max(0.04, (fit.size || 0.4) * frame.span);
+  attachOriented(slot, head, mesh, target, size, frame, fit.tilt || 0);
+}
+
+/**
+ * Static Poly Pizza meshes have no skeleton — plant world-aligned landmark nodes
+ * on the bbox so hats/glasses still parent to a head anchor (whole-body only).
+ */
+function injectSyntheticBones(object) {
+  if (hasSkeleton) return;
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const min = box.min;
+  const isQuadruped = size.x > size.y * 0.7;
+  const isBird = size.y > size.x * 1.2;
+  let headY = 0.82, headZ = 0.18, neckY = 0.65, neckZ = 0.1;
+  let handY = 0.45, handX = 0.32, handZ = 0.08;
+  if (isQuadruped) {
+    headY = 0.78; headZ = 0.36; neckY = 0.62; neckZ = 0.26;
+    handY = 0.08; handX = 0.34; handZ = 0.28;
+  } else if (isBird) {
+    headY = 0.9; headZ = 0.1; neckY = 0.72; neckZ = 0.05;
+    handY = 0.55; handX = 0.38; handZ = 0.05;
+  }
+  function makeAt(fx, fy, fz, name) {
+    const node = new THREE.Object3D();
+    node.name = name;
+    node.position.set(min.x + size.x * (0.5 + fx), min.y + size.y * fy, min.z + size.z * (0.5 + fz));
+    object.add(node);
+    boneByName[name] = node;
+    return node;
+  }
+  makeAt(0, headY, headZ, 'Head');
+  makeAt(0, headY, headZ, 'b_Head_05');
+  makeAt(0, headY - 0.06, headZ + 0.1, 'Chin');
+  makeAt(0, headY + 0.06, headZ + 0.08, 'Head.tip');
+  makeAt(-0.12, headY + 0.08, headZ - 0.02, 'Ear_L');
+  makeAt(0.12, headY + 0.08, headZ - 0.02, 'Ear_R');
+  makeAt(0, neckY, neckZ, 'Neck');
+  makeAt(0, neckY, neckZ, 'b_Neck_04');
+  makeAt(handX, handY, handZ, 'b_RightHand_08');
+  hasSkeleton = true;
+}
+
 function applyOutfit(next) {
   outfitState = { ...outfitState, ...next };
   const fills = {
@@ -1430,44 +1678,69 @@ function applyOutfit(next) {
   }
 
   if (!root) return;
-
-  if (!hasSkeleton) {
-    hud.textContent = '';
-    clearAcc('hat'); clearAcc('face'); clearAcc('neck'); clearAcc('held');
-    return;
-  }
   hud.textContent = '';
 
   const head = findBone([
     ...(PROCEDURAL_MODEL?.accessoryAnchors?.head ? [PROCEDURAL_MODEL.accessoryAnchors.head] : []),
-    'b_Head_05',
+    ...(LANDMARK_HINTS.head || []),
     ...(RIG_HINTS.head || []),
   ]);
   const neck = findBone([
     ...(PROCEDURAL_MODEL?.accessoryAnchors?.neck ? [PROCEDURAL_MODEL.accessoryAnchors.neck] : []),
-    'b_Neck_04',
+    ...(LANDMARK_HINTS.neck || []),
     ...(RIG_HINTS.neck || []),
   ]);
   const hand = findBone([
     ...(PROCEDURAL_MODEL?.accessoryAnchors?.forelimb ? [PROCEDURAL_MODEL.accessoryAnchors.forelimb] : []),
     'b_RightHand_08',
+    ...(RIG_HINTS.hand || []),
     ...(RIG_HINTS.forelimb || []),
   ]);
 
-  if (outfitState.hat && outfitState.hat !== 'none' && head) {
-    attachWorld('hat', head, makeHat(outfitState.hat), { up: 0.11, forward: 0.02 }, 0.13);
-  } else clearAcc('hat');
+  const fit = ACCESSORY_FIT || {};
+  const hatFit = fit.hat || { up: 0.12, forward: -0.1, size: 0.48, tilt: 0.18 };
+  const faceFit = fit.face || { up: 0.06, forward: 0.48, size: 0.4 };
+  const neckFit = fit.neck || { up: -0.15, forward: 0.12, size: 0.42 };
+  const heldFit = fit.held || { up: 0.05, forward: 0.2, size: 0.28 };
 
-  if (outfitState.face && outfitState.face !== 'none' && head) {
-    attachWorld('face', head, makeFace(outfitState.face), { up: 0.02, forward: 0.1 }, 0.09);
+  if (!head) {
+    clearAcc('hat'); clearAcc('face'); clearAcc('neck'); clearAcc('held');
+    return;
+  }
+
+  if (outfitState.hat && outfitState.hat !== 'none') {
+    attachHeadAccessory('hat', head, makeHat(outfitState.hat), hatFit);
+  } else clearAcc('hat');
+  if (outfitState.face && outfitState.face !== 'none') {
+    attachHeadAccessory('face', head, makeFace(outfitState.face), faceFit);
   } else clearAcc('face');
 
+  const frame = resolveHeadFrame(head);
   if (outfitState.neck && outfitState.neck !== 'none' && neck) {
-    attachWorld('neck', neck, makeScarf(outfitState.neck), { up: -0.02, forward: 0.04 }, 0.11);
+    attachWorld(
+      'neck',
+      neck,
+      makeScarf(outfitState.neck),
+      {
+        up: (neckFit.up || 0) * frame.span,
+        forward: (neckFit.forward || 0) * frame.span,
+        right: (neckFit.right || 0) * frame.span,
+      },
+      Math.max(0.04, (neckFit.size || 0.4) * frame.span)
+    );
   } else clearAcc('neck');
-
   if (outfitState.held && outfitState.held !== 'none' && hand) {
-    attachWorld('held', hand, makeHeld(outfitState.held), { up: 0.02, forward: 0.06 }, 0.08);
+    attachWorld(
+      'held',
+      hand,
+      makeHeld(outfitState.held),
+      {
+        up: (heldFit.up || 0) * frame.span,
+        forward: (heldFit.forward || 0) * frame.span,
+        right: (heldFit.right || 0) * frame.span,
+      },
+      Math.max(0.04, (heldFit.size || 0.28) * frame.span)
+    );
   } else clearAcc('held');
 }
 
@@ -1563,6 +1836,7 @@ function initializeRoot(nextRoot, animations = []) {
   });
 
   indexBones(root);
+  injectSyntheticBones(root);
   indexMorphs(root);
   indexEyeMeshes(root);
   applyEyeProfile();
@@ -1604,6 +1878,58 @@ function onResize() {
 }
 window.addEventListener('resize', onResize);
 onResize();
+
+/** Tap / long-press without stealing orbit drags from OrbitControls. */
+(function bindCompanionGestures() {
+  const el = renderer.domElement;
+  let down = null;
+  let longTimer = null;
+  let moved = false;
+  const clearLong = () => {
+    if (longTimer) {
+      clearTimeout(longTimer);
+      longTimer = null;
+    }
+  };
+  const postHost = (type) => {
+    const payload = JSON.stringify({ type: type });
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(payload);
+    if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
+  };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    moved = false;
+    down = { x: e.clientX, y: e.clientY };
+    clearLong();
+    longTimer = setTimeout(() => {
+      longTimer = null;
+      if (!moved && down) {
+        down = null;
+        postHost('petLongPress');
+      }
+    }, 420);
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) {
+      moved = true;
+      clearLong();
+    }
+  });
+  const endPointer = () => {
+    const wasTap = Boolean(down && !moved && longTimer);
+    clearLong();
+    if (wasTap) postHost('petTap');
+    down = null;
+    moved = false;
+  };
+  el.addEventListener('pointerup', endPointer);
+  el.addEventListener('pointercancel', () => {
+    clearLong();
+    down = null;
+    moved = false;
+  });
+})();
 
 (function tick() {
   requestAnimationFrame(tick);

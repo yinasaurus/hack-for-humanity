@@ -4,7 +4,92 @@ import type { CharacterDef } from './types';
  * Free animated GLBs (CDN) — swap for local assets/characters/*.glb anytime.
  * Clip names are explicit candidates; unsupported semantic actions use a
  * procedural rig overlay or remain unavailable rather than guessing a clip.
+ *
+ * Bundled Poly Pizza animals use `bundled:<id>` paths resolved at runtime
+ * (see characterBundledModels.ts + ATTRIBUTION.md). Keep those path strings
+ * here so Node catalog tests never evaluate Metro `require()` of `.glb` files.
  */
+const STATIC_POLY_PIZZA_CLIPS = {
+  idle: 'Idle',
+  talk: 'Idle',
+  react: 'Idle',
+} as const;
+
+const STATIC_POLY_PIZZA_ACTIONS = {
+  idle: [] as string[],
+  talk: [] as string[],
+  wave: [] as string[],
+  play: [] as string[],
+  curious: [] as string[],
+  gentle: [] as string[],
+};
+
+const STATIC_POLY_PIZZA_RIG = {
+  head: ['Head', 'head', 'Neck', 'neck'],
+  jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
+  // Static meshes have no real limb joints — hints kept for accessory probes only.
+  forelimb: [
+    'Front_Leg_Shoulder_L',
+    'Front_Leg_Upper_L',
+    'Forelimb_L',
+    'Front_Leg_Foot_L',
+    'Front_Leg_Tip_L',
+    'ForePaw_L',
+  ],
+  hand: [
+    'Front_Leg_Foot_L',
+    'Front_Leg_Tip_L',
+    'ForePaw_L',
+    'Front_Leg_Foot_R',
+    'Front_Leg_Tip_R',
+    'ForePaw_R',
+  ],
+  tail: ['Tail', 'tail'],
+  talkMorphs: ['mouthOpen', 'Mouth', 'jaw'],
+};
+
+/** Mesh2Motion fox-family shoulder → foot chain (dog/fox/panda/horse). */
+const MESH2MOTION_FORELIMB = [
+  'Front_Leg_Shoulder_L',
+  'Front_Leg_Upper_L',
+  'Front_Leg_Shoulder_R',
+  'Front_Leg_Upper_R',
+  'Forelimb_L',
+  'Forelimb_R',
+  'Front_Leg_Lower_L',
+  'Front_Leg_Lower_R',
+  'Front_Leg_Foot_L',
+  'Front_Leg_Foot_R',
+  'Front_Leg_Tip_L',
+  'Front_Leg_Tip_R',
+  'ForePaw_L',
+  'ForePaw_R',
+] as const;
+
+const MESH2MOTION_HAND = [
+  'Front_Leg_Foot_L',
+  'Front_Leg_Tip_L',
+  'ForePaw_L',
+  'Front_Leg_Foot_R',
+  'Front_Leg_Tip_R',
+  'ForePaw_R',
+  'Front_Leg_Lower_L',
+  'Front_Leg_Lower_R',
+] as const;
+
+function polyPizzaCompanion(id: string, label: string): CharacterDef {
+  return {
+    id,
+    label,
+    // Animals by molochdadev [CC-BY] via Poly Pizza — static mesh; motion overlay.
+    modelPath: `bundled:${id}`,
+    clips: { ...STATIC_POLY_PIZZA_CLIPS },
+    actions: { ...STATIC_POLY_PIZZA_ACTIONS },
+    rig: { ...STATIC_POLY_PIZZA_RIG },
+    scale: 1,
+  };
+}
+
 export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'fox',
@@ -25,8 +110,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     rig: {
       head: ['Head', 'head', 'Neck', 'neck'],
       jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
-      forelimb: ['ForeArm', 'forearm', 'Arm', 'arm', 'FrontLeg', 'front_leg'],
-      tail: ['Tail', 'tail'],
+      forelimb: [...MESH2MOTION_FORELIMB],
+      hand: [...MESH2MOTION_HAND],
+      tail: ['Tail', 'Tail_Base', 'tail'],
       talkMorphs: ['mouthOpen', 'Mouth', 'jaw', 'viseme_aa'],
     },
     // Scale is a fine-tune after auto-normalize-to-height in AnimalWebView
@@ -52,8 +138,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     rig: {
       head: ['Head', 'head', 'Neck', 'neck'],
       jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
-      forelimb: ['ForeArm', 'forearm', 'FrontLeg', 'front_leg', 'Arm', 'arm'],
-      tail: ['Tail', 'tail'],
+      forelimb: [...MESH2MOTION_FORELIMB],
+      hand: [...MESH2MOTION_HAND],
+      tail: ['Tail', 'Tail_Base', 'tail'],
       talkMorphs: ['mouthOpen', 'Mouth', 'jaw'],
     },
     scale: 1,
@@ -142,39 +229,14 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     rig: {
       head: ['Head', 'head', 'Neck', 'neck'],
       jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
-      forelimb: ['ForeArm', 'forearm', 'Arm', 'arm', 'FrontLeg', 'front_leg'],
-      tail: ['Tail', 'tail'],
+      forelimb: [...MESH2MOTION_FORELIMB],
+      hand: [...MESH2MOTION_HAND],
+      tail: ['Tail', 'Tail_Base', 'tail'],
       talkMorphs: ['mouthOpen', 'Mouth', 'jaw', 'viseme_aa'],
     },
     scale: 1,
   },
-  {
-    id: 'cat',
-    label: 'Cat',
-    // Cat v2 is an original declarative model built by the shared procedural
-    // renderer. Keep the remote path empty so a legacy GLB cannot supersede it.
-    modelPath: '',
-    proceduralModel: 'cat-v2',
-    clips: { idle: 'procedural_idle', talk: 'procedural_talk', react: 'procedural_play' },
-    actions: {
-      idle: [],
-      talk: [],
-      wave: [],
-      play: [],
-      curious: [],
-      gentle: [],
-    },
-    rig: {
-      head: ['Head'],
-      jaw: ['Jaw'],
-      forelimb: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R'],
-      hindlimb: ['Hindlimb_L', 'Hindlimb_R', 'HindFoot_L', 'HindFoot_R'],
-      ear: ['Ear_L', 'Ear_R'],
-      tail: ['TailBase', 'TailMid', 'TailTip'],
-      talkMorphs: ['Jaw', 'Muzzle_L', 'Muzzle_R'],
-    },
-    scale: 1,
-  },
+  polyPizzaCompanion('cat', 'Cat'),
   {
     id: 'panda',
     label: 'Panda',
@@ -192,8 +254,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     rig: {
       head: ['Head', 'head', 'Neck', 'neck'],
       jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
-      forelimb: ['ForeArm', 'forearm', 'Arm', 'arm', 'FrontLeg', 'front_leg'],
-      tail: ['Tail', 'tail'],
+      forelimb: [...MESH2MOTION_FORELIMB],
+      hand: [...MESH2MOTION_HAND],
+      tail: ['Tail', 'Tail_Base', 'tail'],
       talkMorphs: ['mouthOpen', 'Mouth', 'jaw', 'viseme_aa'],
     },
     scale: 1,
@@ -225,8 +288,7 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'rabbit',
     label: 'Rabbit',
-    // The original seated model is declarative and renderer-built. Keep the
-    // legacy field empty so no remote GLB can become the Rabbit authority.
+    // Retired from onboarding; kept for legacy Bun/Rabbit profiles.
     modelPath: '',
     proceduralModel: 'rabbit-v2',
     clips: { idle: 'procedural_idle', talk: 'procedural_talk', react: 'procedural_play' },
@@ -241,14 +303,24 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     rig: {
       head: ['Head'],
       jaw: ['Jaw'],
-      forelimb: ['Forelimb_L', 'Forelimb_R', 'ForePaw_L', 'ForePaw_R'],
+      forelimb: ['Forelimb_L', 'Forelimb_R'],
       hindlimb: ['Hindlimb_L', 'Hindlimb_R', 'HindFoot_L', 'HindFoot_R'],
       ear: ['Ear_L', 'Ear_R'],
       tail: ['Tail'],
+      hand: ['ForePaw_L', 'ForePaw_R'],
       talkMorphs: ['Jaw', 'Muzzle_L', 'Muzzle_R'],
     },
     scale: 1,
   },
+  polyPizzaCompanion('capybara', 'Capybara'),
+  polyPizzaCompanion('hamster', 'Hamster'),
+  polyPizzaCompanion('koala', 'Koala'),
+  polyPizzaCompanion('bear', 'Bear'),
+  polyPizzaCompanion('raccoon', 'Raccoon'),
+  polyPizzaCompanion('duck', 'Duck'),
+  polyPizzaCompanion('sheep', 'Sheep'),
+  polyPizzaCompanion('seal', 'Seal'),
+  polyPizzaCompanion('sloth', 'Sloth'),
 ];
 
 export function getCharacter(id: string): CharacterDef | undefined {

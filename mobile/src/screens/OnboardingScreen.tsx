@@ -233,9 +233,9 @@ export function OnboardingScreen({ onDone }: Props) {
               </Text>
 
               <View style={styles.infoCard}>
-                <Text style={styles.infoTitle}>📸 Meal Photos</Text>
+                <Text style={styles.infoTitle}>Check-in photos</Text>
                 <Text style={styles.infoBody}>
-                  Take photos of what you eat. Your care team can see your meals to understand your patterns.
+                  One photo of food or drink counts the same. Your care team can see them to understand your patterns.
                 </Text>
               </View>
 

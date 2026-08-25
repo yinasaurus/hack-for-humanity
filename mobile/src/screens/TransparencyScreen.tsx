@@ -33,8 +33,10 @@ export function TransparencyScreen({ onDone }: Props) {
         </Text>
 
         <View style={styles.block}>
-          <Text style={styles.blockTitle}>Meal photos</Text>
-          <Text style={styles.blockBody}>The photos you take, and which days you said hello.</Text>
+          <Text style={styles.blockTitle}>Check-in photos</Text>
+          <Text style={styles.blockBody}>
+            Photos of food or drink you take, and which days you said hello.
+          </Text>
         </View>
 
         <View style={styles.block}>

@@ -1,0 +1,101 @@
+Buddi — what we’ve done so far
+================================
+(Hack for Humanity · patient companion + clinician dashboard)
+
+PRODUCT
+-------
+- Renamed KindPlate → Buddi (user-facing). Package id may still say kindplate.
+- Patient app (Expo / mobile), Express backend, Vite clinician dashboard.
+- Ethics: no patient calories/scores; companion rests (never suffers); AI observes,
+  clinicians decide; live camera only; cosmetics-only growth.
+
+
+PATIENT APP (mobile/)
+---------------------
+Check-in
+- Live camera meal photo only (no gallery).
+- Non-food photos rejected before save (meal gate).
+- Clear “Saved” screen, then soft hello on Home.
+- Soft clinician-only flag for possible screen/image of food (patient never sees it).
+
+Companion Home
+- 3D companion (WebView), Talk / Wave / Play / Sleep.
+- Talk: multi-line scripts + speech bubble; speaks on tap (unmutes if needed).
+- Care note card from clinician reminders; “Not today” moves gentle plan days.
+- Hello dots strip (presence, not scores).
+- Style look link → Customize.
+- Cleaner, shorter copy throughout.
+- Support chip (crisis lines) moved so it doesn’t block Capture / Skip.
+
+Customize / Style
+- Name, companion type, outfit cosmetics.
+- “Coming up” keepsake path always visible (first block under preview):
+  Soft scarf, Sunny meadow, etc. as “~N hellos” / “Yours” — not a deadline calendar.
+- Keepsakes only here (removed duplicate list from Home).
+
+Welcome / login
+- Clean login (no 2D fox preview before sign-in).
+- Demo: maya@demo.local / demo.
+
+Settings
+- Mute voice, quiet-time music, gentle self-reminders.
+- Privacy blurb (no patient calories).
+- Note: Expo Go on Android does not fire real OS notifications.
+
+Notifications
+- Clinician + self reminders schedule via expo-notifications when allowed.
+- Expo Go Android: in-app care card only; OS pop-ups need an EAS APK build.
+- Time slots map to ~8am / ~12pm / ~6pm.
+
+
+CLINICIAN DASHBOARD (dashboard/)
+--------------------------------
+- Login: clinic@demo.local / demo.
+- Patient list, alerts (“Why this alert”), meal photos, estimates, AI summary.
+- Celebrate checkup (attendance only — no BMI/weight).
+- Care reminder: note + frequency + Morning / Midday / Evening.
+- Optional “Plan with Gemini” soft day/meal slots (no catch-up stacking).
+- Soft “possible screen photo” hint on check-ins (clinician only).
+
+
+BACKEND (backend/)
+------------------
+- JWT auth, roles, JSON store + uploads.
+- Meal analysis (Gemini preferred → OpenAI → mock); isMeal gate; possibleScreenPhoto.
+- Milestones / unlocks from unique hello days (not streak punishment).
+- Clinician reminders + optional care schedule + redistribute on “Not today”.
+- Checkup celebrations (one-time patient ack).
+- Seeded demo users (Maya, Jordan, Sam, clinic).
+
+
+REPO CLEANUP
+------------
+- Removed unused CharacterScreen / R3F AnimalStage path / CompanionPet / MuteBar.
+- Dropped heavy three.js native deps (WebView companion only).
+- Removed stray root node_modules/.expo, outdated NOTES.md / TEAM.md.
+- Docs: README + DEMO.md (Buddi / Gemini aware).
+
+
+HOW TO RUN (quick)
+------------------
+1. backend:  cp .env.example .env → set JWT_SECRET (+ GEMINI_API_KEY) → npm i → npm run seed → npm run dev
+2. dashboard: npm i → npm run dev  → clinic@demo.local / demo
+3. mobile:    EXPO_PUBLIC_API_URL=http://YOUR_PC_IP:3001 → npx expo start
+   Same Wi‑Fi/hotspot as phone. Demo patient: maya@demo.local / demo
+
+See README.md and DEMO.md for the full pitch path.
+
+
+STILL LIMITED / HONEST
+----------------------
+- Camera-only ≠ proof meal was eaten; screen photos of food can pass meal gate
+  (clinician soft-flag only).
+- Expo Go Android: no reliable OS reminder pop-ups — use EAS APK for that.
+- iOS store/Expo Go SDK mismatch may need APK demo or Apple credentials for iOS builds.
+- Local JSON store — not production multi-instance DB.
+
+
+Demo accounts
+-------------
+Patient:    maya@demo.local / demo
+Clinician:  clinic@demo.local / demo

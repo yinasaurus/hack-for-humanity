@@ -135,7 +135,9 @@ export function SettingsScreen({ navigation }: Props) {
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Mute voice</Text>
-              <Text style={styles.rowBody}>Talk plays only after a tap. Turn this on to keep it quiet.</Text>
+              <Text style={styles.rowBody}>
+                Soft companion chirps stay quiet. Wave and play still animate — only the sound turns off.
+              </Text>
             </View>
             <Switch
               value={settings.companionMuted}

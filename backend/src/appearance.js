@@ -8,12 +8,13 @@
 
 export const SELECTABLE_PET_TYPES = [
   'fox', 'horse', 'parrot', 'flamingo', 'stork',
-  'dog', 'cat', 'panda', 'penguin', 'rabbit',
+  'dog', 'cat', 'panda', 'penguin',
+  'capybara', 'hamster', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth',
 ];
 
-/** IDs from the first onboarding prototype; readable but retired for new users. */
+/** IDs from earlier prototypes; readable but retired for new users. */
 export const LEGACY_PET_TYPES = [
-  'capybara', 'cow', 'chipmunk', 'monkey', 'hamster', 'otter',
+  'rabbit', 'cow', 'chipmunk', 'monkey', 'otter',
 ];
 
 export const ALLOWED = {

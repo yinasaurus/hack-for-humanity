@@ -366,12 +366,199 @@ export const ANIMAL_PRESENTATIONS: Record<string, AnimalPresentation> = {
       ],
     },
   },
+  capybara: {
+    framing: { fit: 1.2, groundRadius: 1.05 },
+    material: { tint: '#c4a882', strength: 0.05, roughness: 0.82 },
+    visual: smoothToyVisual(),
+    actions: {
+      wave: motion(1900, 0.03, 0.22, 0.08, 0.018, 0.4),
+      play: motion(1600, 0.055, 0.32, 0.1, 0.04, 0.6),
+      curious: motion(2400, 0.016, 0.26, 0.12, 0.01, 0.28),
+      gentle: motion(1700, 0.025, 0.1, 0.04, 0.016, 0.3),
+    },
+    voice: {
+      pitch: 0.78,
+      rate: 0.82,
+      volume: 0.16,
+      caption: 'Hmm-rumble!',
+      call: [
+        { frequency: 140, endFrequency: 110, durationMs: 280, offsetMs: 0, waveform: 'sine' },
+        { frequency: 120, endFrequency: 160, durationMs: 200, offsetMs: 240, waveform: 'triangle' },
+      ],
+    },
+  },
+  hamster: {
+    framing: { fit: 0.72, groundRadius: 0.88 },
+    material: { tint: '#e0b898', strength: 0.06, roughness: 0.76 },
+    visual: visualWith({ eyes: { scale: 1.12, color: '#1a1510' } }),
+    actions: {
+      wave: motion(1300, 0.06, 0.45, 0.16, 0.028, 0.8),
+      play: motion(1100, 0.1, 0.65, 0.2, 0.07, 1.1),
+      curious: motion(1700, 0.035, 0.55, 0.22, 0.016, 0.58),
+      gentle: motion(1200, 0.05, 0.22, 0.1, 0.028, 0.58),
+    },
+    voice: {
+      pitch: 1.4,
+      rate: 1.05,
+      volume: 0.12,
+      caption: 'Peep-peep!',
+      call: [
+        { frequency: 1400, endFrequency: 1800, durationMs: 60, offsetMs: 0, waveform: 'sine' },
+        { frequency: 1600, endFrequency: 1200, durationMs: 70, offsetMs: 80, waveform: 'triangle' },
+      ],
+    },
+  },
+  koala: {
+    framing: { fit: 1.15, groundRadius: 0.98 },
+    material: { tint: '#b8b0a4', strength: 0.04, roughness: 0.86 },
+    visual: smoothToyVisual(),
+    actions: {
+      wave: motion(2000, 0.028, 0.2, 0.08, 0.016, 0.38),
+      play: motion(1650, 0.05, 0.3, 0.1, 0.038, 0.55),
+      curious: motion(2500, 0.014, 0.24, 0.12, 0.01, 0.26),
+      gentle: motion(1800, 0.022, 0.1, 0.04, 0.014, 0.28),
+    },
+    voice: {
+      pitch: 0.7,
+      rate: 0.78,
+      volume: 0.15,
+      caption: 'Growl-hum!',
+      call: [
+        { frequency: 110, endFrequency: 90, durationMs: 300, offsetMs: 0, waveform: 'triangle' },
+        { frequency: 95, endFrequency: 130, durationMs: 220, offsetMs: 260, waveform: 'sine' },
+      ],
+    },
+  },
+  bear: {
+    framing: { fit: 1.25, groundRadius: 1.02 },
+    material: { tint: '#a87850', strength: 0.05, roughness: 0.84 },
+    visual: smoothToyVisual(),
+    actions: {
+      wave: motion(1950, 0.032, 0.24, 0.08, 0.018, 0.4),
+      play: motion(1600, 0.058, 0.34, 0.11, 0.042, 0.6),
+      curious: motion(2450, 0.016, 0.26, 0.12, 0.01, 0.28),
+      gentle: motion(1750, 0.026, 0.1, 0.04, 0.016, 0.3),
+    },
+    voice: {
+      pitch: 0.72,
+      rate: 0.8,
+      volume: 0.16,
+      caption: 'Gruff-hmm!',
+      call: [
+        { frequency: 130, endFrequency: 100, durationMs: 260, offsetMs: 0, waveform: 'triangle' },
+        { frequency: 115, endFrequency: 150, durationMs: 200, offsetMs: 230, waveform: 'sine' },
+      ],
+    },
+  },
+  raccoon: {
+    framing: { fit: 1.05, groundRadius: 0.95 },
+    material: { tint: '#9a9590', strength: 0.05, roughness: 0.8 },
+    visual: visualWith({ eyes: { scale: 1.1, color: '#141820' } }),
+    actions: {
+      wave: motion(1600, 0.045, 0.36, 0.14, 0.022, 0.55),
+      play: motion(1350, 0.08, 0.5, 0.18, 0.055, 0.85),
+      curious: motion(2100, 0.025, 0.42, 0.18, 0.014, 0.4),
+      gentle: motion(1450, 0.038, 0.16, 0.08, 0.022, 0.42),
+    },
+    voice: {
+      pitch: 1.05,
+      rate: 0.95,
+      volume: 0.14,
+      caption: 'Chitter-chirp!',
+      call: [
+        { frequency: 520, endFrequency: 680, durationMs: 90, offsetMs: 0, waveform: 'triangle' },
+        { frequency: 640, endFrequency: 480, durationMs: 100, offsetMs: 110, waveform: 'sine' },
+      ],
+    },
+  },
+  duck: {
+    framing: { fit: 0.95, groundRadius: 0.9 },
+    material: { tint: '#e8c85a', strength: 0.06, roughness: 0.72 },
+    visual: visualWith({ eyes: { scale: 1.05, color: '#1a1a14' } }),
+    actions: {
+      wave: motion(1500, 0.05, 0.34, 0.16, 0.024, 0.65),
+      play: motion(1250, 0.085, 0.48, 0.2, 0.055, 0.95),
+      curious: motion(2000, 0.028, 0.4, 0.18, 0.014, 0.45),
+      gentle: motion(1350, 0.04, 0.16, 0.1, 0.022, 0.45),
+    },
+    voice: {
+      pitch: 1.2,
+      rate: 0.98,
+      volume: 0.15,
+      caption: 'Quack-quack!',
+      call: [
+        { frequency: 480, endFrequency: 360, durationMs: 120, offsetMs: 0, waveform: 'square' },
+        { frequency: 420, endFrequency: 520, durationMs: 100, offsetMs: 140, waveform: 'square' },
+      ],
+    },
+  },
+  sheep: {
+    framing: { fit: 1.1, groundRadius: 1.0 },
+    material: { tint: '#f0ece4', strength: 0.04, roughness: 0.88 },
+    visual: smoothToyVisual(),
+    actions: {
+      wave: motion(1800, 0.035, 0.28, 0.1, 0.02, 0.45),
+      play: motion(1500, 0.06, 0.38, 0.12, 0.045, 0.65),
+      curious: motion(2300, 0.018, 0.3, 0.14, 0.012, 0.32),
+      gentle: motion(1600, 0.028, 0.12, 0.05, 0.018, 0.32),
+    },
+    voice: {
+      pitch: 0.95,
+      rate: 0.88,
+      volume: 0.15,
+      caption: 'Baa-soft!',
+      call: [
+        { frequency: 280, endFrequency: 340, durationMs: 180, offsetMs: 0, waveform: 'sine' },
+        { frequency: 320, endFrequency: 240, durationMs: 160, offsetMs: 200, waveform: 'triangle' },
+      ],
+    },
+  },
+  seal: {
+    framing: { fit: 1.05, groundRadius: 0.95 },
+    material: { tint: '#8a9098', strength: 0.05, roughness: 0.7 },
+    visual: visualWith({ eyes: { scale: 1.14, color: '#101418' } }),
+    actions: {
+      wave: motion(1700, 0.04, 0.3, 0.14, 0.022, 0.5),
+      play: motion(1400, 0.07, 0.42, 0.18, 0.05, 0.8),
+      curious: motion(2200, 0.022, 0.36, 0.16, 0.012, 0.36),
+      gentle: motion(1500, 0.035, 0.14, 0.08, 0.02, 0.38),
+    },
+    voice: {
+      pitch: 1.0,
+      rate: 0.9,
+      volume: 0.14,
+      caption: 'Arf-bark!',
+      call: [
+        { frequency: 360, endFrequency: 280, durationMs: 140, offsetMs: 0, waveform: 'square' },
+        { frequency: 300, endFrequency: 400, durationMs: 120, offsetMs: 160, waveform: 'triangle' },
+      ],
+    },
+  },
+  sloth: {
+    framing: { fit: 1.1, groundRadius: 1.0 },
+    material: { tint: '#a89070', strength: 0.06, roughness: 0.78 },
+    visual: smoothToyVisual(),
+    actions: {
+      wave: motion(2200, 0.025, 0.18, 0.08, 0.014, 0.32),
+      play: motion(1900, 0.045, 0.26, 0.1, 0.03, 0.48),
+      curious: motion(2600, 0.014, 0.22, 0.1, 0.008, 0.24),
+      gentle: motion(2000, 0.022, 0.08, 0.04, 0.012, 0.26),
+    },
+    voice: {
+      pitch: 0.72,
+      rate: 0.78,
+      volume: 0.14,
+      caption: 'Ahh-slow!',
+      call: [
+        { frequency: 160, endFrequency: 120, durationMs: 320, offsetMs: 0, waveform: 'sine' },
+        { frequency: 140, endFrequency: 180, durationMs: 240, offsetMs: 280, waveform: 'triangle' },
+      ],
+    },
+  },
 };
 
 export function animalPresentationFor(species?: string | null): AnimalPresentation {
-  // Stored Hamster records remain readable after Rabbit replaces onboarding.
-  const resolved = species === 'hamster' ? 'rabbit' : species || 'fox';
-  return ANIMAL_PRESENTATIONS[resolved] || ANIMAL_PRESENTATIONS.fox;
+  return ANIMAL_PRESENTATIONS[species || 'fox'] || ANIMAL_PRESENTATIONS.fox;
 }
 
 export type CompanionVitality = 'bright' | 'fatigued' | 'dim' | 'dormant';

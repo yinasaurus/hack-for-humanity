@@ -10,7 +10,15 @@ const PET_LABELS: Record<SelectablePetTypeId, string> = {
   cat: 'Cat',
   panda: 'Panda',
   penguin: 'Penguin',
-  rabbit: 'Rabbit',
+  capybara: 'Capybara',
+  hamster: 'Hamster',
+  koala: 'Koala',
+  bear: 'Bear',
+  raccoon: 'Raccoon',
+  duck: 'Duck',
+  sheep: 'Sheep',
+  seal: 'Seal',
+  sloth: 'Sloth',
 };
 
 /**
@@ -93,9 +101,21 @@ const pandaTalkSource: number = typeof require === 'undefined'
 const penguinTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
   : require('../../assets/audio/animal-calls/penguin-talk.m4a');
-const rabbitTalkSource: number = typeof require === 'undefined'
+const sheepTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
-  : require('../../assets/audio/animal-calls/rabbit-talk.wav');
+  : require('../../assets/audio/animal-calls/sheep-talk.m4a');
+const duckTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/duck-talk.m4a');
+const hamsterTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/hamster-talk.m4a');
+const sealTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/seal-talk.m4a');
+const capybaraTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/capybara-talk.m4a');
 
 const EMPTY_PROVENANCE: AnimalSoundProvenance = {
   sourceUrl: null,
@@ -162,6 +182,16 @@ function entriesFor(
     talk: readyTalkEntry(species, ready),
     // Play remains intentionally silent until a separate friendly cue is
     // licensed. Talk never borrows the same file for another interaction.
+    play: pendingEntry(species, 'play', 'pilot'),
+  };
+}
+
+function silentSpecies(species: SelectablePetTypeId): {
+  talk: AnimalSoundEntry;
+  play: AnimalSoundEntry;
+} {
+  return {
+    talk: pendingEntry(species, 'talk', 'pilot'),
     play: pendingEntry(species, 'play', 'pilot'),
   };
 }
@@ -294,19 +324,81 @@ export const ANIMAL_SOUND_MANIFEST = {
       downloadDate: DOWNLOAD_DATE,
     },
   }),
-  rabbit: entriesFor('rabbit', {
-    source: rabbitTalkSource,
-    durationMs: 2000,
-    byteSize: 176444,
+  sheep: entriesFor('sheep', {
+    source: sheepTalkSource,
+    durationMs: 1820,
+    byteSize: 15787,
     provenance: {
-      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Rabbit_oinks_and_squeaks.wav',
-      author: 'kessir (Freesound recording; Wikimedia Commons mirror)',
+      sourceUrl: 'https://freesound.org/people/Chipsplease/sounds/669765/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/669/669765_14629129-hq.mp3',
+      author: 'Chipsplease',
       license: 'CC0',
-      modifications: 'Trimmed the first 2.000 s of the verified rabbit oink/squeak WAV; decoded to mono 44.1 kHz signed 16-bit PCM; bundled as WAV for Expo SDK 57 cross-platform playback.',
-      sha256: 'f1972981c62348f1aef83b63110cdf18d3bfb84fb15132d205e4d61175f95553',
-      downloadDate: DOWNLOAD_DATE,
+      modifications: AAC_MODIFICATIONS('Trimmed ~1.80 s of the recorded sheep baa from the HQ preview.'),
+      sha256: 'd9f875599df44b957f4c7da221c19a19d2b2202976904df98ca53d9d75837037',
+      downloadDate: '2026-08-25',
     },
   }),
+  duck: entriesFor('duck', {
+    source: duckTalkSource,
+    durationMs: 410,
+    byteSize: 4250,
+    provenance: {
+      sourceUrl: 'https://freesound.org/people/Breviceps/sounds/445960/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/445/445960_9159316-hq.mp3',
+      author: 'Breviceps',
+      license: 'CC0',
+      modifications: AAC_MODIFICATIONS('Used the complete ~0.38 s cartoon duck quack from the HQ preview.'),
+      sha256: 'c8464ad52fc956c04b7e1561efdf84f3fbd0dc4f557eb9d9081e22d18627442b',
+      downloadDate: '2026-08-25',
+    },
+  }),
+  hamster: entriesFor('hamster', {
+    source: hamsterTalkSource,
+    durationMs: 1520,
+    byteSize: 13348,
+    provenance: {
+      sourceUrl: 'https://freesound.org/people/lusania/sounds/815243/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/815/815243_17523460-hq.mp3',
+      author: 'lusania',
+      license: 'CC0',
+      modifications: AAC_MODIFICATIONS('Trimmed ~1.50 s of the recorded hamster squeak from the HQ preview.'),
+      sha256: 'e65e4145cd5ac99a2fa9e82e34e6984bae25ba13708a636c42162cddc4825c76',
+      downloadDate: '2026-08-25',
+    },
+  }),
+  seal: entriesFor('seal', {
+    source: sealTalkSource,
+    durationMs: 1820,
+    byteSize: 16056,
+    provenance: {
+      sourceUrl: 'https://freesound.org/people/florianreichelt/sounds/450751/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/450/450751_6253486-hq.mp3',
+      author: 'florianreichelt',
+      license: 'CC0',
+      modifications: AAC_MODIFICATIONS('Trimmed ~1.80 s of the recorded seal call from the HQ preview.'),
+      sha256: 'b9dab2322e462d8877f5a49f659eed049660578285f130f8e92a388d9c0b7424',
+      downloadDate: '2026-08-25',
+    },
+  }),
+  capybara: entriesFor('capybara', {
+    source: capybaraTalkSource,
+    durationMs: 1820,
+    byteSize: 15957,
+    provenance: {
+      sourceUrl: 'https://freesound.org/people/%D0%9A%D0%B0%D0%BF%D1%8B%D0%B1%D0%B0%D1%80%D0%B0_12345/sounds/849980/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/849/849980_18656191-hq.mp3',
+      author: 'Капибара_12345',
+      license: 'CC0',
+      modifications: AAC_MODIFICATIONS('Trimmed ~1.80 s of the recorded capybara call from the HQ preview.'),
+      sha256: '5ac6176c71f96a0a3507f3ec340b12eced1dc17e6cb3fb2efd23da5f6133073f',
+      downloadDate: '2026-08-25',
+    },
+  }),
+  // Remaining Poly Pizza companions stay silent until a same-species CC0/CC-BY call is verified.
+  koala: silentSpecies('koala'),
+  bear: silentSpecies('bear'),
+  raccoon: silentSpecies('raccoon'),
+  sloth: silentSpecies('sloth'),
 } as const satisfies Record<SelectablePetTypeId, { talk: AnimalSoundEntry; play: AnimalSoundEntry }>;
 
 export const ANIMAL_SOUND_PILOT_SPECIES = Object.keys(ANIMAL_SOUND_MANIFEST) as SelectablePetTypeId[];

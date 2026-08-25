@@ -27,17 +27,35 @@ test('every species/action has continuous bounded anticipation, primary, seconda
   }
 });
 
-test('wave and play are intentionally different, with play using stronger/faster tail movement', () => {
+test('quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () => {
   for (const species of ['dog', 'cat', 'fox', 'horse', 'panda', 'rabbit']) {
     const wave = getAnimalChoreography(species, 'wave');
     const play = getAnimalChoreography(species, 'play');
-    const waveTail = wave.channels.find((channel) => channel.target === 'tail');
-    const playTail = play.channels.find((channel) => channel.target === 'tail');
-    assert.ok(waveTail && playTail, `${species} should expose tail intent`);
-    assert.ok(playTail.amplitude > waveTail.amplitude);
-    assert.ok(playTail.cycles > waveTail.cycles);
-    assert.notEqual(wave.durationMs, play.durationMs);
+    assert.ok(wave.channels.every((channel) => channel.target === 'forelimb'));
+    assert.ok(wave.channels.some((channel) => channel.axis === 'x' && channel.motion === 'lift'));
+    assert.ok(wave.channels.some((channel) => channel.axis === 'z' && channel.cycles >= 2.4));
+    assert.equal(wave.root.maxLift, 0);
     assert.ok(play.root.maxLift > wave.root.maxLift);
+    assert.notEqual(wave.durationMs, play.durationMs);
+    assert.ok(
+      wave.samples.some((sample) => Math.abs(sample.channels.forelimb?.z || 0) > 0.15),
+      `${species} wave should rock the forelimb`
+    );
+    assert.ok(
+      wave.samples.every((sample) => !sample.channels.head && !sample.channels.tail && !sample.channels.ear),
+      `${species} wave must leave head/ear/tail still`
+    );
+    assert.ok(wave.samples.every((sample) => sample.root.lift === 0));
+  }
+});
+
+test('play keeps stronger/faster tail movement than a quiet pose would', () => {
+  for (const species of ['dog', 'cat', 'fox', 'horse', 'panda', 'rabbit']) {
+    const play = getAnimalChoreography(species, 'play');
+    const playTail = play.channels.find((channel) => channel.target === 'tail');
+    assert.ok(playTail, `${species} play should expose tail intent`);
+    assert.ok(playTail.amplitude > 0.3);
+    assert.ok(playTail.cycles > 2);
   }
 });
 
@@ -90,8 +108,8 @@ test('reduced motion removes repeated limb/wing beats and stays centered', () =>
   }
 });
 
-test('legacy hamster id safely resolves to rabbit choreography', () => {
-  const legacy = getAnimalChoreography('hamster', 'wave');
-  assert.equal(legacy.species, 'rabbit');
-  assert.ok(legacy.channels.some((channel) => channel.target === 'ear'));
+test('hamster uses its own quadruped choreography rather than rabbit ears', () => {
+  const hamster = getAnimalChoreography('hamster', 'wave');
+  assert.equal(hamster.species, 'hamster');
+  assert.ok(hamster.channels.every((channel) => channel.target === 'forelimb'));
 });

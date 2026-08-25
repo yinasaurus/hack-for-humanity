@@ -40,6 +40,8 @@ export type AnimalRigHints = {
   eye?: readonly string[];
   ear?: readonly string[];
   forelimb?: readonly string[];
+  /** Preferred paw/foot tip for held accessories (distinct from shoulder wave pivot). */
+  hand?: readonly string[];
   hindlimb?: readonly string[];
   wing?: readonly string[];
   tail?: readonly string[];

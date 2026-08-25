@@ -64,38 +64,55 @@ test('Rabbit spec has a stable named low-poly hierarchy', () => {
     assert.ok(part.segments === 1 || (part.segments >= 4 && part.segments <= 10), `${part.name} needs intentional low-poly geometry`);
   }
 
-  for (const name of ['Body', 'Chest', 'Haunch_L', 'Haunch_R', 'Neck', 'Head']) {
-    assert.equal(byName.get(name).primitive, 'polyhedron', `${name} must use broad planar facets`);
+  // Reference style: faceted polyhedra / flat boxes — not smooth ellipsoids.
+  for (const name of ['Body', 'Chest', 'Haunch_L', 'Haunch_R', 'Neck', 'Head', 'Jaw']) {
+    assert.equal(byName.get(name).primitive, 'polyhedron', `${name} must use flat low-poly facets`);
   }
-  assert.equal(byName.get('Jaw').primitive, 'wedge', 'the muzzle must project as one tapered wedge');
-  assert.equal(byName.get('Ear_L').primitive, 'cone', 'ears must end in a sharp point');
-  assert.equal(byName.get('InnerEar_L').primitive, 'cone', 'inner-ear planes must echo the outer blade');
-  assert.equal(byName.get('Forelimb_L').primitive, 'box', 'front legs must read as angular columns');
-  assert.equal(byName.get('ForePaw_L').primitive, 'wedge', 'front paws must be long, flat, and tapered');
-  assert.equal(byName.get('HindFoot_L').primitive, 'wedge', 'hind feet must be long, flat, and tapered');
-  assert.equal(RABBIT_PROCEDURAL_MODEL.parts.some((part) => part.primitive === 'ellipsoid'), false);
-  assert.ok(byName.get('Ear_L').scale[1] > byName.get('Head').scale[1], 'ears must read as long and upright');
+  assert.equal(byName.get('Ear_L').primitive, 'cone', 'ears must be diamond leaf blades');
+  assert.equal(byName.get('InnerEar_L').primitive, 'cone', 'inner-ear panels follow the leaf inset');
+  assert.equal(byName.get('Forelimb_L').primitive, 'box', 'forelimbs are short angular seated columns');
+  assert.equal(byName.get('Tail').primitive, 'polyhedron', 'tail is a tiny tucked facet puff');
+  assert.equal(
+    RABBIT_PROCEDURAL_MODEL.parts.some((part) => part.primitive === 'ellipsoid'),
+    false,
+    'reference rabbit stays faceted — no smooth ellipsoids'
+  );
+
+  // Proportions vs the cream seated reference.
+  assert.ok(byName.get('Ear_L').scale[1] > byName.get('Head').scale[1] * 1.3, 'ears must read as long and upright');
+  assert.ok(byName.get('Ear_L').scale[1] > byName.get('Ear_L').scale[0] * 4, 'ears must be elongated blades, not short triangles');
+  assert.ok(byName.get('Ear_L').scale[2] < byName.get('Ear_L').scale[0] * 0.55, 'ears must stay flat (leaf depth)');
+  assert.ok(Math.abs(byName.get('Ear_L').rotation[2]) > 0.15, 'ears angle outward in a soft V');
+  assert.ok(Math.abs(byName.get('Ear_L').rotation[2]) < 0.35, 'ears must not splay into weird slabs');
+  assert.ok(byName.get('Ear_L').pivot[1] < -0.3, 'ear pivot sits at the skull so blades grow up');
+  assert.ok(byName.get('Jaw').scale[2] < byName.get('Head').scale[2] * 0.6, 'snout must stay short vs the skull');
+  assert.ok(byName.get('Head').scale[0] > byName.get('Body').scale[0] * 0.7, 'head is a large fraction of the egg body');
   assert.ok(RABBIT_PROCEDURAL_MODEL.framing.fit <= 0.65, 'Rabbit must fill the companion stage closely');
-  assert.ok(byName.get('Haunch_L').scale[0] > byName.get('Forelimb_L').scale[0] * 2.5, 'rear haunch must dominate the seated silhouette');
+  assert.ok(byName.get('Haunch_L').scale[0] > byName.get('Forelimb_L').scale[0] * 2, 'rear haunch still reads larger than a foreleg');
+  assert.ok(byName.get('Haunch_L').scale[0] < byName.get('Body').scale[0] * 0.7, 'haunches must not balloon into a giant butt');
+  assert.ok(Math.abs(byName.get('Haunch_L').position[0]) < byName.get('Body').scale[0] * 0.75, 'haunches stay tucked into the egg silhouette');
   assert.ok(byName.get('HindFoot_L').scale[2] > byName.get('HindFoot_L').scale[1] * 2.5, 'hind feet must be long and planted');
+  assert.ok(
+    Math.max(...byName.get('Tail').scale) < byName.get('Head').scale[0] * 0.4,
+    'bobtail stays tiny and tucked'
+  );
 });
 
-test('Rabbit palette matches the ivory reference with charcoal ears and glossy black eyes', () => {
+test('Rabbit palette matches the cream reference with charcoal ears and dark eyes', () => {
   const { materials, framing } = RABBIT_PROCEDURAL_MODEL;
-  assert.equal(materials.fur.color, '#CFC0A2');
-  assert.equal(materials.cream.color, '#E6D8BC');
-  assert.equal(materials.innerEar.color, '#34383A');
-  assert.equal(materials.nose.color, '#B89D7D');
+  assert.equal(materials.fur.color, '#E8DFC8');
+  assert.equal(materials.cream.color, '#E8DFC8', 'body stays uniform cream');
+  assert.equal(materials.innerEar.color, '#2C3032', 'inner ear is charcoal, not pink');
+  assert.equal(materials.nose.color, '#E8DFC8', 'nose blends into cream body');
   assert.equal(materials.eye.color, '#101315');
   assert.equal(materials.fur.flatShading, true);
   assert.equal(materials.cream.flatShading, true);
   assert.equal(materials.innerEar.flatShading, true);
   assert.ok(luma(materials.fur.color) - luma(framing.ground) > 0.15);
-  assert.ok(luma(materials.catchlight.color) > luma(materials.eye.color) + 0.7);
+  assert.ok(luma(materials.fur.color) - luma(materials.innerEar.color) > 0.45, 'charcoal inset must contrast cream');
+  assert.ok(luma(materials.catchlight.color) > luma(materials.eye.color) + 0.6);
   assert.ok(materials.eye.roughness < 0.2);
-  assert.ok(materials.eye.clearcoat > 0.3);
   assert.equal(materials.eye.metalness, 0);
-  assert.ok(materials.nose.roughness <= 0.4);
 });
 
 test('Rabbit exposes action, growth, eye, and accessory anchors without topology assumptions', () => {

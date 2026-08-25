@@ -322,7 +322,7 @@ export async function submitCheckInPhoto(
   const form = new FormData();
   form.append('photo', {
     uri,
-    name: 'meal.jpg',
+    name: 'checkin.jpg',
     type: mimeType,
   } as unknown as Blob);
 

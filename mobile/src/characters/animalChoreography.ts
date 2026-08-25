@@ -40,7 +40,7 @@ export type ChoreographyChannelIntent = {
   /** Phase in radians, used to avoid every appendage moving in lockstep. */
   phase: number;
   phaseName: ChoreographyPhaseName;
-  motion: 'greeting' | 'flap' | 'wag' | 'perk' | 'alternate';
+  motion: 'greeting' | 'flap' | 'wag' | 'perk' | 'alternate' | 'lift';
   /** Apply a mirrored sign to alternating discovered bones. */
   mirrored?: boolean;
   /** A segmented tail should receive the intent on every matching segment. */
@@ -131,10 +131,11 @@ const ROOT: ChoreographyRootIntent = {
 };
 
 const WAVE_PHASES: readonly ChoreographyPhase[] = [
-  phase('anticipation', 0, 0.16, 0.38),
-  phase('primary', 0.16, 0.72, 1),
-  phase('secondary', 0.72, 0.88, 0.5),
-  phase('settle', 0.88, 1, 0.36),
+  // Anticipation raises the paw; primary holds it up while rocking; settle returns.
+  phase('anticipation', 0, 0.14, 0.85),
+  phase('primary', 0.14, 0.78, 1),
+  phase('secondary', 0.78, 0.9, 0.35),
+  phase('settle', 0.9, 1, 0.28),
 ];
 
 const PLAY_PHASES: readonly ChoreographyPhase[] = [
@@ -150,6 +151,16 @@ type ChoreographyRuntimeProfile = Pick<
   'action' | 'phases' | 'channels' | 'root'
 >;
 
+/** Greeting wave: one front paw lifts, rocks side-to-side, then returns. Body stays planted. */
+const waveForelimbChannels = (): ChoreographyChannelIntent[] => [
+  // Raise + hold through anticipation→primary (lift motion follows phase envelope).
+  channel('forelimb', 'x', -0.82, 1, 0, 'primary', 'lift'),
+  // Slight outward open while raised.
+  channel('forelimb', 'y', 0.22, 1, 0, 'primary', 'lift'),
+  // Side-to-side rock ≈ 2.5–3 waves while the paw is up.
+  channel('forelimb', 'z', 0.72, 2.7, 0, 'primary', 'greeting'),
+];
+
 const quadrupedDefinition = (
   species: string,
   action: ChoreographyAction
@@ -162,23 +173,30 @@ const quadrupedDefinition = (
   return {
     species,
     action,
-    durationMs: play ? 1540 : 1710,
+    durationMs: play ? 1540 : 1780,
     reducedMotionDurationMs: 520,
     phases,
-    root: { ...ROOT, maxLift: play ? 0.11 : 0.025, maxScaleY: play ? 0.08 : 0.025 },
-    rig: { wings: 'available', tail: 'segmented', fallback: 'head-and-root' },
-    channels: [
-      channel('head', 'x', play ? 0.1 : 0.13, play ? 2.1 : 1.35, 0.2, 'secondary', 'greeting'),
-      channel('forelimb', 'z', limbAmplitude, play ? 3.2 : 2.1, 0, 'primary', play ? 'alternate' : 'greeting', {
-        mirrored: play,
-      }),
-      channel('ear', 'z', play ? 0.19 : 0.14, play ? 2.8 : 1.6, 1.1, play ? 'secondary' : 'primary', 'perk', {
-        mirrored: true,
-      }),
-      channel('tail', 'y', tailAmplitude, tailCycles, play ? 0.42 : 0.18, play ? 'secondary' : 'primary', 'wag', {
-        allMatches: true,
-      }),
-    ],
+    // Wave must not bob/yaw the root — only the chosen forelimb moves.
+    root: { ...ROOT, maxLift: play ? 0.11 : 0, maxScaleY: play ? 0.08 : 0 },
+    rig: {
+      wings: 'available',
+      tail: 'segmented',
+      fallback: play ? 'head-and-root' : 'root-only',
+    },
+    channels: play
+      ? [
+          channel('head', 'x', 0.1, 2.1, 0.2, 'secondary', 'greeting'),
+          channel('forelimb', 'z', limbAmplitude, 3.2, 0, 'primary', 'alternate', {
+            mirrored: true,
+          }),
+          channel('ear', 'z', 0.19, 2.8, 1.1, 'secondary', 'perk', {
+            mirrored: true,
+          }),
+          channel('tail', 'y', tailAmplitude, tailCycles, 0.42, 'secondary', 'wag', {
+            allMatches: true,
+          }),
+        ]
+      : waveForelimbChannels(),
   };
 };
 
@@ -212,15 +230,27 @@ const birdDefinition = (
 
 const pandaDefinition = (action: ChoreographyAction): ChoreographyDefinition => {
   const play = action === 'play';
+  const base = quadrupedDefinition('panda', action);
+  if (!play) {
+    return {
+      ...base,
+      durationMs: 1950,
+      channels: [
+        channel('forelimb', 'x', -0.7, 1, 0, 'primary', 'lift'),
+        channel('forelimb', 'y', 0.28, 1, 0, 'primary', 'lift'),
+        channel('forelimb', 'z', 0.62, 2.5, 0.15, 'primary', 'greeting'),
+      ],
+    };
+  }
   return {
-    ...quadrupedDefinition('panda', action),
-    durationMs: play ? 1680 : 1950,
+    ...base,
+    durationMs: 1680,
     channels: [
-      channel('head', 'x', play ? 0.08 : 0.11, play ? 1.8 : 1.2, 0.15, 'secondary', 'greeting'),
-      channel('forelimb', 'z', play ? 0.48 : 0.38, play ? 2.5 : 1.8, 0.2, 'primary', play ? 'alternate' : 'greeting', {
-        mirrored: play,
+      channel('head', 'x', 0.08, 1.8, 0.15, 'secondary', 'greeting'),
+      channel('forelimb', 'z', 0.48, 2.5, 0.2, 'primary', 'alternate', {
+        mirrored: true,
       }),
-      channel('tail', 'y', play ? 0.53 : 0.31, play ? 4.2 : 2.4, 0.1, play ? 'secondary' : 'primary', 'wag', {
+      channel('tail', 'y', 0.53, 4.2, 0.1, 'secondary', 'wag', {
         allMatches: true,
       }),
     ],
@@ -250,12 +280,20 @@ const penguinDefinition = (action: ChoreographyAction): ChoreographyDefinition =
 const rabbitDefinition = (action: ChoreographyAction): ChoreographyDefinition => {
   const base = quadrupedDefinition('rabbit', action);
   const play = action === 'play';
+  if (!play) {
+    return {
+      ...base,
+      durationMs: 1660,
+      // Keep wave paw-only — ears stay still so the gesture reads as a wave.
+      channels: waveForelimbChannels(),
+    };
+  }
   return {
     ...base,
-    durationMs: play ? 1480 : 1660,
+    durationMs: 1480,
     channels: [
       ...base.channels.filter((intent) => intent.target !== 'ear'),
-      channel('ear', 'z', play ? 0.32 : 0.24, play ? 3.3 : 2, 0.5, play ? 'secondary' : 'primary', 'perk', {
+      channel('ear', 'z', 0.32, 3.3, 0.5, 'secondary', 'perk', {
         mirrored: true,
       }),
     ],
@@ -264,7 +302,7 @@ const rabbitDefinition = (action: ChoreographyAction): ChoreographyDefinition =>
 
 function canonicalSpecies(species: string | null | undefined): string {
   const id = String(species || '').toLowerCase();
-  return id === 'hamster' ? 'rabbit' : id || 'animal';
+  return id || 'animal';
 }
 
 function definitionFor(species: string, action: ChoreographyAction): ChoreographyDefinition {
@@ -305,6 +343,8 @@ function signalFor(
   const u = clamp((t - current.start) / Math.max(current.end - current.start, 1e-5), 0, 1);
   const angle = u * Math.PI * 2 * intent.cycles + intent.phase;
   if (intent.motion === 'perk') return envelope * Math.sin(Math.min(Math.PI, u * Math.PI));
+  // Hold a raised pose for the duration of the phase (used for paw lift).
+  if (intent.motion === 'lift') return envelope;
   if (intent.motion === 'wag') return envelope * Math.sin(angle);
   if (intent.motion === 'alternate') return envelope * Math.sin(angle);
   if (intent.motion === 'flap') return envelope * Math.sin(angle);
@@ -347,12 +387,13 @@ export function sampleAnimalChoreography(
   const anticipation = phaseEnvelope(profile, 'anticipation', t);
   const primary = phaseEnvelope(profile, 'primary', t);
   const secondary = phaseEnvelope(profile, 'secondary', t);
-  const settle = phaseEnvelope(profile, 'settle', t);
   if (profile.action === 'play') {
     root.lift = clamp(primary * 0.11 + secondary * 0.04, 0, profile.root.maxLift);
     root.scaleY = clamp(1 - anticipation * profile.root.maxScaleY, 1 - profile.root.maxScaleY, 1);
   } else {
-    root.lift = clamp(secondary * 0.012, 0, profile.root.maxLift);
+    // Wave: no root bob — paw motion alone carries the greeting.
+    root.lift = 0;
+    root.scaleY = 1;
   }
 
   for (const intent of profile.channels) {
@@ -366,12 +407,8 @@ export function sampleAnimalChoreography(
     };
   }
 
-  // A tiny follow-through keeps the ending from snapping back, while keeping
-  // settle visibly quieter than the primary movement.
-  if (settle > 0 && profile.action === 'wave') {
-    const head = channels.head || { x: 0, y: 0, z: 0 };
-    channels.head = { ...head, x: clamp(head.x + settle * 0.018, -1.1, 1.1) };
-  }
+  // Wave settle is already handled by the forelimb channel envelopes fading out.
+  // Do not add head follow-through — the body must stay still during a paw wave.
   return { root, channels };
 }
 
