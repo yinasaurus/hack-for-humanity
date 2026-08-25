@@ -30,6 +30,7 @@ export type PatientRow = {
   streak: number;
   lastCheckIn?: string;
   totalDays: number;
+  unreadVisitNotes?: number;
 };
 
 export type AlertRow = {

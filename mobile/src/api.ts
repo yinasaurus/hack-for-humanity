@@ -299,13 +299,17 @@ export async function updateAppearance(
 export async function submitCheckIn(
   userId: string,
   imageBase64: string,
-  mimeType = 'image/jpeg'
-): Promise<{ checkIn: unknown; companion: CompanionState }> {
+  mimeType = 'image/jpeg',
+  visitNote?: string
+): Promise<{ checkIn: unknown; companion: CompanionState; visitNoteSaved?: boolean }> {
   const cleaned = imageBase64.replace(/^data:[^;]+;base64,/, '');
+  const body: Record<string, string> = { imageBase64: cleaned, mimeType };
+  const note = (visitNote || '').trim();
+  if (note) body.visitNote = note;
   const res = await fetch(`${API_BASE}/api/patient/${userId}/check-in`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ imageBase64: cleaned, mimeType }),
+    body: JSON.stringify(body),
   });
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not save check-in');
@@ -317,14 +321,17 @@ export async function submitCheckIn(
 export async function submitCheckInPhoto(
   userId: string,
   uri: string,
-  mimeType = 'image/jpeg'
-): Promise<{ checkIn: unknown; companion: CompanionState }> {
+  mimeType = 'image/jpeg',
+  visitNote?: string
+): Promise<{ checkIn: unknown; companion: CompanionState; visitNoteSaved?: boolean }> {
   const form = new FormData();
   form.append('photo', {
     uri,
     name: 'checkin.jpg',
     type: mimeType,
   } as unknown as Blob);
+  const note = (visitNote || '').trim();
+  if (note) form.append('visitNote', note);
 
   const headers = await authHeaders(false);
   const res = await fetch(`${API_BASE}/api/patient/${userId}/check-in`, {
@@ -335,6 +342,25 @@ export async function submitCheckInPhoto(
   const data = await parseJson(res);
   if (!res.ok) throw new Error(data.error || 'Could not save check-in');
   assertNoNutritionLeak(data);
+  return data;
+}
+
+/** Optional free-text for care team — stored verbatim; no AI processing. */
+export async function submitVisitNote(
+  userId: string,
+  text: string,
+  checkInId?: string
+): Promise<{ visitNoteSaved: boolean; id: string; createdAt: string }> {
+  const res = await fetch(`${API_BASE}/api/patient/${userId}/visit-notes`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      text: text.trim(),
+      ...(checkInId ? { checkInId } : {}),
+    }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not save note');
   return data;
 }
 

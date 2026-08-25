@@ -53,7 +53,7 @@ describe('meal photo rejection', () => {
   });
 
   it('exports a gentle patient error string', () => {
-    assert.match(NOT_A_MEAL_ERROR, /meal/i);
+    assert.match(NOT_A_MEAL_ERROR, /food|drink/i);
     assert.doesNotMatch(NOT_A_MEAL_ERROR, /calorie|score|fail/i);
   });
 });

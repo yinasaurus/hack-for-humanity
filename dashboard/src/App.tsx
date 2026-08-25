@@ -35,6 +35,11 @@ function formatDate(iso?: string) {
   });
 }
 
+function formatApproxKcal(n?: number) {
+  const kcal = Math.round(Number(n) || 0);
+  return `~${kcal} kcal (estimated)`;
+}
+
 function formatDay(iso?: string) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -145,6 +150,13 @@ export default function App() {
       try {
         const d = await fetchPatientDetail(selectedId);
         setDetail(d);
+        // Refresh list badges after opening chart (notes marked read server-side).
+        try {
+          const p = await fetchPatients();
+          setPatients(p);
+        } catch {
+          /* keep existing list */
+        }
         setClinical(d.patient.clinicalProfile || { heightCm: null, weightKg: null, dailyCalorieTarget: null, customGoals: [] });
         const existing = d.clinicianReminder as
           | {
@@ -450,6 +462,7 @@ export default function App() {
           <ul className="patient-list">
             {patients.map((p) => {
               const flags = alertCountByPatient.get(p.id) || 0;
+              const unreadNotes = p.unreadVisitNotes || 0;
               const on = p.id === selectedId;
               return (
                 <li key={p.id}>
@@ -458,13 +471,18 @@ export default function App() {
                     className={`patient-card ${on ? 'selected' : ''}`}
                     onClick={() => setSelectedId(p.id)}
                     aria-pressed={on}
-                    aria-label={`View patient ${p.name}`}
+                    aria-label={`View patient ${p.name}${unreadNotes ? `, ${unreadNotes} new note${unreadNotes === 1 ? '' : 's'}` : ''}`}
                   >
                     <div className="patient-card-top">
                       <strong>{p.name}</strong>
-                      {flags > 0 ? (
-                        <span className="flag-badge">{flags} flag{flags === 1 ? '' : 's'}</span>
-                      ) : null}
+                      <span className="patient-card-badges">
+                        {unreadNotes > 0 ? (
+                          <span className="note-badge">New note{unreadNotes > 1 ? ` · ${unreadNotes}` : ''}</span>
+                        ) : null}
+                        {flags > 0 ? (
+                          <span className="flag-badge">{flags} flag{flags === 1 ? '' : 's'}</span>
+                        ) : null}
+                      </span>
                     </div>
                     <div className="patient-card-meta">
                       <span>
@@ -821,6 +839,35 @@ export default function App() {
                 ) : null}
               </section>
 
+              <section className="block notes patient-visit-notes">
+                <h3>Patient notes for your visit</h3>
+                <p className="muted tiny">
+                  Written by the patient in their own words — shown verbatim. Not summarized or
+                  analyzed by AI.
+                </p>
+                <p className="visit-note-count">
+                  {(detail.patientVisitNotesThisMonth || 0) > 0
+                    ? `Patient added a note on ${detail.patientVisitNotesThisMonth} occasion${
+                        detail.patientVisitNotesThisMonth === 1 ? '' : 's'
+                      } this month`
+                    : 'No patient notes this month'}
+                </p>
+                {(detail.patientVisitNotes || []).length > 0 ? (
+                  <ul className="note-list">
+                    {(detail.patientVisitNotes || []).map(
+                      (n: { id: string; text: string; createdAt: string }) => (
+                        <li key={n.id}>
+                          <time className="muted tiny">{formatDate(n.createdAt)}</time>
+                          <p className="visit-note-text">{n.text}</p>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : (
+                  <p className="muted">No notes yet</p>
+                )}
+              </section>
+
               <section className="block notes">
                 <h3>Your notes</h3>
                 <textarea
@@ -872,6 +919,7 @@ export default function App() {
                         pending?: boolean;
                         isMeal?: boolean;
                         possibleScreenPhoto?: boolean;
+                        usedNutritionLabel?: boolean;
                       } | null;
                     }) => (
                       <li key={c.id} className="checkin-row">
@@ -898,12 +946,17 @@ export default function App() {
                                     {c.analysis.foodType}
                                     <span className="kcal">
                                       {' '}
-                                      · ~{c.analysis.estimatedCalories} kcal
+                                      · {formatApproxKcal(c.analysis.estimatedCalories)}
                                     </span>
                                     <span className={`conf conf-${c.analysis.confidence}`}>
                                       {' '}
                                       · {c.analysis.confidence}
                                     </span>
+                                    {c.analysis.usedNutritionLabel ? (
+                                      <span className="muted"> · label read</span>
+                                    ) : (
+                                      <span className="muted"> · visual estimate</span>
+                                    )}
                                   </>
                                 )}
                               </p>
@@ -935,7 +988,7 @@ export default function App() {
                   </button>
                   {showTrend ? (
                     <>
-                      <p className="muted tiny">Rough photo estimates — clinician only.</p>
+                      <p className="muted tiny">Rough photo estimates — clinician only. Always approximate.</p>
                       <ul className="trend">
                         {detail.calorieTrend.map(
                           (t: {
@@ -946,7 +999,7 @@ export default function App() {
                           }) => (
                             <li key={`${t.date}-${t.estimatedCalories}`}>
                               <span>{t.date}</span>
-                              <span>~{t.estimatedCalories} kcal</span>
+                              <span>{formatApproxKcal(t.estimatedCalories)}</span>
                               <span className="muted">{t.confidence}</span>
                             </li>
                           )

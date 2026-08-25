@@ -14,6 +14,8 @@ const defaultDb = () => ({
   summaries: {},
   alerts: [],
   clinicianNotes: {},
+  /** Patient → clinician free-text notes (verbatim; never AI-processed). */
+  patientVisitNotes: {},
   /** Clinician-logged checkup attendance celebrations (date + optional note only). */
   checkupCelebrations: {},
   /** Clinician-scheduled patient reminders (note + frequency; not AI-parsed). */

@@ -264,6 +264,13 @@
   gap: 8px;
 }
 
+.patient-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
 .flag-badge {
   font-size: 0.68rem;
   font-weight: 700;
@@ -274,6 +281,34 @@
   padding: 2px 7px;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+.note-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #e4eef8;
+  color: #1f4f7a;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.visit-note-count {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2f3a44;
+}
+
+.visit-note-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.patient-visit-notes {
+  border-left: 3px solid #7aa0c2;
+  padding-left: 12px;
 }
 
 .patient-card-meta {

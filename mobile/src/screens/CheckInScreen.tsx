@@ -1,11 +1,14 @@
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -13,7 +16,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, tapTarget } from '../theme';
 import { useAuth } from '../AuthContext';
-import { API_BASE, submitCheckIn, submitCheckInPhoto, type Unlock } from '../api';
+import {
+  API_BASE,
+  submitCheckIn,
+  submitCheckInPhoto,
+  submitVisitNote,
+  type Unlock,
+} from '../api';
 import { SupportChip } from '../components/SupportChip';
 
 type Props = {
@@ -25,6 +34,7 @@ type Props = {
 
 /**
  * Live camera capture only — no gallery picker.
+ * Optional free-text for care team is never required and never AI-processed.
  */
 export function CheckInScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -38,6 +48,10 @@ export function CheckInScreen({ navigation }: Props) {
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
   const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const [visitNote, setVisitNote] = useState('');
+  const [noteSentWithCheckIn, setNoteSentWithCheckIn] = useState(false);
+  const [postNoteBusy, setPostNoteBusy] = useState(false);
+  const [postNoteSaved, setPostNoteSaved] = useState(false);
 
   const goHomeSaved = (unlocks: Unlock[]) => {
     if (leaveTimer.current) {
@@ -111,7 +125,6 @@ export function CheckInScreen({ navigation }: Props) {
     setStatus('Capturing…');
 
     try {
-      // Faster capture: smaller JPEG, no base64 encode when multipart URI upload works
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.28,
         base64: false,
@@ -124,12 +137,17 @@ export function CheckInScreen({ navigation }: Props) {
       }
 
       setStatus('Saving…');
+      const noteForCareTeam = visitNote.trim();
 
       let result: Awaited<ReturnType<typeof submitCheckInPhoto>>;
       try {
-        result = await submitCheckInPhoto(user.id, photo.uri, 'image/jpeg');
+        result = await submitCheckInPhoto(
+          user.id,
+          photo.uri,
+          'image/jpeg',
+          noteForCareTeam || undefined
+        );
       } catch (uploadErr) {
-        // Fallback: read file as base64 JSON (slower — only if multipart fails)
         setStatus('Saving (backup path)…');
         const b64 = await FileSystem.readAsStringAsync(photo.uri, {
           encoding: FileSystem.EncodingType.Base64,
@@ -139,15 +157,21 @@ export function CheckInScreen({ navigation }: Props) {
             ? uploadErr
             : new Error('Could not read photo data');
         }
-        result = await submitCheckIn(user.id, b64, 'image/jpeg');
+        result = await submitCheckIn(
+          user.id,
+          b64,
+          'image/jpeg',
+          noteForCareTeam || undefined
+        );
       }
 
       setStatus(null);
       const unlocks = result.companion?.newlyUnlocked || [];
       setPendingUnlocks(unlocks);
+      setNoteSentWithCheckIn(Boolean(result.visitNoteSaved) || Boolean(noteForCareTeam));
       setDoneMessage('Your companion noticed you.');
-      // Hold the thank-you beat so it is readable, then return home with a soft hello.
-      leaveTimer.current = setTimeout(() => goHomeSaved(unlocks), 1600);
+      // Hold briefly, then leave — optional post-note can still be sent first.
+      leaveTimer.current = setTimeout(() => goHomeSaved(unlocks), 3200);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not save photo';
       const softMeal =
@@ -169,105 +193,193 @@ export function CheckInScreen({ navigation }: Props) {
     }
   };
 
+  const sendPostNote = async () => {
+    if (!user || postNoteBusy || !visitNote.trim()) return;
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+    setPostNoteBusy(true);
+    setError(null);
+    try {
+      await submitVisitNote(user.id, visitNote.trim());
+      setPostNoteSaved(true);
+      setVisitNote('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save note');
+    } finally {
+      setPostNoteBusy(false);
+    }
+  };
+
   if (doneMessage) {
+    const showOptionalNote = !noteSentWithCheckIn && !postNoteSaved;
     return (
-      <View
-        style={[
-          styles.root,
-          styles.savedRoot,
-          {
-            paddingTop: Math.max(insets.top, 12) + 8,
-            paddingBottom: Math.max(insets.bottom, 12) + 8,
-          },
-        ]}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.header} accessibilityRole="header">
-          Saved
-        </Text>
-        <Text style={styles.doneBig}>{doneMessage}</Text>
-        <Pressable
-          style={styles.shutter}
-          onPress={() => goHomeSaved(pendingUnlocks)}
-          accessibilityRole="button"
-          accessibilityLabel="Back to companion"
+        <ScrollView
+          contentContainerStyle={[
+            styles.root,
+            styles.savedRoot,
+            {
+              paddingTop: Math.max(insets.top, 12) + 8,
+              paddingBottom: Math.max(insets.bottom, 12) + 8,
+              flexGrow: 1,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.shutterText}>Back to companion</Text>
-        </Pressable>
-        <SupportChip />
-      </View>
+          <Text style={styles.header} accessibilityRole="header">
+            Saved
+          </Text>
+          <Text style={styles.doneBig}>{doneMessage}</Text>
+          {postNoteSaved ? (
+            <Text style={styles.noteAck}>Note shared with your care team.</Text>
+          ) : null}
+          {showOptionalNote ? (
+            <View style={styles.noteBlock}>
+              <Text style={styles.noteLabel}>
+                Anything you’d like your care team to know before your next visit?
+                Optional.
+              </Text>
+              <TextInput
+                style={styles.noteInput}
+                value={visitNote}
+                onChangeText={setVisitNote}
+                placeholder="Write in your own words…"
+                placeholderTextColor={colors.inkSoft}
+                multiline
+                textAlignVertical="top"
+                editable={!postNoteBusy}
+                accessibilityLabel="Optional note for your care team"
+              />
+              <Pressable
+                style={[styles.ghostBtn, (!visitNote.trim() || postNoteBusy) && styles.shutterDisabled]}
+                onPress={sendPostNote}
+                disabled={!visitNote.trim() || postNoteBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Send note to care team"
+              >
+                {postNoteBusy ? (
+                  <ActivityIndicator color={colors.sageDeep} />
+                ) : (
+                  <Text style={styles.ghostBtnText}>Send note</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Pressable
+            style={styles.shutter}
+            onPress={() => goHomeSaved(pendingUnlocks)}
+            accessibilityRole="button"
+            accessibilityLabel="Back to companion"
+          >
+            <Text style={styles.shutterText}>Back to companion</Text>
+          </Pressable>
+          <SupportChip />
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
   return (
-    <View
-      style={[
-        styles.root,
-        {
-          paddingTop: Math.max(insets.top, 12) + 8,
-          paddingBottom: Math.max(insets.bottom, 12) + 8,
-        },
-      ]}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.header} accessibilityRole="header">
-        Check-in photo
-      </Text>
-      <Text style={styles.sub}>Food or drink · live camera · skip anytime</Text>
-
-      <View style={styles.cameraWrap}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing="back"
-          mode="picture"
-          onCameraReady={() => setCameraReady(true)}
-          onMountError={(err) => {
-            setError(err.message || 'Camera failed to start');
-            setCameraReady(false);
-          }}
-        />
-        {!cameraReady ? (
-          <View style={styles.cameraBusy}>
-            <ActivityIndicator color={colors.white} />
-            <Text style={styles.cameraBusyText}>Starting camera…</Text>
-          </View>
-        ) : null}
-      </View>
-
-      {status ? <Text style={styles.status}>{status}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Pressable
-        style={[styles.shutter, (!cameraReady || busy) && styles.shutterDisabled]}
-        onPress={capture}
-        disabled={busy || !cameraReady}
-        accessibilityRole="button"
-        accessibilityLabel={cameraReady ? 'Capture check-in photo' : 'Wait for camera'}
-        accessibilityState={{ disabled: busy || !cameraReady }}
+      <ScrollView
+        contentContainerStyle={[
+          styles.root,
+          {
+            paddingTop: Math.max(insets.top, 12) + 8,
+            paddingBottom: Math.max(insets.bottom, 12) + 8,
+            flexGrow: 1,
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
       >
-        {busy ? (
-          <ActivityIndicator color={colors.white} />
-        ) : (
-          <Text style={styles.shutterText}>
-            {cameraReady ? 'Capture' : 'Wait for camera…'}
+        <Text style={styles.header} accessibilityRole="header">
+          Check-in photo
+        </Text>
+        <Text style={styles.sub}>Food or drink · live camera · skip anytime</Text>
+
+        <View style={styles.cameraWrap}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="back"
+            mode="picture"
+            onCameraReady={() => setCameraReady(true)}
+            onMountError={(err) => {
+              setError(err.message || 'Camera failed to start');
+              setCameraReady(false);
+            }}
+          />
+          {!cameraReady ? (
+            <View style={styles.cameraBusy}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={styles.cameraBusyText}>Starting camera…</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.noteBlock}>
+          <Text style={styles.noteLabel}>
+            Anything you’d like your care team to know before your next visit?
+            Optional — skip anytime.
           </Text>
-        )}
-      </Pressable>
+          <TextInput
+            style={styles.noteInput}
+            value={visitNote}
+            onChangeText={setVisitNote}
+            placeholder="Write in your own words…"
+            placeholderTextColor={colors.inkSoft}
+            multiline
+            textAlignVertical="top"
+            editable={!busy}
+            accessibilityLabel="Optional note for your care team"
+          />
+        </View>
 
-      <Pressable
-        onPress={() => navigation.goBack()}
-        disabled={busy}
-        accessibilityRole="button"
-        accessibilityLabel="Skip check-in for now"
-        style={styles.backHit}
-      >
-        <Text style={styles.back}>Not now — that’s okay</Text>
-      </Pressable>
+        {status ? <Text style={styles.status}>{status}</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {Platform.OS === 'android' ? (
-        <Text style={styles.hint}>Tip: hold steady for a second after tapping Capture.</Text>
-      ) : null}
-      <SupportChip />
-    </View>
+        <Pressable
+          style={[styles.shutter, (!cameraReady || busy) && styles.shutterDisabled]}
+          onPress={capture}
+          disabled={busy || !cameraReady}
+          accessibilityRole="button"
+          accessibilityLabel={cameraReady ? 'Capture check-in photo' : 'Wait for camera'}
+          accessibilityState={{ disabled: busy || !cameraReady }}
+        >
+          {busy ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.shutterText}>
+              {cameraReady ? 'Capture' : 'Wait for camera…'}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          onPress={() => navigation.goBack()}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Skip check-in for now"
+          style={styles.backHit}
+        >
+          <Text style={styles.back}>Not now — that’s okay</Text>
+        </Pressable>
+
+        {Platform.OS === 'android' ? (
+          <Text style={styles.hint}>Tip: hold steady for a second after tapping Capture.</Text>
+        ) : null}
+        <SupportChip />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -309,11 +421,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   cameraWrap: {
-    flex: 1,
+    height: 280,
     borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: colors.ink,
-    minHeight: 320,
   },
   camera: { flex: 1 },
   cameraBusy: {
@@ -326,6 +437,49 @@ const styles = StyleSheet.create({
   cameraBusyText: {
     color: '#fff',
     fontFamily: 'Nunito_600SemiBold',
+  },
+  noteBlock: {
+    marginTop: spacing.md,
+  },
+  noteLabel: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.inkSoft,
+    marginBottom: 8,
+  },
+  noteInput: {
+    minHeight: 88,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D5D0C6',
+    backgroundColor: '#FFFEFA',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 15,
+    color: colors.ink,
+  },
+  noteAck: {
+    marginTop: spacing.sm,
+    fontFamily: 'Nunito_600SemiBold',
+    color: colors.sageDeep,
+    fontSize: 15,
+  },
+  ghostBtn: {
+    marginTop: 10,
+    borderRadius: 18,
+    minHeight: tapTarget.min,
+    borderWidth: 1.5,
+    borderColor: colors.sageDeep,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  ghostBtnText: {
+    color: colors.sageDeep,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 16,
   },
   shutter: {
     marginTop: spacing.lg,
@@ -386,12 +540,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'Nunito_600SemiBold',
     lineHeight: 20,
-  },
-  done: {
-    marginTop: spacing.sm,
-    color: colors.sage,
-    textAlign: 'center',
-    fontFamily: 'Nunito_700Bold',
   },
   doneBig: {
     marginTop: spacing.lg,

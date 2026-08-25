@@ -57,6 +57,16 @@ import {
   normalizeClinicalProfile,
   patientReminderFromClinicalProfile,
 } from './clinical.js';
+import {
+  appendPatientVisitNote,
+  assertNoVisitNotesInAiPayload,
+  countPatientVisitNotesSince,
+  countUnreadPatientVisitNotes,
+  listPatientVisitNotes,
+  markPatientVisitNotesRead,
+  normalizePatientVisitNoteText,
+  startOfCurrentMonthIso,
+} from './patientVisitNotes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -194,7 +204,7 @@ export function toPatientCompanionState(userId, dbOverride = null) {
   };
 }
 
-async function saveCheckInFromBuffer(user, buffer, mimeType) {
+async function saveCheckInFromBuffer(user, buffer, mimeType, visitNoteText = '') {
   // Gate runs before we log — non-food/drink photos must not create a check-in.
   // Drinks count the same as meals (clinician estimates include them).
   // (This waits on vision; client still captures smaller JPEGs to keep it quicker.)
@@ -225,6 +235,9 @@ async function saveCheckInFromBuffer(user, buffer, mimeType) {
     photoPath: diskPath,
   };
 
+  const noteText = normalizePatientVisitNoteText(visitNoteText);
+  let visitNote = null;
+
   updateDb((d) => {
     d.checkIns.push(checkIn);
     d.analyses[checkInId] = {
@@ -239,11 +252,23 @@ async function saveCheckInFromBuffer(user, buffer, mimeType) {
         [...Object.values(d.analyses).filter((a) => a.userId === user.id), { createdAt, ...analysis }]
       ).metrics.intakeSeverity,
     };
+    // Optional patient note — stored verbatim, never merged into analysis / AI.
+    if (noteText) {
+      visitNote = appendPatientVisitNote(d, {
+        id: uuid(),
+        userId: user.id,
+        text: noteText,
+        checkInId,
+        createdAt,
+      });
+    }
   });
 
   return {
     checkIn: toPatientSafeCheckIn(checkIn),
     companion: toPatientCompanionState(user.id),
+    // Ack only — never return note text with AI framing to the patient.
+    visitNoteSaved: Boolean(visitNote),
   };
 }
 
@@ -573,7 +598,9 @@ export function registerRoutes(app) {
           return res.status(400).json({ error: 'photo required' });
         }
 
-        const result = await saveCheckInFromBuffer(user, buffer, mimeType);
+        const visitNoteText =
+          req.body?.visitNote ?? req.body?.patientNote ?? req.body?.note ?? '';
+        const result = await saveCheckInFromBuffer(user, buffer, mimeType, visitNoteText);
         res.status(201).json(result);
       } catch (err) {
         console.error('check-in error:', err);
@@ -591,6 +618,43 @@ export function registerRoutes(app) {
         }
         res.status(500).json({ error: 'Could not save check-in right now' });
       }
+    }
+  );
+
+  // Optional free-text for care team — verbatim only; never enters AI pipelines.
+  app.post(
+    '/api/patient/:userId/visit-notes',
+    requireAuth(['patient']),
+    (req, res) => {
+      if (req.auth.sub !== req.params.userId) {
+        return res.status(403).json({ error: 'Not allowed' });
+      }
+      const user = readDb().users.find((u) => u.id === req.params.userId);
+      if (!user || user.role !== 'patient') {
+        return res.status(404).json({ error: 'patient not found' });
+      }
+      const text = normalizePatientVisitNoteText(req.body?.text ?? req.body?.visitNote);
+      if (!text) {
+        return res.status(400).json({ error: 'note text required when submitting a visit note' });
+      }
+      const checkInId = req.body?.checkInId ? String(req.body.checkInId) : null;
+      if (checkInId) {
+        const owns = readDb().checkIns.some(
+          (c) => c.id === checkInId && c.userId === user.id
+        );
+        if (!owns) return res.status(400).json({ error: 'check-in not found' });
+      }
+      let note;
+      updateDb((d) => {
+        note = appendPatientVisitNote(d, {
+          id: uuid(),
+          userId: user.id,
+          text,
+          checkInId,
+        });
+      });
+      // Do not echo the note body back with any analysis — ack only.
+      res.status(201).json({ visitNoteSaved: true, id: note.id, createdAt: note.createdAt });
     }
   );
 
@@ -636,12 +700,14 @@ export function registerRoutes(app) {
     const analyses = Object.values(db.analyses).filter((a) => a.userId === patientId);
     const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
 
-    const ai = await generateClinicianSummary({
+    const summaryPayload = {
       patientName: patient.name,
       metrics,
       analyses,
       alertReasons: alerts.map((a) => a.reason),
-    });
+    };
+    assertNoVisitNotesInAiPayload(summaryPayload);
+    const ai = await generateClinicianSummary(summaryPayload);
 
     const summaryRecord = {
       patientId,
@@ -687,6 +753,7 @@ export function registerRoutes(app) {
       const checkIns = db.checkIns.filter((c) => c.userId === p.id);
       const timeZone = normalizeTimeZone(p.timezone);
       const todayKey = toDateKey(new Date(), timeZone);
+      const visitNotes = listPatientVisitNotes(db, p.id);
       return {
         id: p.id,
         name: p.name,
@@ -698,6 +765,7 @@ export function registerRoutes(app) {
         lastCheckIn: checkIns.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
           ?.createdAt,
         totalDays: uniqueSortedDays(checkIns, timeZone).length,
+        unreadVisitNotes: countUnreadPatientVisitNotes(visitNotes),
       };
     });
     res.json({ patients, clinicId });
@@ -743,7 +811,21 @@ export function registerRoutes(app) {
         estimatedCalories: a.estimatedCalories,
         foodType: a.foodType,
         confidence: a.confidence,
+        usedNutritionLabel: Boolean(a.usedNutritionLabel),
       }));
+
+    const visitNotesBeforeRead = listPatientVisitNotes(db, patient.id);
+    const monthStart = startOfCurrentMonthIso();
+    const visitNotesThisMonth = countPatientVisitNotesSince(visitNotesBeforeRead, monthStart);
+    const unreadVisitNotes = countUnreadPatientVisitNotes(visitNotesBeforeRead);
+
+    // Opening the chart marks notes read so the list badge clears — content stays verbatim.
+    if (unreadVisitNotes > 0) {
+      updateDb((d) => {
+        markPatientVisitNotesRead(d, patient.id);
+      });
+    }
+    const visitNotes = listPatientVisitNotes(readDb(), patient.id);
 
     res.json({
       patient: {
@@ -757,6 +839,15 @@ export function registerRoutes(app) {
       consistency30,
       calorieTrend,
       clinicianNotes: db.clinicianNotes?.[patient.id] || [],
+      patientVisitNotes: visitNotes.map((n) => ({
+        id: n.id,
+        text: n.text,
+        createdAt: n.createdAt,
+        checkInId: n.checkInId || null,
+        readAt: n.readAt || null,
+      })),
+      patientVisitNotesThisMonth: visitNotesThisMonth,
+      unreadVisitNotes: 0,
       checkupCelebrations: listCelebrationsForPatient(db, patient.id).map((c) => ({
         id: c.id,
         attendedOn: c.attendedOn,
@@ -808,7 +899,15 @@ export function registerRoutes(app) {
     const checkIns = db.checkIns.filter((c) => c.userId === patient.id && new Date(c.createdAt).getTime() >= cutoff);
     const analyses = Object.values(db.analyses).filter((a) => a.userId === patient.id && new Date(a.createdAt).getTime() >= cutoff);
     const { alerts, metrics } = evaluateAlerts(patient, checkIns, analyses);
-    const digest = await generateClinicianSummary({ patientName: patient.name, metrics, analyses, alertReasons: alerts.map((a) => a.reason) });
+    const summaryPayload = {
+      patientName: patient.name,
+      metrics,
+      analyses,
+      alertReasons: alerts.map((a) => a.reason),
+    };
+    // Hard guard: visit notes must never enter the AI summary pipeline.
+    assertNoVisitNotesInAiPayload(summaryPayload);
+    const digest = await generateClinicianSummary(summaryPayload);
     const record = { patientId: patient.id, weeks, createdAt: new Date().toISOString(), ...digest, metrics };
     updateDb((d) => { d.summaries[patient.id] = record; });
     res.json({ digest: record, alerts });

@@ -42,28 +42,42 @@ function parseJsonLoose(text) {
   return JSON.parse(cleaned || '{}');
 }
 
-const MEAL_GATE_PROMPT = `You gate meal photos for a clinical companion app.
+const MEAL_GATE_PROMPT = `You gate meal / drink photos for a clinical companion app.
 First decide isMeal. Be strict.
 
-isMeal = true ONLY if edible food or a drink is the main subject (plate, bowl, cup, takeaway container, clearly edible items).
+isMeal = true ONLY if edible food or a drink is the main subject (plate, bowl, cup, can, bottle, takeaway container, clearly edible items).
 isMeal = false for: laptops, keyboards, monitors, phones, code/terminals, desks, documents, rooms, people without food, pets, empty surfaces, packaging alone with no food visible, or anything unclear.
 
 Also set possibleScreenPhoto (boolean). This is a soft clinician hint only — never reject the check-in for it.
 possibleScreenPhoto = true when the meal looks photographed from another screen (phone/monitor/tablet), a search-result image, a printed photo of food, strong moiré/pixel grid, bezel/browser chrome around the food, or other signs it may not be a real plate in front of the camera.
-possibleScreenPhoto = false when it looks like a real plated meal / takeaway in physical space, or when unsure.
-Do NOT set isMeal false just because possibleScreenPhoto is true — if food is the main subject, isMeal stays true.
+possibleScreenPhoto = false when it looks like a real plated meal / takeaway / drink in physical space, or when unsure.
+Do NOT set isMeal false just because possibleScreenPhoto is true — if food or drink is the main subject, isMeal stays true.
+
+=== Estimation path (important) ===
+The NORMAL case is a plain visual photo of food or drink with NO nutrition label visible or intentionally photographed.
+Visual-only estimation is the DEFAULT path — not a fallback. Do NOT assume labels are present. Do NOT treat missing labels as low quality or low confidence by itself.
+If a nutrition label happens to be clearly visible AND legible in the photo, you MAY use those numbers and set usedNutritionLabel = true. That is a bonus edge case, not the primary accuracy strategy.
+
+=== Confidence (visual-first calibration) ===
+confidence reflects how standardized / knowable the item is — NOT whether a label was read.
+- high: recognizable, standardized branded / mass-produced packaged product OR a specific well-known fast-food item with fairly consistent published nutrition (e.g. a familiar energy-drink can, a specific chain sandwich). Use high even when estimating from product knowledge without reading a label. ALSO use high when usedNutritionLabel is true.
+- medium: a generic recognizable dish or food type with real portion / recipe variability (e.g. "pan-fried dumplings", "homemade pasta", "restaurant rice bowl" — count and ingredients can vary a lot).
+- low: ambiguous, mixed plate, unclear portion, heavily occluded, or unfamiliar food where the estimate is weakly grounded.
+
+A branded can estimated from appearance alone can be "high". A plate of dumplings without a clear count should usually be "medium" or "low", never "high" just because the photo is clear.
 
 Return JSON only:
 - isMeal (boolean) — required
 - possibleScreenPhoto (boolean) — required
+- usedNutritionLabel (boolean) — required; true only if a legible nutrition label in the photo was used for the numbers
 - foodType (string)
 - estimatedCalories, estimatedProteinG, estimatedCarbsG, estimatedFatG (numbers)
 - confidence ("high" | "medium" | "low")
-- notes (short string)
+- notes (short string; clinician-facing; may briefly say visual estimate vs label)
 
-If isMeal is false: foodType "Not a meal or drink photo", all macros 0, confidence "high", possibleScreenPhoto false.
+If isMeal is false: foodType "Not a meal or drink photo", all macros 0, confidence "high", possibleScreenPhoto false, usedNutritionLabel false.
 Do NOT invent food when unsure — set isMeal false.
-Do NOT diagnose eating disorders. Do NOT judge portions.`;
+Do NOT diagnose eating disorders. Do NOT shame portions; estimate neutrally.`;
 
 /**
  * Food/photo analysis — clinician-only numeric estimates.
@@ -176,11 +190,13 @@ export async function generateClinicianSummary({
 Rules:
 - Observations only — never diagnose, never prescribe, never instruct the clinician what to do.
 - Phrase as patterns ("logging dropped off over the past week"), not clinical conclusions.
-- Mention nutritional trends only as rough estimates from photo analysis; note low-confidence analyses.
+- Nutritional numbers from photo analysis are ALWAYS approximate visual estimates. Even "high" confidence means a better-grounded guess (e.g. familiar branded product), NOT exact lab values. Prefer phrasing like "~450 kcal (estimated)" or "roughly ~… kcal" — never present calories as exact.
+- Note low-confidence analyses when relevant; still frame medium/high as estimates.
 - If possibleScreenPhotoCount > 0, mention gently that some photos may have been of a screen/image rather than a plate — soft context only, not an accusation.
 - Return JSON: { "summary": string, "shouldAlert": boolean, "alertReason": string|null }
 - If shouldAlert is true, alertReason MUST be a concrete explainable string.
-- Do NOT set shouldAlert solely because of possible screen photos.`;
+- Do NOT set shouldAlert solely because of possible screen photos.
+- Do NOT invent or reference any patient free-text visit notes — you will not receive them.`;
 
   const userPayload = JSON.stringify({
     patientName,
@@ -314,6 +330,7 @@ export function normalizeAnalysis(parsed = {}) {
     return {
       isMeal: false,
       possibleScreenPhoto: false,
+      usedNutritionLabel: false,
       foodType: 'Not a meal photo',
       estimatedCalories: 0,
       estimatedProteinG: 0,
@@ -328,12 +345,22 @@ export function normalizeAnalysis(parsed = {}) {
     };
   }
 
-  const confidence = ['high', 'medium', 'low'].includes(parsed.confidence)
+  const usedNutritionLabel =
+    parsed.usedNutritionLabel === true ||
+    parsed.usedNutritionLabel === 'true' ||
+    parsed.used_nutrition_label === true ||
+    parsed.used_nutrition_label === 'true';
+
+  let confidence = ['high', 'medium', 'low'].includes(parsed.confidence)
     ? parsed.confidence
     : 'low';
+  // Legible on-photo label is a bonus path — treat as high confidence.
+  if (usedNutritionLabel) confidence = 'high';
+
   return {
     isMeal: true,
     possibleScreenPhoto,
+    usedNutritionLabel,
     foodType: String(parsed.foodType || 'Unclear meal'),
     estimatedCalories: Number(parsed.estimatedCalories) || 0,
     estimatedProteinG: Number(parsed.estimatedProteinG) || 0,
@@ -345,27 +372,35 @@ export function normalizeAnalysis(parsed = {}) {
   };
 }
 
-/** Varied demo meals for mock mode / seeding (not live vision). */
+/** Clinician-facing calorie string — always approximate, never exact. */
+export function formatApproxKcal(n) {
+  const kcal = Math.round(Number(n) || 0);
+  return `~${kcal} kcal (estimated)`;
+}
+
+/** Varied demo meals for mock mode / seeding (not live vision).
+ * Confidence follows visual-first calibration: branded/standardized → high;
+ * variable dishes → medium; unclear → low. Labels are rare (bonus). */
 export const MOCK_MEAL_SAMPLES = [
-  { foodType: 'Toast with avocado and egg', estimatedCalories: 380, estimatedProteinG: 16, estimatedCarbsG: 28, estimatedFatG: 22, confidence: 'medium' },
-  { foodType: 'Rice bowl with vegetables and tofu', estimatedCalories: 470, estimatedProteinG: 18, estimatedCarbsG: 68, estimatedFatG: 12, confidence: 'medium' },
-  { foodType: 'Yogurt bowl with fruit and granola', estimatedCalories: 320, estimatedProteinG: 14, estimatedCarbsG: 42, estimatedFatG: 9, confidence: 'medium' },
-  { foodType: 'Noodle soup with greens', estimatedCalories: 410, estimatedProteinG: 15, estimatedCarbsG: 55, estimatedFatG: 11, confidence: 'medium' },
-  { foodType: 'Grilled fish with steamed rice', estimatedCalories: 450, estimatedProteinG: 32, estimatedCarbsG: 48, estimatedFatG: 10, confidence: 'medium' },
-  { foodType: 'Chicken porridge with egg', estimatedCalories: 360, estimatedProteinG: 22, estimatedCarbsG: 40, estimatedFatG: 9, confidence: 'medium' },
-  { foodType: 'Vegetable stir-fry with noodles', estimatedCalories: 430, estimatedProteinG: 14, estimatedCarbsG: 58, estimatedFatG: 14, confidence: 'medium' },
-  { foodType: 'Sandwich with cheese and tomato', estimatedCalories: 390, estimatedProteinG: 17, estimatedCarbsG: 36, estimatedFatG: 18, confidence: 'medium' },
-  { foodType: 'Oatmeal with banana and peanut butter', estimatedCalories: 350, estimatedProteinG: 12, estimatedCarbsG: 52, estimatedFatG: 11, confidence: 'medium' },
-  { foodType: 'Salad with chickpeas and feta', estimatedCalories: 340, estimatedProteinG: 16, estimatedCarbsG: 30, estimatedFatG: 16, confidence: 'medium' },
-  { foodType: 'Congee with scallion and tofu', estimatedCalories: 310, estimatedProteinG: 14, estimatedCarbsG: 44, estimatedFatG: 7, confidence: 'medium' },
-  { foodType: 'Pasta with tomato sauce', estimatedCalories: 480, estimatedProteinG: 16, estimatedCarbsG: 72, estimatedFatG: 12, confidence: 'medium' },
-  { foodType: 'Egg fried rice with peas', estimatedCalories: 440, estimatedProteinG: 15, estimatedCarbsG: 60, estimatedFatG: 14, confidence: 'medium' },
-  { foodType: 'Banana smoothie and toast', estimatedCalories: 370, estimatedProteinG: 11, estimatedCarbsG: 58, estimatedFatG: 9, confidence: 'medium' },
-  { foodType: 'Unfamiliar plated dish', estimatedCalories: 0, estimatedProteinG: 0, estimatedCarbsG: 0, estimatedFatG: 0, confidence: 'low' },
+  { foodType: 'Monster Energy green can', estimatedCalories: 210, estimatedProteinG: 0, estimatedCarbsG: 54, estimatedFatG: 0, confidence: 'high', usedNutritionLabel: false },
+  { foodType: 'Coca-Cola can (330 ml)', estimatedCalories: 139, estimatedProteinG: 0, estimatedCarbsG: 35, estimatedFatG: 0, confidence: 'high', usedNutritionLabel: false },
+  { foodType: 'McDonald’s Egg McMuffin', estimatedCalories: 300, estimatedProteinG: 17, estimatedCarbsG: 30, estimatedFatG: 12, confidence: 'high', usedNutritionLabel: false },
+  { foodType: 'Pan-fried dumplings on a plate', estimatedCalories: 420, estimatedProteinG: 18, estimatedCarbsG: 48, estimatedFatG: 16, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Toast with avocado and egg', estimatedCalories: 380, estimatedProteinG: 16, estimatedCarbsG: 28, estimatedFatG: 22, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Rice bowl with vegetables and tofu', estimatedCalories: 470, estimatedProteinG: 18, estimatedCarbsG: 68, estimatedFatG: 12, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Yogurt bowl with fruit and granola', estimatedCalories: 320, estimatedProteinG: 14, estimatedCarbsG: 42, estimatedFatG: 9, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Noodle soup with greens', estimatedCalories: 410, estimatedProteinG: 15, estimatedCarbsG: 55, estimatedFatG: 11, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Homemade sandwich (unclear filling)', estimatedCalories: 390, estimatedProteinG: 17, estimatedCarbsG: 36, estimatedFatG: 18, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Oatmeal with banana and peanut butter', estimatedCalories: 350, estimatedProteinG: 12, estimatedCarbsG: 52, estimatedFatG: 11, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Salad with chickpeas and feta', estimatedCalories: 340, estimatedProteinG: 16, estimatedCarbsG: 30, estimatedFatG: 16, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Pasta with tomato sauce', estimatedCalories: 480, estimatedProteinG: 16, estimatedCarbsG: 72, estimatedFatG: 12, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Banana smoothie in a cup', estimatedCalories: 280, estimatedProteinG: 8, estimatedCarbsG: 48, estimatedFatG: 6, confidence: 'medium', usedNutritionLabel: false },
+  { foodType: 'Mixed plate (several foods, unclear portions)', estimatedCalories: 520, estimatedProteinG: 20, estimatedCarbsG: 58, estimatedFatG: 18, confidence: 'low', usedNutritionLabel: false },
+  { foodType: 'Unfamiliar plated dish', estimatedCalories: 0, estimatedProteinG: 0, estimatedCarbsG: 0, estimatedFatG: 0, confidence: 'low', usedNutritionLabel: false },
 ];
 
 const MOCK_NOTES =
-  'Mock demo label — not from the photo. Set GEMINI_API_KEY (or OPENAI_API_KEY) for live vision.';
+  'Mock visual estimate — not live vision. Set GEMINI_API_KEY (or OPENAI_API_KEY) for live analysis.';
 
 function hashSeed(input = '') {
   let h = 2166136261;
@@ -389,8 +424,9 @@ export function mockAnalyze(seed = '') {
     ...pick,
     isMeal: true,
     possibleScreenPhoto: false,
+    usedNutritionLabel: Boolean(pick.usedNutritionLabel),
     notes: pick.confidence === 'low'
-      ? 'Mock demo — no live vision. Set GEMINI_API_KEY for real photo analysis; review photos directly.'
+      ? 'Mock demo — unclear visual estimate. Set GEMINI_API_KEY for real photo analysis; review photos directly.'
       : MOCK_NOTES,
     error: false,
   };
@@ -424,11 +460,11 @@ function mockSummary({ patientName, metrics, alertReasons, lowConf, possibleScre
   }
   if (lowConf > 0) {
     parts.push(
-      `Photo estimates: ${lowConf} recent analysis(es) were low-confidence, so calorie/macro trends should be treated as soft context only.`
+      `Photo estimates: ${lowConf} recent analysis(es) were low-confidence visual estimates — treat ~kcal figures as soft context only, never exact intake.`
     );
   } else if ((metrics.totalDays || 0) > 0) {
     parts.push(
-      'Photo estimates: recent analyses are available for rough nutritional trend context (estimates only — not dietary advice).'
+      'Photo estimates: recent analyses include approximate visual ~kcal guesses (even “high” confidence means a better-grounded estimate — not a measured value).'
     );
   }
   parts.push(
