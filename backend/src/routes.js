@@ -67,6 +67,7 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 },
 });
 
+
 /** Strip nutrition fields — patient payloads must never include these. */
 export function toPatientSafeCheckIn(checkIn) {
   return {
@@ -438,35 +439,57 @@ export function registerRoutes(app) {
     if (req.auth.sub !== req.params.userId) {
       return res.status(403).json({ error: 'Not allowed' });
     }
-    const existing = readDb().users.find((u) => u.id === req.params.userId && u.role === 'patient');
-    if (!existing) return res.status(404).json({ error: 'patient not found' });
- feature/pets-growth
-    if (req.body?.petType != null && req.body.petType !== existing.petType) {
-      return res.status(409).json({ error: 'Pet species cannot be changed after onboarding' });
-    }
-    const unlockIds = new Set(
-      (readDb().unlocks?.[req.params.userId] || []).map((unlock) => unlock.id)
+  const existing = readDb().users.find(
+    (u) => u.id === req.params.userId && u.role === 'patient'
+  );
+  
+  if (!existing) {
+    return res.status(404).json({ error: 'patient not found' });
+  }
+  
+  const unlockIds = new Set(
+    (readDb().unlocks?.[req.params.userId] || []).map(
+      (unlock) => unlock.id
+    )
+  );
+  
+  const lockedChange = findLockedWardrobeChange(
+    req.body || {},
+    existing,
+    unlockIds
+  );
+  
+  if (lockedChange) {
+    return res.status(403).json({
+      error: 'That wardrobe item is still a future keepsake',
+    });
+  }
+  
+  // Pet type changes are allowed — switching the 3D companion model is a cosmetic choice.
+  updateDb((d) => {
+    const u = d.users.find(
+      (x) => x.id === req.params.userId && x.role === 'patient'
     );
-    const lockedChange = findLockedWardrobeChange(req.body || {}, existing, unlockIds);
-    if (lockedChange) {
-      return res.status(403).json({ error: 'That wardrobe item is still a future keepsake' });
-    }
-
-    // petType changes are now allowed — switching 3D companion model is a cosmetic choice
- main
-    updateDb((d) => {
-      const u = d.users.find((x) => x.id === req.params.userId && x.role === 'patient');
-      if (!u) return;
-      applyAppearancePatch(u, req.body || {});
-    });
-
-    const user = readDb().users.find((u) => u.id === req.params.userId);
-    if (!user) return res.status(404).json({ error: 'patient not found' });
-    res.json({
-      appearance: appearanceFromUser(user),
-      companion: toPatientCompanionState(user.id),
-    });
+  
+    if (!u) return;
+  
+    applyAppearancePatch(u, req.body || {});
   });
+
+  const user = readDb().users.find(
+    (u) => u.id === req.params.userId
+  );
+
+  if (!user) {
+    return res.status(404).json({ error: 'patient not found' });
+  }
+
+  res.json({
+    appearance: appearanceFromUser(user),
+    companion: toPatientCompanionState(user.id),
+  });
+}
+);
 
   // --- Patient: companion state (no nutrition) ---
   app.get('/api/patient/:userId/companion', requireAuth(['patient']), (req, res) => {

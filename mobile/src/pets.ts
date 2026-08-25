@@ -60,8 +60,8 @@ export const PET_TYPE_LABELS: Record<string, string> = {
 export function petTypeLabel(id: string | undefined): string {
   return (id && PET_TYPE_LABELS[id]) || id || 'Companion';
 }
-export type PetTypeId = (typeof PET_TYPES)[number]['id']
-  | 'fox' | 'horse' | 'parrot' | 'flamingo' | 'stork';
+// export type PetTypeId = (typeof PET_TYPES)[number]['id']
+//   | 'fox' | 'horse' | 'parrot' | 'flamingo' | 'stork';
 
 
 export const PET_COLORS = [
