@@ -271,7 +271,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
       >
         <View style={styles.pathCard} accessibilityRole="summary">
           <Text style={styles.pathTitle}>Coming up</Text>
-          <Text style={styles.pathBlurb}>Soft keepsakes from hello days — no deadlines.</Text>
+          <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
           {keepsakePath.map((step) => (
             <View key={step.milestoneDay} style={styles.pathRow}>
               <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>

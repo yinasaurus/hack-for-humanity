@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, tapTarget } from '../theme';
@@ -11,9 +11,11 @@ type Props = {
 
 /**
  * Transparency screen — explains exactly what the clinician sees.
+ * Requires an explicit consent check before continuing.
  */
 export function TransparencyScreen({ onDone }: Props) {
   const insets = useSafeAreaInsets();
+  const [agreed, setAgreed] = useState(false);
 
   return (
     <View style={styles.root}>
@@ -35,7 +37,7 @@ export function TransparencyScreen({ onDone }: Props) {
         <View style={styles.block}>
           <Text style={styles.blockTitle}>Check-in photos</Text>
           <Text style={styles.blockBody}>
-            Photos of food or drink you take, and which days you said hello.
+            Photos of food or drink you take, and which days you checked in.
           </Text>
         </View>
 
@@ -47,10 +49,27 @@ export function TransparencyScreen({ onDone }: Props) {
         </View>
 
         <Pressable
-          style={styles.cta}
+          style={styles.consentRow}
+          onPress={() => setAgreed((v) => !v)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: agreed }}
+          accessibilityLabel="I understand and agree"
+        >
+          <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
+            {agreed ? <Text style={styles.checkmark}>✓</Text> : null}
+          </View>
+          <Text style={styles.consentText}>I understand and agree</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.cta, !agreed && styles.ctaDisabled]}
           onPress={onDone}
+          disabled={!agreed}
           accessibilityRole="button"
-          accessibilityLabel="Continue to pet selection"
+          accessibilityState={{ disabled: !agreed }}
+          accessibilityLabel={
+            agreed ? 'Agree and continue to pet selection' : 'Agree first to continue'
+          }
         >
           <Text style={styles.ctaText}>Continue</Text>
         </Pressable>
@@ -104,6 +123,40 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_400Regular',
     color: colors.inkSoft,
   },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    minHeight: tapTarget.min,
+    paddingVertical: 4,
+  },
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.sageDeep,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: {
+    backgroundColor: colors.sageDeep,
+  },
+  checkmark: {
+    color: colors.white,
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 16,
+    lineHeight: 18,
+  },
+  consentText: {
+    flex: 1,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 16,
+    color: colors.ink,
+  },
   cta: {
     marginTop: spacing.md,
     backgroundColor: colors.sageDeep,
@@ -112,6 +165,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  ctaDisabled: {
+    opacity: 0.4,
   },
   ctaText: {
     color: colors.white,

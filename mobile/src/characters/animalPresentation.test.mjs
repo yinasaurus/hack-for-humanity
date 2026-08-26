@@ -86,6 +86,15 @@ test('penguin eye cue is slightly smaller; Hamster has its own presentation', ()
   assert.ok(animalPresentationFor('hamster').voice.caption);
 });
 
+test('hamster framing matches other companions (not over-zoomed)', () => {
+  const hamster = animalPresentationFor('hamster').framing.fit;
+  const cat = animalPresentationFor('cat').framing.fit;
+  const fox = animalPresentationFor('fox').framing.fit;
+  // Hamster was 0.72 (too close); keep it near cat/fox so it does not fill the stage.
+  assert.ok(hamster >= cat * 0.95, `hamster fit ${hamster} should be at least ~cat (${cat})`);
+  assert.ok(hamster <= fox * 1.15, `hamster fit ${hamster} should stay near fox (${fox})`);
+});
+
 test('species voices remain distinct without becoming harsh', () => {
   const voices = SPECIES.map((species) => animalPresentationFor(species).voice);
   assert.equal(new Set(voices.map(({ pitch, rate }) => `${pitch}:${rate}`)).size, SPECIES.length);

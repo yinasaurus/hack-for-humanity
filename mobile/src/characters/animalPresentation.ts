@@ -388,7 +388,8 @@ export const ANIMAL_PRESENTATIONS: Record<string, AnimalPresentation> = {
     },
   },
   hamster: {
-    framing: { fit: 0.72, groundRadius: 0.88 },
+    // Pull camera back vs other Poly Pizza companions (was 0.72 → too zoomed-in).
+    framing: { fit: 1.08, groundRadius: 0.98 },
     material: { tint: '#e0b898', strength: 0.06, roughness: 0.76 },
     visual: visualWith({ eyes: { scale: 1.12, color: '#1a1510' } }),
     actions: {

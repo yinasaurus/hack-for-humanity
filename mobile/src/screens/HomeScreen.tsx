@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  AppState,
-  type AppStateStatus,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -22,6 +20,7 @@ import {
   AnimalWebView,
   animalPresentationFor,
   characterForLiveCompanion,
+  companionSupportsPawWave,
   companionVitalityOpacity,
   createAnimalIntent,
   isGrowthMilestoneDay,
@@ -58,11 +57,10 @@ import {
 } from '../companionInteraction';
 import {
   REACTION_MS,
-  shouldAutoPlayCompanionVoice,
   talkVisualDurationMs,
 } from '../companionReactions';
 import type { AnimalWebHandle } from '../characters';
-import { petTypeLabel } from '../pets';
+import { petTypeLabel, resolveScene } from '../pets';
 import { BondingHeartBurst } from '../components/BondingHeartBurst';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useAnimalAudio } from '../audio/useAnimalAudio';
@@ -138,7 +136,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   /** Client presentation — may include waving / excited / curious / sleepy */
   const [expression, setExpression] = useState<CompanionExpression>('happy');
   const expressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const appState = useRef(AppState.currentState);
   const nappingRef = useRef(false);
   nappingRef.current = napping;
   const celebrateRef = useRef(Boolean(celebrate));
@@ -234,8 +231,8 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     }, REACTION_MS.play);
   }, [settleAfterGesture, showHeartBurst, stopTalk]);
 
-  /** Greeting wave — app open / return / Wave button. Animation always runs. */
-  const playGreetingWave = useCallback(
+  /** Explicit Wave button only — animation runs; no auto chirp. */
+  const playWave = useCallback(
     (nap: boolean) => {
       // Don't interrupt a check-in hello or an in-progress Talk.
       if (celebrateRef.current || speakingRef.current) return;
@@ -245,29 +242,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
       showHeartBurst('small');
       petRef.current?.wake();
       petRef.current?.wave();
-      // Soft chirp only when voice is unmuted; wave never depends on sound.
-      if (
-        companion &&
-        shouldAutoPlayCompanionVoice({
-          companionMuted: settings.companionMuted,
-          companionMuteIntentional: settings.companionMuteIntentional,
-        })
-      ) {
-        const species = characterForLiveCompanion(companion.petType).id;
-        void animalAudio.play(species, 'talk');
-      }
       expressionTimer.current = setTimeout(() => {
         settleAfterGesture(nap);
       }, REACTION_MS.wave);
     },
-    [
-      animalAudio,
-      companion,
-      settings.companionMuteIntentional,
-      settings.companionMuted,
-      settleAfterGesture,
-      showHeartBurst,
-    ]
+    [settleAfterGesture, showHeartBurst]
   );
 
   /**
@@ -484,31 +463,8 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     setExpression('excited');
   }, [showCheckup]);
 
-  // Return to Home → greeting wave (nav focus). Chirp only if unmuted.
-  // Skip when a check-in hello is about to talk so wave doesn't interrupt it.
-  useFocusEffect(
-    useCallback(() => {
-      const id = setTimeout(() => {
-        if (celebrateRef.current) return;
-        playGreetingWave(nappingRef.current);
-      }, REACTION_MS.focusWaveDelay);
-      return () => clearTimeout(id);
-    }, [playGreetingWave])
-  );
-
-  // App foreground while already on Home → wave again.
-  useEffect(() => {
-    const onChange = (next: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
-        playGreetingWave(nappingRef.current);
-      }
-      appState.current = next;
-    };
-    const sub = AppState.addEventListener('change', onChange);
-    return () => {
-      sub.remove();
-    };
-  }, [playGreetingWave]);
+  // No auto wave/sound on Home focus or app resume — companion switches (and
+  // returning from Style) must stay silent. Wave / Talk are button-only.
 
   // While napping: soft quiet idle rotation
   useEffect(() => {
@@ -544,7 +500,10 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
   const quietHours = presence === 'resting';
   const cozyLook = quietHours || napping;
-  const gradient = cozyLook ? gradients.homeResting : gradients.home;
+  const sceneFill = resolveScene(companion?.scene).fill;
+  const gradient = cozyLook
+    ? ([sceneFill, '#DDE5E8', '#D5E0DC'] as const)
+    : ([sceneFill, sceneFill, colors.cream] as const);
   const growthIndex = GROWTH_CHAPTERS.indexOf(companion?.growthStage || 'baby');
 
   return (
@@ -666,7 +625,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
             >
               <AnimalWebView
                 ref={petRef}
-                key={`home-${companion.petType}-${companion.hat}-${companion.face}-${companion.neck}-${companion.held}`}
+                key={`home-${companion.petType}-${companion.hat}-${companion.face}-${companion.neck}-${companion.held}-${companion.scene}`}
                 character={characterForLiveCompanion(companion.petType)}
                 growthStage={companion.growthStage}
                 expression={expression}
@@ -828,7 +787,19 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 style={styles.petBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Wave hello"
-                onPress={() => playGreetingWave(false)}
+                onPress={() => {
+                  if (!companion) return;
+                  const species = characterForLiveCompanion(companion.petType).id;
+                  if (!companionSupportsPawWave(species)) {
+                    // Static Poly Pizza meshes have no forelimb joint — do not fake a spin.
+                    setTalkWordByWord(false);
+                    setTalkLine(
+                      `${companion.petName} is here with you — a paw wave needs a little more time to learn.`
+                    );
+                    return;
+                  }
+                  playWave(false);
+                }}
               >
                 <Text style={styles.petBtnText}>Wave</Text>
               </Pressable>
@@ -862,7 +833,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           </View>
         )}
 
-        {companion ? <HelloCalendar helloDays={companion.helloDays || []} /> : null}
+        {companion && user ? (
+          <HelloCalendar helloDays={companion.helloDays || []} userId={user.id} />
+        ) : null}
 
         {napping && companion ? (
           <View style={styles.restCard} accessibilityRole="summary">
@@ -887,10 +860,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           {companion?.walksAvailable ? (
             <Pressable
               onPress={() => navigation.navigate('Together')}
-              accessibilityRole="link"
-              style={styles.linkHit}
+              accessibilityRole="button"
+              accessibilityLabel="Open Quiet time"
+              style={styles.quietTimeBtn}
             >
-              <Text style={styles.link}>Quiet time</Text>
+              <Text style={styles.quietTimeBtnText}>Quiet time</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -1236,19 +1210,30 @@ const styles = StyleSheet.create({
   },
   linkRow: {
     marginTop: spacing.lg,
-    gap: 10,
+    gap: 12,
+    alignItems: 'stretch',
+  },
+  quietTimeBtn: {
+    minHeight: Math.max(tapTarget.min, 52),
+    borderRadius: 18,
+    backgroundColor: colors.sage,
+    borderWidth: 1.5,
+    borderColor: colors.sageDeep,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  quietTimeBtnText: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 17,
+    color: colors.white,
   },
   linkHit: {
     minHeight: tapTarget.min,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 8,
-  },
-  link: {
-    fontFamily: 'Nunito_700Bold',
-    fontSize: 16,
-    color: colors.sageDeep,
-    textDecorationLine: 'underline',
   },
   linkMuted: {
     fontFamily: 'Nunito_400Regular',

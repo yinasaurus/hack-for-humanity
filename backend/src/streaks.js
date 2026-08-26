@@ -149,16 +149,34 @@ export function checkInRate(
   return hit / windowDays;
 }
 
-/** Consecutive calendar days without a check-in, counting back from today. */
+/**
+ * Consecutive fully elapsed calendar days without a check-in.
+ *
+ * - Never counts today (still in progress until local midnight).
+ * - Never counts days before trackingStartedAt (new accounts start at 0).
+ * - With no history and no start date, returns 0 (not an infinite miss streak).
+ */
 export function consecutiveMisses(
   checkIns,
   todayKey = toDateKey(new Date(), UTC_TIMEZONE),
-  timeZone = UTC_TIMEZONE
+  timeZone = UTC_TIMEZONE,
+  trackingStartedAt = null
 ) {
   const days = new Set(uniqueSortedDays(checkIns, timeZone));
+  const startKey = trackingStartedAt
+    ? toDateKey(trackingStartedAt, timeZone)
+    : days.size > 0
+      ? [...days].sort()[0]
+      : null;
+  if (!startKey) return 0;
+  // Account created today (or in the future) → no completed day has elapsed.
+  if (startKey >= todayKey) return 0;
+
+  // Start from yesterday — daily cutoff, not real-time mid-day punishment.
+  let cursor = shiftDay(todayKey, -1);
   let misses = 0;
-  let cursor = todayKey;
-  while (!days.has(cursor)) {
+  while (cursor >= startKey) {
+    if (days.has(cursor)) break;
     misses += 1;
     cursor = shiftDay(cursor, -1);
     if (misses > 365) break;
@@ -216,7 +234,12 @@ export function vitalityState(
   const latest = [...checkIns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const baseline = latest?.createdAt || trackingStartedAt;
   const hoursSince = baseline ? (now.getTime() - new Date(baseline).getTime()) / 36e5 : 0;
-  const misses = consecutiveMisses(checkIns, toDateKey(now, timeZone), timeZone);
+  const misses = consecutiveMisses(
+    checkIns,
+    toDateKey(now, timeZone),
+    timeZone,
+    trackingStartedAt
+  );
   if (hoursSince >= 48 || (dailyDeficitPct != null && dailyDeficitPct > 0.5)) return 'dormant';
   if (misses >= 2 || (dailyDeficitPct != null && dailyDeficitPct >= 0.25)) return 'dim';
   if (misses >= 1 || (dailyDeficitPct != null && dailyDeficitPct > 0)) return 'fatigued';

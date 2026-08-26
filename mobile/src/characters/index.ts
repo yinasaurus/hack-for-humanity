@@ -46,6 +46,10 @@ export {
   animalPresentationFor,
   companionVitalityOpacity,
 } from './animalPresentation';
+export {
+  PAW_WAVE_BLOCKED_STATIC_MESH,
+  companionSupportsPawWave,
+} from './companionWaveSupport';
 export type {
   AnimalActionMotion,
   AnimalPresentation,

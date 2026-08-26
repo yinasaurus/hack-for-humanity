@@ -108,6 +108,13 @@ describe('vitalityState', () => {
     assert.equal(vitalityState([ci(0)], 0.3, new Date(`${today}T16:00:00Z`)), 'dim');
     assert.equal(vitalityState([ci(3)], 0, new Date(`${today}T16:00:00Z`)), 'dormant');
   });
+
+  it('stays bright for a brand-new account mid-day with no logs yet', () => {
+    assert.equal(
+      vitalityState([], 0, new Date(`${today}T16:00:00Z`), `${today}T10:00:00.000Z`),
+      'bright'
+    );
+  });
 });
 
 describe('intake severity', () => {
@@ -123,21 +130,64 @@ describe('intake severity', () => {
 });
 
 describe('consecutiveMisses & alerts', () => {
-  it('counts misses from today backward', () => {
-    assert.equal(consecutiveMisses([ci(5)], today), 5);
-    assert.equal(consecutiveMisses([ci(0)], today), 0);
+  it('starts at 0 for new accounts with no history', () => {
+    assert.equal(consecutiveMisses([], today), 0);
+    assert.equal(
+      consecutiveMisses([], today, 'UTC', `${today}T08:00:00.000Z`),
+      0
+    );
+  });
+
+  it('does not count today as missed while the day is still in progress', () => {
+    // Account existed yesterday, logged yesterday, no log yet today → 0 misses.
+    assert.equal(
+      consecutiveMisses([ci(1)], today, 'UTC', `${shiftDay(today, -10)}T12:00:00.000Z`),
+      0
+    );
+  });
+
+  it('counts fully elapsed missed days from yesterday backward', () => {
+    // Last log 5 days ago → today-1..today-4 empty; today-5 has log → 4 misses.
+    assert.equal(
+      consecutiveMisses([ci(5)], today, 'UTC', `${shiftDay(today, -30)}T12:00:00.000Z`),
+      4
+    );
+    // Yesterday logged → consecutive elapsed misses are 0 (today still in progress).
+    assert.equal(
+      consecutiveMisses([ci(0), ci(1)], today, 'UTC', `${shiftDay(today, -30)}T12:00:00.000Z`),
+      0
+    );
+    // Only logged today — yesterday through account start are still elapsed misses.
+    assert.equal(
+      consecutiveMisses([ci(0)], today, 'UTC', `${shiftDay(today, -30)}T12:00:00.000Z`),
+      30
+    );
+    // Account created yesterday, never logged → exactly 1 completed missed day.
+    assert.equal(
+      consecutiveMisses([], today, 'UTC', `${shiftDay(today, -1)}T12:00:00.000Z`),
+      1
+    );
   });
 
   it('flags 5+ consecutive misses with explainable reason', () => {
     const checkIns = [ci(6), ci(7), ci(8)];
     const { alerts } = evaluateAlerts(
-      { id: 'p1', name: 'Test' },
+      { id: 'p1', name: 'Test', createdAt: `${shiftDay(today, -40)}T12:00:00.000Z` },
       checkIns
     );
     assert.ok(alerts.length >= 1);
     assert.ok(alerts[0].reason.includes('consecutive missed'));
     assert.ok(alerts[0].detail && alerts[0].detail.includes('Rule threshold'));
     assert.ok(alerts[0].guidance && alerts[0].guidance.includes('Clinician decides'));
+  });
+
+  it('does not flag a brand-new empty account as consecutive misses', () => {
+    const { metrics, alerts } = evaluateAlerts(
+      { id: 'p-new', name: 'New', createdAt: `${today}T10:00:00.000Z` },
+      []
+    );
+    assert.equal(metrics.misses, 0);
+    assert.ok(!alerts.some((a) => /consecutive missed/i.test(a.reason)));
   });
 });
 

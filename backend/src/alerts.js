@@ -17,7 +17,12 @@ export function evaluateAlerts(patient, checkIns, analyses = []) {
   const alerts = [];
   const timeZone = normalizeTimeZone(patient?.timezone);
   const today = toDateKey(new Date(), timeZone);
-  const misses = consecutiveMisses(checkIns, today, timeZone);
+  const misses = consecutiveMisses(
+    checkIns,
+    today,
+    timeZone,
+    patient?.createdAt || null
+  );
   const rate7 = checkInRate(checkIns, 7, today, timeZone);
   const rate10 = checkInRate(checkIns, 10, today, timeZone);
   const rate30 = checkInRate(checkIns, 30, today, timeZone);

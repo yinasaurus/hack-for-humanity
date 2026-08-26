@@ -244,6 +244,23 @@ export async function syncTimezone(userId: string, timezone = getDeviceTimezone(
   return data.user;
 }
 
+export type PatientCheckIn = {
+  id: string;
+  userId: string;
+  createdAt: string;
+  photoUrl: string;
+};
+
+export async function fetchPatientCheckIns(userId: string): Promise<PatientCheckIn[]> {
+  const res = await fetch(`${API_BASE}/api/patient/${userId}/check-ins`, {
+    headers: await authHeaders(false),
+  });
+  const data = await parseJson(res);
+  if (!res.ok) throw new Error(data.error || 'Could not load check-ins');
+  assertNoNutritionLeak(data);
+  return (data.checkIns || []) as PatientCheckIn[];
+}
+
 export async function fetchCompanion(userId: string): Promise<CompanionState> {
   const res = await fetch(`${API_BASE}/api/patient/${userId}/companion`, {
     headers: await authHeaders(false),

@@ -721,7 +721,21 @@ function idleSpeed() {
 }
 
 function setBackground(e) {
-  const c = BG[e] || BG.happy;
+  const fills = {
+    sky: '#E8F0F6',
+    sunny_meadow: '#C8E6D0',
+    cozy_nook: '#E8D9F0',
+    quiet_garden: '#D6E8F5',
+    dusk: '#F0D8D0',
+    cloudscape: '#F4F7FB',
+    window: '#FFF0E0',
+    lavender_field: '#E4D8F0',
+  };
+  // Wardrobe scene is the default stage color; sleepy/curious keep a softer wash.
+  const c =
+    e === 'sleepy' || e === 'curious'
+      ? BG[e] || BG.happy
+      : fills[outfitState.scene] || BG[e] || BG.happy;
   scene.background = new THREE.Color(c);
   document.body.style.background = c;
 }
@@ -1675,10 +1689,8 @@ function applyOutfit(next) {
   };
   if (outfitState.scene && fills[outfitState.scene]) {
     const c = fills[outfitState.scene];
-    if (!isQuietExpr(expression)) {
-      scene.background = new THREE.Color(c);
-      document.body.style.background = c;
-    }
+    scene.background = new THREE.Color(c);
+    document.body.style.background = c;
   }
 
   if (!root) return;

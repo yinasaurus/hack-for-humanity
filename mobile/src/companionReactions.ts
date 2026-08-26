@@ -4,6 +4,9 @@
  * Talk / play / wave are species-agnostic intents that every live animal model
  * can receive through AnimalWebView. Sound is optional: muted calls still run
  * the full visual reaction so bonding never depends on audio.
+ *
+ * Auto greetings (focus / resume) do not trigger wave or sound — those stay
+ * on the explicit Talk / Wave buttons so companion switching stays silent.
  */
 
 export type CompanionReactionKind = 'talk' | 'play' | 'wave';
@@ -17,8 +20,6 @@ export const REACTION_MS = {
   talkVisualFallbackReduced: 500,
   /** Soft hello chirp after check-in celebration settles into talk. */
   celebrateTalkDelay: 380,
-  /** Delay before greeting wave on screen focus (avoids fighting load). */
-  focusWaveDelay: 450,
 } as const;
 
 /** Visual Talk length: prefer verified audio duration; never zero when muted. */
@@ -42,8 +43,9 @@ export function reactionSettleMs(kind: CompanionReactionKind, visualMs: number):
 }
 
 /**
- * Auto chirps (open / check-in) stay quiet unless the person has unmuted.
- * Intentional mute always wins; legacy soft-mute also stays quiet for autos.
+ * Whether muted companions should stay quiet for optional auto chirps.
+ * Kept for call sites that still gate non-button audio (e.g. legacy helpers).
+ * Home no longer auto-waves or auto-chirps on focus / companion switch.
  */
 export function shouldAutoPlayCompanionVoice(options: {
   companionMuted: boolean;
