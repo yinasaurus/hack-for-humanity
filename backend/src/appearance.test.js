@@ -15,7 +15,7 @@ describe('appearance independence', () => {
     assert.deepEqual(SELECTABLE_PET_TYPES, [
       'fox', 'horse', 'parrot', 'flamingo', 'stork',
       'dog', 'cat', 'panda', 'penguin',
-      'capybara', 'hamster', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth',
+      'capybara', 'rabbit', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth',
     ]);
     for (const species of SELECTABLE_PET_TYPES) {
       assert.equal(isAllowedPetType(species), true);
@@ -65,13 +65,13 @@ describe('appearance independence', () => {
     assert.equal(a.hat, 'bow');
   });
 
-  it('accepts Hamster and Capybara as selectable Poly Pizza companions', () => {
-    assert.equal(isAllowedPetType('hamster'), true);
+  it('accepts Rabbit and Capybara while preserving legacy Hamster saves', () => {
+    assert.equal(isAllowedPetType('rabbit'), true);
     assert.equal(isAllowedPetType('capybara'), true);
     assert.equal(appearanceFromUser({ petType: 'hamster' }).petType, 'hamster');
     const user = { ...DEFAULT_APPEARANCE, petType: 'fox' };
-    applyAppearancePatch(user, { petType: 'hamster' });
-    assert.equal(user.petType, 'hamster');
+    applyAppearancePatch(user, { petType: 'rabbit' });
+    assert.equal(user.petType, 'rabbit');
   });
 
   it('rejects unknown ids without clobbering existing look', () => {

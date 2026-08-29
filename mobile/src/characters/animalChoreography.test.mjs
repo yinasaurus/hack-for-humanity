@@ -27,8 +27,8 @@ test('every species/action has continuous bounded anticipation, primary, seconda
   }
 });
 
-test('quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () => {
-  for (const species of ['dog', 'cat', 'fox', 'horse', 'panda', 'rabbit']) {
+test('rigged quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () => {
+  for (const species of ['dog', 'cat', 'fox', 'horse', 'panda']) {
     const wave = getAnimalChoreography(species, 'wave');
     const play = getAnimalChoreography(species, 'play');
     assert.ok(wave.channels.every((channel) => channel.target === 'forelimb'));
@@ -47,6 +47,25 @@ test('quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () =
     );
     assert.ok(wave.samples.every((sample) => sample.root.lift === 0));
   }
+});
+
+test('static companions use a small centered whole-body greeting', () => {
+  for (const species of ['capybara', 'rabbit', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth']) {
+    const wave = getAnimalChoreography(species, 'wave');
+    assert.ok(wave.root.maxLift > 0, `${species} needs visible lift`);
+    assert.ok(wave.root.maxScaleY > 0, `${species} needs visible body compression`);
+    assert.ok(wave.samples.some((sample) => sample.root.lift > 0), `${species} wave is static`);
+    assert.ok(wave.samples.every((sample) => sample.root.x === 0 && sample.root.z === 0));
+  }
+});
+
+test('penguin flaps both flippers on their authored local axis', () => {
+  const wave = getAnimalChoreography('penguin', 'wave');
+  const flipper = wave.channels.find((channel) => channel.target === 'flipper');
+  assert.equal(flipper?.axis, 'y');
+  assert.equal(flipper?.allMatches, true);
+  assert.equal(flipper?.mirrored, true);
+  assert.ok(wave.samples.some((sample) => Math.abs(sample.channels.flipper?.y || 0) > 0.2));
 });
 
 test('play keeps stronger/faster tail movement than a quiet pose would', () => {

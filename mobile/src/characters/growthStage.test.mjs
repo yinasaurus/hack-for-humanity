@@ -43,7 +43,7 @@ test('every selectable animal receives a conservative species calibration', () =
   const species = [
     'fox', 'horse', 'parrot', 'flamingo', 'stork',
     'dog', 'cat', 'panda', 'penguin',
-    'capybara', 'hamster', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth',
+    'capybara', 'rabbit', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth',
   ];
   const stages = ['baby', 'little', 'growing', 'playful', 'adventurer', 'grown'];
 

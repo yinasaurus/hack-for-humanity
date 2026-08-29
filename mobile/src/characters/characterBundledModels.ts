@@ -3,11 +3,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 /**
- * Local Poly Pizza / molochdadev animal GLBs (CC-BY).
+ * Local character GLBs with their licenses documented in ATTRIBUTION.md.
  * Catalog entries use `modelPath: 'bundled:<id>'`; the WebView resolves that
  * to a fetchable URI (data URI on native so https-based WebViews can load it).
  */
 export const BUNDLED_MODEL_MODULES = {
+  horse: require('../../assets/characters/horse.glb'),
+  penguin: require('../../assets/characters/penguin.glb'),
+  rabbit: require('../../assets/characters/rabbit.glb'),
   capybara: require('../../assets/characters/capybara.glb'),
   hamster: require('../../assets/characters/hamster.glb'),
   koala: require('../../assets/characters/koala.glb'),

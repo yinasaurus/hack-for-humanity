@@ -18,7 +18,8 @@ const LEGACY_PET_TO_CHARACTER: Record<string, string> = {
 
 /**
  * New petType values are one-to-one animal ids. Retired ids stay readable and
- * render through this map. Capybara and Hamster are selectable catalog animals.
+ * render through this map. Rabbit and Capybara are selectable catalog animals;
+ * the old Hamster id stays directly renderable for saved profiles.
  */
 export function characterForPetType(petType?: string): CharacterDef {
   const raw = petType || 'fox';

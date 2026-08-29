@@ -11,7 +11,7 @@ const PET_LABELS: Record<SelectablePetTypeId, string> = {
   panda: 'Panda',
   penguin: 'Penguin',
   capybara: 'Capybara',
-  hamster: 'Hamster',
+  rabbit: 'Rabbit',
   koala: 'Koala',
   bear: 'Bear',
   raccoon: 'Raccoon',
@@ -107,15 +107,27 @@ const sheepTalkSource: number = typeof require === 'undefined'
 const duckTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
   : require('../../assets/audio/animal-calls/duck-talk.m4a');
-const hamsterTalkSource: number = typeof require === 'undefined'
+const rabbitTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
-  : require('../../assets/audio/animal-calls/hamster-talk.m4a');
+  : require('../../assets/audio/animal-calls/rabbit-talk.wav');
 const sealTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
   : require('../../assets/audio/animal-calls/seal-talk.m4a');
 const capybaraTalkSource: number = typeof require === 'undefined'
   ? TEST_ASSET_FALLBACK
   : require('../../assets/audio/animal-calls/capybara-talk.m4a');
+const koalaTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/koala-talk.m4a');
+const bearTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/bear-talk.m4a');
+const raccoonTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/raccoon-talk.m4a');
+const slothTalkSource: number = typeof require === 'undefined'
+  ? TEST_ASSET_FALLBACK
+  : require('../../assets/audio/animal-calls/sloth-talk.m4a');
 
 const EMPTY_PROVENANCE: AnimalSoundProvenance = {
   sourceUrl: null,
@@ -186,19 +198,11 @@ function entriesFor(
   };
 }
 
-function silentSpecies(species: SelectablePetTypeId): {
-  talk: AnimalSoundEntry;
-  play: AnimalSoundEntry;
-} {
-  return {
-    talk: pendingEntry(species, 'talk', 'pilot'),
-    play: pendingEntry(species, 'play', 'pilot'),
-  };
-}
-
 const DOWNLOAD_DATE = '2026-08-24';
 const AAC_MODIFICATIONS = (sourceDetail: string) =>
   `${sourceDetail}; decoded to mono 44.1 kHz PCM; 40 ms linear fades; encoded as AAC-LC 64 kbps M4A.`;
+const NORMALIZED_AAC_MODIFICATIONS = (sourceDetail: string) =>
+  `${sourceDetail}; high-pass filtered, loudness-normalized, decoded to mono 44.1 kHz PCM, given 40 ms linear fades, and encoded as AAC-LC 64 kbps M4A.`;
 
 /**
  * The only source of truth for animal calls. Every Talk slot is a verified,
@@ -352,18 +356,17 @@ export const ANIMAL_SOUND_MANIFEST = {
       downloadDate: '2026-08-25',
     },
   }),
-  hamster: entriesFor('hamster', {
-    source: hamsterTalkSource,
-    durationMs: 1520,
-    byteSize: 13348,
+  rabbit: entriesFor('rabbit', {
+    source: rabbitTalkSource,
+    durationMs: 2000,
+    byteSize: 176478,
     provenance: {
-      sourceUrl: 'https://freesound.org/people/lusania/sounds/815243/',
-      acquisitionUrl: 'https://cdn.freesound.org/previews/815/815243_17523460-hq.mp3',
-      author: 'lusania',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Rabbit_oinks_and_squeaks.wav',
+      author: 'kessir (Freesound recording; Wikimedia Commons mirror)',
       license: 'CC0',
-      modifications: AAC_MODIFICATIONS('Trimmed ~1.50 s of the recorded hamster squeak from the HQ preview.'),
-      sha256: 'e65e4145cd5ac99a2fa9e82e34e6984bae25ba13708a636c42162cddc4825c76',
-      downloadDate: '2026-08-25',
+      modifications: 'Used 20.20–22.20 s of the authentic rabbit oinks and squeaks recording; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz PCM, and given 40 ms linear fades.',
+      sha256: '0f132fa07ee0cf958f1545361fe6fc478d6084e6829b7b452d049342305e6a38',
+      downloadDate: '2026-08-29',
     },
   }),
   seal: entriesFor('seal', {
@@ -382,23 +385,74 @@ export const ANIMAL_SOUND_MANIFEST = {
   }),
   capybara: entriesFor('capybara', {
     source: capybaraTalkSource,
-    durationMs: 1820,
-    byteSize: 15957,
+    durationMs: 1800,
+    byteSize: 15786,
     provenance: {
-      sourceUrl: 'https://freesound.org/people/%D0%9A%D0%B0%D0%BF%D1%8B%D0%B1%D0%B0%D1%80%D0%B0_12345/sounds/849980/',
-      acquisitionUrl: 'https://cdn.freesound.org/previews/849/849980_18656191-hq.mp3',
-      author: 'Капибара_12345',
-      license: 'CC0',
-      modifications: AAC_MODIFICATIONS('Trimmed ~1.80 s of the recorded capybara call from the HQ preview.'),
-      sha256: '5ac6176c71f96a0a3507f3ec340b12eced1dc17e6cb3fb2efd23da5f6133073f',
-      downloadDate: '2026-08-25',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Baby_Capybara_Twins.webm',
+      acquisitionUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Baby_Capybara_Twins.webm',
+      author: 'Daniel Baumgartner',
+      license: 'CC-BY',
+      modifications: NORMALIZED_AAC_MODIFICATIONS('Used 88.40–90.20 s of the same-species field video, where the five-day-old capybaras give the clearest tonal chirps.'),
+      sha256: 'c02480ab9cd7e9395f205c453d69df70e364e30071baf5050164f34805d84cd2',
+      downloadDate: '2026-08-29',
     },
   }),
-  // Remaining Poly Pizza companions stay silent until a same-species CC0/CC-BY call is verified.
-  koala: silentSpecies('koala'),
-  bear: silentSpecies('bear'),
-  raccoon: silentSpecies('raccoon'),
-  sloth: silentSpecies('sloth'),
+  koala: entriesFor('koala', {
+    source: koalaTalkSource,
+    durationMs: 1800,
+    byteSize: 15979,
+    provenance: {
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Perception-of-Male-Caller-Identity-in-Koalas-(Phascolarctos-cinereus)-Acoustic-Analysis-and-pone.0020329.s001.ogv',
+      acquisitionUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Perception-of-Male-Caller-Identity-in-Koalas-%28Phascolarctos-cinereus%29-Acoustic-Analysis-and-pone.0020329.s001.ogv',
+      author: 'Charlton B, Ellis W, McKinnon A, Brumm J, Nilsson K, Fitch W',
+      license: 'CC-BY',
+      modifications: NORMALIZED_AAC_MODIFICATIONS('Used 0.20–2.00 s of the recorded male koala bellow.'),
+      sha256: 'aab34c20b86c038311ea837e53fce65653e4fb45dc2748da3121fd4fcd1d6bb0',
+      downloadDate: '2026-08-29',
+    },
+  }),
+  bear: entriesFor('bear', {
+    source: bearTalkSource,
+    durationMs: 1800,
+    byteSize: 16058,
+    provenance: {
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Yellowstone_sound_library_-_Grizzly_Bear_Eating_-_001.mp3',
+      acquisitionUrl: 'https://upload.wikimedia.org/wikipedia/commons/0/08/Yellowstone_sound_library_-_Grizzly_Bear_Eating_-_001.mp3',
+      author: 'National Park Service and MSU Acoustic Atlas / Jennifer Jerrett',
+      license: 'Public-Domain',
+      modifications: NORMALIZED_AAC_MODIFICATIONS('Used 0.20–2.00 s of the Yellowstone grizzly-bear eating vocalization.'),
+      sha256: '8b56e8c0ebdf8a93a560bddb39715c29552ac647cd33c50ed2e8f2d5c4c60dbc',
+      downloadDate: '2026-08-29',
+    },
+  }),
+  raccoon: entriesFor('raccoon', {
+    source: raccoonTalkSource,
+    durationMs: 1800,
+    byteSize: 15922,
+    provenance: {
+      sourceUrl: 'https://freesound.org/people/MoveAwayPodcast/sounds/555365/',
+      acquisitionUrl: 'https://cdn.freesound.org/previews/555/555365_11888343-hq.mp3',
+      author: 'MoveAwayPodcast',
+      license: 'CC-BY',
+      modifications: NORMALIZED_AAC_MODIFICATIONS('Used 0.50–2.30 s of the authentic raccoon noises recording.'),
+      sha256: '58d7f8aebb88867fd60ad67faa0f0fb2ec311f273f11a00be87e0116d7b1fb35',
+      downloadDate: '2026-08-29',
+    },
+  }),
+  sloth: entriesFor('sloth', {
+    source: slothTalkSource,
+    durationMs: 1800,
+    byteSize: 15990,
+    provenance: {
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Hoffman%27s_Two-toed_Sloth._Choloepus_hoffmanni_video.webm',
+      acquisitionUrl: 'https://upload.wikimedia.org/wikipedia/commons/b/b5/Hoffman%27s_Two-toed_Sloth._Choloepus_hoffmanni_video.webm',
+      author: 'Gail (Flickr: gails_pictures)',
+      license: 'CC-BY',
+      modifications: NORMALIZED_AAC_MODIFICATIONS('Used 3.00–4.80 s of the Hoffman’s two-toed sloth field-video sound.'),
+      sha256: '9825923c5aaa25d2a7a3fa5b1a65ec26cbaf9d4c37e2aa9a202a2603d8b455dc',
+      downloadDate: '2026-08-29',
+    },
+  }),
 } as const satisfies Record<SelectablePetTypeId, { talk: AnimalSoundEntry; play: AnimalSoundEntry }>;
 
 export const ANIMAL_SOUND_PILOT_SPECIES = Object.keys(ANIMAL_SOUND_MANIFEST) as SelectablePetTypeId[];
