@@ -19,7 +19,7 @@ export const PET_TYPES = [
   { id: 'panda', label: 'Panda', icon: '🐼', blurb: 'A soft, playful friend' },
   { id: 'penguin', label: 'Penguin', icon: '🐧', blurb: 'A cool, caring friend' },
   { id: 'capybara', label: 'Capybara', icon: '🦫', blurb: 'A mellow, easygoing friend' },
-  { id: 'hamster', label: 'Hamster', icon: '🐹', blurb: 'A tiny, cozy friend' },
+  { id: 'rabbit', label: 'Rabbit', icon: '🐰', blurb: 'A gentle, cozy friend' },
   { id: 'koala', label: 'Koala', icon: '🐨', blurb: 'A soft, sleepy friend' },
   { id: 'bear', label: 'Bear', icon: '🧸', blurb: 'A warm, cuddly friend' },
   { id: 'raccoon', label: 'Raccoon', icon: '🦝', blurb: 'A curious, playful friend' },
@@ -36,7 +36,7 @@ export type SelectablePetTypeId = (typeof PET_TYPES)[number]['id'];
  * profiles, but are intentionally not offered to new patients.
  */
 export const LEGACY_PET_TYPES = [
-  { id: 'rabbit', label: 'Rabbit', icon: '🐰', blurb: 'A gentle, cozy friend' },
+  { id: 'hamster', label: 'Hamster', icon: '🐹', blurb: 'A tiny, cozy friend' },
   { id: 'cow', label: 'Cow', icon: '🐮', blurb: 'A sweet, steady friend' },
   { id: 'chipmunk', label: 'Chipmunk', icon: '🐿️', blurb: 'A bright, busy friend' },
   { id: 'monkey', label: 'Monkey', icon: '🐒', blurb: 'A cheerful, clever friend' },

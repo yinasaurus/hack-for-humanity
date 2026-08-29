@@ -118,6 +118,8 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       character.actions,
       character.rig,
       character.scale,
+      character.rotation,
+      character.proportions,
       growthStage,
       reducedMotion,
       resolvedModelPath,
@@ -303,6 +305,8 @@ function buildHtml(
   const rigHints = JSON.stringify(character.rig || {});
   const choreography = JSON.stringify(choreographyForSpecies(character.id));
   const scale = character.scale ?? 1;
+  const rotation = character.rotation || [0, 0, 0];
+  const headScale = character.proportions?.head ?? 1;
   const growth = getSpeciesGrowthStagePresentation(growthStage, character.id);
   const growthChannels = growth.channels || {
     body: growth.proportions.bodyScale,
@@ -359,6 +363,8 @@ const ACTION_CANDIDATES = ${actionCandidates};
 const RIG_HINTS = ${rigHints};
 const CHOREOGRAPHY = ${choreography};
 const MODEL_SCALE = ${scale};
+const MODEL_ROTATION = ${JSON.stringify(rotation)};
+const MODEL_HEAD_SCALE = ${headScale};
 const GROWTH_SCALE = ${growth.scale};
 const GROWTH_POSITION = ${JSON.stringify(growth.position)};
 const GROWTH_BODY_SCALE = ${JSON.stringify(growthChannels.body)};
@@ -818,9 +824,9 @@ function doWaveGreeting() {
     state.bones.flipper?.length
   );
   if (!hasWaveLimb) {
-    setTimeout(() => {
+    scheduleProceduralIdle(state, m.durationMs + 100, () => {
       if (expression === 'waving') goBaseIdle();
-    }, m.durationMs + 100);
+    });
     return;
   }
   scheduleProceduralIdle(state, m.durationMs + 100, () => {
@@ -1363,7 +1369,10 @@ function applyGrowthProportions() {
   const head = findProceduralBones('head')[0] ||
     findBone(['Head', 'head', 'HeadBone', 'b_Head_05']) ||
     findRigBones('head', /^(head|b_head)/i)[0];
-  if (head) scaleRoots([head], GROWTH_CHANNELS?.head ?? GROWTH_HEAD_SCALE);
+  if (head) {
+    const growthHeadScale = GROWTH_CHANNELS?.head ?? GROWTH_HEAD_SCALE;
+    scaleRoots([head], growthHeadScale * MODEL_HEAD_SCALE);
+  }
   scaleRoots(growthChannelBones('muzzle', 'jaw', /jaw|muzzle|snout|mouth|bill|beak/i), GROWTH_CHANNELS?.muzzle);
   scaleRoots(growthChannelBones('neck', 'neck', /neck/i), GROWTH_CHANNELS?.neck);
   scaleRoots(growthChannelBones('legs', 'legs', /leg|thigh|shin|calf|hock|ankle|foot/i), GROWTH_CHANNELS?.legs);
@@ -1829,6 +1838,11 @@ function frameFullBody(object, position = [0, 0, 0]) {
 
 function initializeRoot(nextRoot, animations = []) {
   root = nextRoot;
+  root.rotation.set(
+    Number(MODEL_ROTATION[0] || 0),
+    Number(MODEL_ROTATION[1] || 0),
+    Number(MODEL_ROTATION[2] || 0)
+  );
   applySpeciesMaterial(root);
   root.scale.setScalar(1);
   scene.add(root);

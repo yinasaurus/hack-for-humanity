@@ -11,7 +11,7 @@ test('Mesh2Motion / procedural companions can wave', () => {
   }
 });
 
-test('Poly Pizza static meshes are flagged — no forced fake wave', () => {
+test('only legacy static meshes without an approved greeting remain blocked', () => {
   for (const id of PAW_WAVE_BLOCKED_STATIC_MESH) {
     assert.equal(
       companionSupportsPawWave(id),

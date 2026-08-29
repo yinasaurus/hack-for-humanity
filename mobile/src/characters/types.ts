@@ -40,6 +40,10 @@ export type CharacterDef = {
   scale?: number;
   position?: [number, number, number];
   rotation?: [number, number, number];
+  /** Source-model proportion correction, applied independently of growth. */
+  proportions?: {
+    head?: number;
+  };
   /** Optional default sample line for the playground Speak button */
   sampleAudioUrl?: string;
 };

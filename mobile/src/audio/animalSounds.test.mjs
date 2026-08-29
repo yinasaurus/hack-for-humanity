@@ -34,26 +34,52 @@ test('Talk has a verified playable recording for every ready pilot species', () 
   }
 });
 
-test('unknown calls fail closed; unverified Poly Pizza companions stay silent', () => {
+test('unknown calls fail closed and Play stays silent without a separate cue', () => {
   assert.equal(getAnimalSoundEntry('not-an-animal', 'talk'), null);
   for (const species of ['koala', 'bear', 'raccoon', 'sloth']) {
-    assert.equal(getAnimalSoundEntry(species, 'talk')?.status, 'pilot-pending', species);
-    assert.equal(animalSoundIsPlayable(getAnimalSoundEntry(species, 'talk')), false, species);
+    assert.equal(getAnimalSoundEntry(species, 'play')?.status, 'pilot-pending', species);
+    assert.equal(animalSoundIsPlayable(getAnimalSoundEntry(species, 'play')), false, species);
   }
 });
 
-test('newly bundled Poly Pizza companions have verified CC0 Talk cues', () => {
-  for (const species of ['sheep', 'duck', 'hamster', 'seal', 'capybara']) {
+test('new and repaired companions have verified same-species Talk cues', () => {
+  for (const species of ['sheep', 'duck', 'rabbit', 'seal', 'capybara', 'koala', 'bear', 'raccoon', 'sloth']) {
     const entry = getAnimalSoundEntry(species, 'talk');
     assert.equal(entry?.status, 'ready', species);
-    assert.equal(entry?.provenance.license, 'CC0', species);
+    assert.ok(['CC0', 'CC-BY', 'Public-Domain'].includes(entry?.provenance.license), species);
     assert.equal(animalSoundIsPlayable(entry), true, species);
     assert.match(entry?.provenance.sha256 || '', /^[a-f0-9]{64}$/, species);
   }
 });
 
-test('Rabbit Talk is retired with the companion; the WAV remains for audit only', () => {
-  assert.equal(getAnimalSoundEntry('rabbit', 'talk'), null);
+test('Rabbit Talk uses the verified local rabbit recording', () => {
+  const rabbit = getAnimalSoundEntry('rabbit', 'talk');
+  const asset = readFileSync(new URL('../../assets/audio/animal-calls/rabbit-talk.wav', import.meta.url));
+  assert.equal(rabbit?.status, 'ready');
+  assert.equal(rabbit?.provenance.license, 'CC0');
+  assert.equal(rabbit?.byteSize, asset.byteLength);
+  assert.equal(rabbit?.provenance.sha256, createHash('sha256').update(asset).digest('hex'));
+});
+
+test('Capybara, Rabbit, and Sloth Talk assets match their verified call excerpts', () => {
+  const assets = {
+    capybara: '../../assets/audio/animal-calls/capybara-talk.m4a',
+    rabbit: '../../assets/audio/animal-calls/rabbit-talk.wav',
+    sloth: '../../assets/audio/animal-calls/sloth-talk.m4a',
+  };
+  for (const [species, relativePath] of Object.entries(assets)) {
+    const entry = getAnimalSoundEntry(species, 'talk');
+    const asset = readFileSync(new URL(relativePath, import.meta.url));
+    assert.equal(entry?.status, 'ready', species);
+    assert.equal(entry?.byteSize, asset.byteLength, `${species} byte size`);
+    assert.equal(
+      entry?.provenance.sha256,
+      createHash('sha256').update(asset).digest('hex'),
+      `${species} checksum`
+    );
+    assert.match(entry?.provenance.modifications || '', /high-pass filtered/i, species);
+    assert.match(entry?.provenance.modifications || '', /loudness-normalized/i, species);
+  }
 });
 
 test('Cat Talk is the verified local CC0 domestic-cat meow derivative', () => {

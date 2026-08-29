@@ -161,6 +161,18 @@ const waveForelimbChannels = (): ChoreographyChannelIntent[] => [
   channel('forelimb', 'z', 0.72, 2.7, 0, 'primary', 'greeting'),
 ];
 
+const STATIC_BODY_GREETING_SPECIES = new Set([
+  'capybara',
+  'rabbit',
+  'koala',
+  'bear',
+  'raccoon',
+  'duck',
+  'sheep',
+  'seal',
+  'sloth',
+]);
+
 const quadrupedDefinition = (
   species: string,
   action: ChoreographyAction
@@ -170,14 +182,20 @@ const quadrupedDefinition = (
   const tailAmplitude = play ? 0.68 : 0.39;
   const tailCycles = play ? 4.8 : 2.7;
   const limbAmplitude = play ? 0.38 : 0.46;
+  const bodyGreeting = !play && STATIC_BODY_GREETING_SPECIES.has(species);
   return {
     species,
     action,
     durationMs: play ? 1540 : 1780,
     reducedMotionDurationMs: 520,
     phases,
-    // Wave must not bob/yaw the root — only the chosen forelimb moves.
-    root: { ...ROOT, maxLift: play ? 0.11 : 0, maxScaleY: play ? 0.08 : 0 },
+    // Static GLBs have no limb joints, so their greeting is a small centered
+    // lift/crouch. Rigged quadrupeds keep the planted paw-wave behavior.
+    root: {
+      ...ROOT,
+      maxLift: play ? 0.11 : bodyGreeting ? 0.055 : 0,
+      maxScaleY: play ? 0.08 : bodyGreeting ? 0.035 : 0,
+    },
     rig: {
       wings: 'available',
       tail: 'segmented',
@@ -269,7 +287,7 @@ const penguinDefinition = (action: ChoreographyAction): ChoreographyDefinition =
     rig: { wings: 'both', tail: 'available', fallback: 'head-and-root' },
     channels: [
       channel('head', 'x', 0.075, play ? 1.7 : 1.1, 0.1, 'secondary', 'greeting'),
-      channel('flipper', 'z', play ? 0.3 : 0.22, play ? 3 : 2, 0, 'primary', 'flap', {
+      channel('flipper', 'y', play ? 0.48 : 0.78, play ? 3.2 : 2.6, 0, 'primary', 'flap', {
         mirrored: true,
         allMatches: true,
       }),
@@ -390,10 +408,15 @@ export function sampleAnimalChoreography(
   if (profile.action === 'play') {
     root.lift = clamp(primary * 0.11 + secondary * 0.04, 0, profile.root.maxLift);
     root.scaleY = clamp(1 - anticipation * profile.root.maxScaleY, 1 - profile.root.maxScaleY, 1);
-  } else {
-    // Wave: no root bob — paw motion alone carries the greeting.
-    root.lift = 0;
-    root.scaleY = 1;
+  } else if (profile.root.maxLift > 0 || profile.root.maxScaleY > 0) {
+    // Models without movable appendages answer with a restrained, centered
+    // whole-body greeting; rigged pets retain maxLift/maxScaleY of zero.
+    root.lift = clamp(primary * profile.root.maxLift, 0, profile.root.maxLift);
+    root.scaleY = clamp(
+      1 - anticipation * profile.root.maxScaleY,
+      1 - profile.root.maxScaleY,
+      1
+    );
   }
 
   for (const intent of profile.channels) {

@@ -44,6 +44,7 @@ export type AnimalRigHints = {
   hand?: readonly string[];
   hindlimb?: readonly string[];
   wing?: readonly string[];
+  flipper?: readonly string[];
   tail?: readonly string[];
   talkMorphs?: readonly string[];
 };

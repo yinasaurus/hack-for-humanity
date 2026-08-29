@@ -48,7 +48,7 @@ const STATIC_POLY_PIZZA_RIG = {
   talkMorphs: ['mouthOpen', 'Mouth', 'jaw'],
 };
 
-/** Mesh2Motion fox-family shoulder → foot chain (dog/fox/panda/horse). */
+/** Mesh2Motion fox-family shoulder → foot chain (dog/fox/panda). */
 const MESH2MOTION_FORELIMB = [
   'Front_Leg_Shoulder_L',
   'Front_Leg_Upper_L',
@@ -77,11 +77,11 @@ const MESH2MOTION_HAND = [
   'Front_Leg_Lower_R',
 ] as const;
 
-function polyPizzaCompanion(id: string, label: string): CharacterDef {
+function staticBundledCompanion(id: string, label: string): CharacterDef {
   return {
     id,
     label,
-    // Animals by molochdadev [CC-BY] via Poly Pizza — static mesh; motion overlay.
+    // See assets/characters/ATTRIBUTION.md; static mesh with a motion overlay.
     modelPath: `bundled:${id}`,
     clips: { ...STATIC_POLY_PIZZA_CLIPS },
     actions: { ...STATIC_POLY_PIZZA_ACTIONS },
@@ -122,28 +122,46 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'horse',
     label: 'Horse',
-    // Smoother textured Mesh2Motion variation, visually consistent with the
-    // dog/cat/panda companion family.
-    modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-horse.glb',
-    clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
+    // Bundled CC-BY cartoon horse with Buddi-authored companion animation clips.
+    modelPath: 'bundled:horse',
+    clips: { idle: 'Idle', talk: 'Talk', react: 'Play' },
     actions: {
-      idle: ['Idle', 'Standing'],
-      talk: ['Talk', 'Eat', 'Idle_2', 'Idle'],
-      wave: ['Wave', 'Gesture'],
-      play: ['Play', 'Jump', 'Gallop', 'Run'],
-      curious: ['Curious', 'Idle_2', 'Idle'],
-      gentle: ['Gentle', 'Idle'],
+      idle: ['Idle'],
+      talk: ['Talk'],
+      wave: ['Wave'],
+      play: ['Play'],
+      curious: ['Curious'],
+      gentle: ['Gentle'],
     },
     rig: {
-      head: ['Head', 'head', 'Neck', 'neck'],
-      jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
-      forelimb: [...MESH2MOTION_FORELIMB],
-      hand: [...MESH2MOTION_HAND],
-      tail: ['Tail', 'Tail_Base', 'tail'],
-      talkMorphs: ['mouthOpen', 'Mouth', 'jaw'],
+      head: ['head0_040', 'neck1_039', 'neck0_038'],
+      forelimb: [
+        'leg_front_left_top0_03',
+        'leg_front_left_top1_04',
+        'leg_front_left_top2_05',
+        'leg_front_left_bot0_06',
+        'leg_front_right_top0_09',
+        'leg_front_right_top1_010',
+        'leg_front_right_top2_011',
+        'leg_front_right_bot0_012',
+      ],
+      hand: ['leg_front_left_hoof_07', 'leg_front_right_hoof_014'],
+      hindlimb: [
+        'leg_hind_left_top0_024',
+        'leg_hind_left_top1_025',
+        'leg_hind_left_top2_026',
+        'leg_hind_left_bot0_027',
+        'leg_hind_right_top0_030',
+        'leg_hind_right_top1_031',
+        'leg_hind_right_top2_032',
+        'leg_hind_right_bot0_033',
+      ],
+      tail: ['tail0_017', 'tail1_018', 'tail2_019', 'tail3_020', 'tail4_021'],
     },
     scale: 1,
+    // The source faces away from the default +Z camera. Turn it toward the
+    // viewer once; OrbitControls still lets the user inspect its back.
+    rotation: [0, Math.PI, 0],
   },
   {
     id: 'parrot',
@@ -235,8 +253,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
       talkMorphs: ['mouthOpen', 'Mouth', 'jaw', 'viseme_aa'],
     },
     scale: 1,
+    proportions: { head: 0.84 },
   },
-  polyPizzaCompanion('cat', 'Cat'),
+  staticBundledCompanion('cat', 'Cat'),
   {
     id: 'panda',
     label: 'Panda',
@@ -264,14 +283,13 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'penguin',
     label: 'Penguin',
-    // Quaternius Cute Animated Monsters — CC0.
-    modelPath:
-      'https://raw.githubusercontent.com/agentkaerf/FreeModels/main/Cute%20Animated%20Monsters%20-%20Aug%202020/glTF/Penguin.gltf',
+    // Quaternius CC0 source, bundled with Buddi-authored flipper joints/Wave.
+    modelPath: 'bundled:penguin',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Jump' },
     actions: {
       idle: ['Idle', 'Standing'],
       talk: ['Talk', 'Honk', 'Idle'],
-      wave: ['Wave', 'Flap'],
+      wave: ['Wave'],
       play: ['Play', 'Jump', 'Run'],
       curious: ['Curious', 'Idle'],
       gentle: ['Gentle', 'Idle'],
@@ -280,47 +298,23 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
       head: ['Head', 'head', 'Neck', 'neck'],
       beak: ['Beak', 'beak', 'Mouth', 'mouth'],
       wing: ['Wing', 'wing', 'LeftWing', 'RightWing', 'Arm', 'arm'],
+      flipper: ['Flipper_L', 'Flipper_R'],
       tail: ['Tail', 'tail'],
       talkMorphs: ['mouthOpen', 'Mouth', 'beakOpen'],
     },
     scale: 1,
   },
-  {
-    id: 'rabbit',
-    label: 'Rabbit',
-    // Retired from onboarding; kept for legacy Bun/Rabbit profiles.
-    modelPath: '',
-    proceduralModel: 'rabbit-v2',
-    clips: { idle: 'procedural_idle', talk: 'procedural_talk', react: 'procedural_play' },
-    actions: {
-      idle: [],
-      talk: [],
-      wave: [],
-      play: [],
-      curious: [],
-      gentle: [],
-    },
-    rig: {
-      head: ['Head'],
-      jaw: ['Jaw'],
-      forelimb: ['Forelimb_L', 'Forelimb_R'],
-      hindlimb: ['Hindlimb_L', 'Hindlimb_R', 'HindFoot_L', 'HindFoot_R'],
-      ear: ['Ear_L', 'Ear_R'],
-      tail: ['Tail'],
-      hand: ['ForePaw_L', 'ForePaw_R'],
-      talkMorphs: ['Jaw', 'Muzzle_L', 'Muzzle_R'],
-    },
-    scale: 1,
-  },
-  polyPizzaCompanion('capybara', 'Capybara'),
-  polyPizzaCompanion('hamster', 'Hamster'),
-  polyPizzaCompanion('koala', 'Koala'),
-  polyPizzaCompanion('bear', 'Bear'),
-  polyPizzaCompanion('raccoon', 'Raccoon'),
-  polyPizzaCompanion('duck', 'Duck'),
-  polyPizzaCompanion('sheep', 'Sheep'),
-  polyPizzaCompanion('seal', 'Seal'),
-  polyPizzaCompanion('sloth', 'Sloth'),
+  // majkel's supplied CC-BY rabbit, optimized locally for mobile.
+  staticBundledCompanion('rabbit', 'Rabbit'),
+  staticBundledCompanion('capybara', 'Capybara'),
+  staticBundledCompanion('hamster', 'Hamster'),
+  staticBundledCompanion('koala', 'Koala'),
+  staticBundledCompanion('bear', 'Bear'),
+  staticBundledCompanion('raccoon', 'Raccoon'),
+  staticBundledCompanion('duck', 'Duck'),
+  staticBundledCompanion('sheep', 'Sheep'),
+  staticBundledCompanion('seal', 'Seal'),
+  staticBundledCompanion('sloth', 'Sloth'),
 ];
 
 export function getCharacter(id: string): CharacterDef | undefined {

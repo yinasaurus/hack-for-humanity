@@ -1,5 +1,46 @@
 # Character model attribution
 
+## Cartoon Horse with animations by Jungle Jim (CC-BY 4.0)
+
+`horse.glb` is derived from **Cartoon Horse with animations** by
+[Jungle Jim](https://sketchfab.com/jungle_jim), downloaded from
+[Sketchfab](https://sketchfab.com/3d-models/cartoon-horse-with-animations-1210663c398745cb9898e7d66fa51500)
+under the [Creative Commons Attribution 4.0 license](https://creativecommons.org/licenses/by/4.0/).
+
+**Modifications:** removed scene-lighting helpers; preserved the original textured
+mesh, quadruped rig, and run cycle; added smooth looping `Idle`, `Talk`, `Wave`,
+`Play`, `Curious`, and `Gentle` companion clips; renamed the original full-body action
+to `Run`; exported as a mobile-ready binary glTF.
+
+## Rabbit by majkel (CC-BY 4.0)
+
+`rabbit.glb` is derived from **Rabbit** by
+[majkel](https://sketchfab.com/majkel20), downloaded from
+[Sketchfab](https://sketchfab.com/3d-models/rabbit-c5fdc23b56334f21a7f6edea4ebbfe69)
+under the [Creative Commons Attribution 4.0 license](https://creativecommons.org/licenses/by/4.0/).
+
+**Modifications:** removed unused scene helpers, resized the base-color texture,
+reduced the dense static mesh to about 30,000 polygons, and exported a mobile-ready
+binary glTF. Buddi supplies a centered whole-body greeting because the source has no rig.
+
+## Dotted White Seal - Free Giveaway by Kugatsu Tsukai 3D Models Hub (CC-BY 4.0)
+
+`seal.glb` is derived from **Dotted White Seal - Free Giveaway** by
+[Kugatsu Tsukai 3D Models Hub](https://sketchfab.com/3d-models/dotted-white-seal-free-giveaway-676115a924214e8289b9e03fb9b9a4ab)
+under the [Creative Commons Attribution 4.0 license](https://creativecommons.org/licenses/by/4.0/).
+
+**Modifications:** removed unused scene helpers, capped textures for mobile use, and
+exported a mobile-ready binary glTF. Buddi supplies a centered whole-body greeting.
+
+## Penguin by Quaternius (CC0)
+
+`penguin.glb` comes from Quaternius' free animated animal collection, released
+under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+**Modifications:** added left and right deforming flipper joints, painted smooth
+flipper weights, authored a looping `Wave` action, and exported a mobile-ready GLB
+while preserving the source animation actions.
+
 ## Animals by molochdadev (CC-BY) via Poly Pizza
 
 The following bundled `.glb` companions are derived from:
@@ -15,8 +56,7 @@ The following bundled `.glb` companions are derived from:
 | `raccoon.glb` | Raccoon |
 | `duck.glb` | Duck |
 | `sheep.glb` | Sheep |
-| `seal.glb` | Seal |
 | `cat.glb` | Cat |
 | `sloth.glb` | Sloth |
 
-**Modifications:** OBJ/MTL/PNG packs (and the Sloth FBX) converted to binary glTF (`.glb`); large base-color textures resized to 512×512 before export to keep the mobile bundle small. Models are static (no animation clips); Buddi drives idle/talk/play via its procedural choreography overlay.
+**Modifications:** OBJ/MTL/PNG packs (and the Sloth FBX) converted to binary glTF (`.glb`); large base-color textures resized to 512×512 before export to keep the mobile bundle small. Models are static (no animation clips); Buddi drives idle/talk/play via its procedural choreography overlay. The Hamster remains bundled only so older saved companions keep rendering.
