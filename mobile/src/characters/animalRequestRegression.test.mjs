@@ -6,7 +6,11 @@ import { getAnimalSoundEntry, animalSoundIsPlayable } from '../audio/animalSound
 import { PET_TYPES, LEGACY_PET_TYPES } from '../pets.ts';
 import { getAnimalChoreography } from './animalChoreography.ts';
 import { getCharacter } from './characterCatalog.ts';
-import { companionSupportsPawWave } from './companionWaveSupport.ts';
+import {
+  companionSupportsPawWave,
+  companionUsesWaveBounce,
+  companionWaveResponse,
+} from './companionWaveSupport.ts';
 
 const requestedWaveSpecies = [
   'penguin',
@@ -22,6 +26,8 @@ const requestedWaveSpecies = [
 ];
 
 const staticGreetingSpecies = [
+  'cat',
+  'hamster',
   'capybara',
   'rabbit',
   'koala',
@@ -72,8 +78,11 @@ test('Penguin Wave has authored flipper motion', () => {
 });
 
 test('Every requested companion exposes a visible Wave response', () => {
-  for (const species of requestedWaveSpecies) {
-    assert.equal(companionSupportsPawWave(species), true, species);
+  assert.equal(companionWaveResponse('penguin'), 'paw-wave');
+  assert.equal(companionSupportsPawWave('penguin'), true);
+  for (const species of requestedWaveSpecies.filter((id) => id !== 'penguin')) {
+    assert.equal(companionWaveResponse(species), 'bounce', species);
+    assert.equal(companionUsesWaveBounce(species), true, species);
   }
   for (const species of staticGreetingSpecies) {
     const wave = getAnimalChoreography(species, 'wave');

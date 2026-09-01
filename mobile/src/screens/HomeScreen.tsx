@@ -20,7 +20,6 @@ import {
   AnimalWebView,
   animalPresentationFor,
   characterForLiveCompanion,
-  companionSupportsPawWave,
   companionVitalityOpacity,
   createAnimalIntent,
   isGrowthMilestoneDay,
@@ -789,15 +788,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 accessibilityLabel="Wave hello"
                 onPress={() => {
                   if (!companion) return;
-                  const species = characterForLiveCompanion(companion.petType).id;
-                  if (!companionSupportsPawWave(species)) {
-                    // Static Poly Pizza meshes have no forelimb joint — do not fake a spin.
-                    setTalkWordByWord(false);
-                    setTalkLine(
-                      `${companion.petName} is here with you — a paw wave needs a little more time to learn.`
-                    );
-                    return;
-                  }
                   playWave(false);
                 }}
               >

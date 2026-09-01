@@ -28,7 +28,7 @@ test('every species/action has continuous bounded anticipation, primary, seconda
 });
 
 test('rigged quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () => {
-  for (const species of ['dog', 'cat', 'fox', 'horse', 'panda']) {
+  for (const species of ['dog', 'fox', 'horse', 'panda']) {
     const wave = getAnimalChoreography(species, 'wave');
     const play = getAnimalChoreography(species, 'play');
     assert.ok(wave.channels.every((channel) => channel.target === 'forelimb'));
@@ -49,13 +49,36 @@ test('rigged quadruped wave is paw-only: lift + side rock, no head/tail/root bob
   }
 });
 
-test('static companions use a small centered whole-body greeting', () => {
-  for (const species of ['capybara', 'rabbit', 'koala', 'bear', 'raccoon', 'duck', 'sheep', 'seal', 'sloth']) {
+test('static companions use a multi-hop centered bounce greeting', () => {
+  for (const species of [
+    'cat',
+    'hamster',
+    'capybara',
+    'rabbit',
+    'koala',
+    'bear',
+    'raccoon',
+    'duck',
+    'sheep',
+    'seal',
+    'sloth',
+  ]) {
     const wave = getAnimalChoreography(species, 'wave');
+    const play = getAnimalChoreography(species, 'play');
     assert.ok(wave.root.maxLift > 0, `${species} needs visible lift`);
     assert.ok(wave.root.maxScaleY > 0, `${species} needs visible body compression`);
+    assert.ok(wave.root.maxLift < play.root.maxLift, `${species} bounce stays below Play hop`);
     assert.ok(wave.samples.some((sample) => sample.root.lift > 0), `${species} wave is static`);
     assert.ok(wave.samples.every((sample) => sample.root.x === 0 && sample.root.z === 0));
+    // Multi-cycle bounce: lift should leave and return more than once.
+    let peaks = 0;
+    let wasUp = false;
+    for (const sample of wave.samples) {
+      const up = sample.root.lift > wave.root.maxLift * 0.35;
+      if (up && !wasUp) peaks += 1;
+      wasUp = up;
+    }
+    assert.ok(peaks >= 2, `${species} Wave bounce should hop at least twice (got ${peaks})`);
   }
 });
 
@@ -130,5 +153,6 @@ test('reduced motion removes repeated limb/wing beats and stays centered', () =>
 test('hamster uses its own quadruped choreography rather than rabbit ears', () => {
   const hamster = getAnimalChoreography('hamster', 'wave');
   assert.equal(hamster.species, 'hamster');
+  assert.ok(hamster.root.maxLift > 0, 'hamster Wave uses bounce root motion');
   assert.ok(hamster.channels.every((channel) => channel.target === 'forelimb'));
 });

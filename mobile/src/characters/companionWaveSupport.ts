@@ -1,18 +1,32 @@
 /**
- * Rigged pets wave a limb; static pets use a restrained whole-body greeting.
+ * Wave response modes:
+ * - paw-wave: Mesh2Motion / bird / penguin rigs with a real forelimb, wing, or flipper
+ * - bounce: static Poly Pizza meshes — whole-body vertical greeting (no limb joints)
+ *
+ * Keep this list in sync with animalChoreography body-greeting species.
  */
-const PAW_WAVE_READY = new Set([
+
+/** Rigged companions that animate a real limb on Wave. */
+export const PAW_WAVE_SPECIES = new Set([
   'fox',
   'horse',
   'dog',
   'panda',
-  // Birds use wing channels when the Mesh2Motion / bird GLB exposes wings.
   'parrot',
   'flamingo',
   'stork',
   'penguin',
-  'capybara',
+]);
+
+/**
+ * Static meshes with no approved forelimb/wing/flipper joint.
+ * Wave uses a short centered bounce instead of a paw raise.
+ */
+export const WAVE_BOUNCE_SPECIES = [
+  'cat',
+  'hamster',
   'rabbit',
+  'capybara',
   'koala',
   'bear',
   'raccoon',
@@ -20,16 +34,26 @@ const PAW_WAVE_READY = new Set([
   'sheep',
   'seal',
   'sloth',
-]);
-
-/** Legacy static meshes that still lack an approved greeting. */
-export const PAW_WAVE_BLOCKED_STATIC_MESH = [
-  'hamster',
-  'cat', // bundled Poly Pizza cat is also a static mesh in this build
 ] as const;
 
+/** @deprecated Prefer WAVE_BOUNCE_SPECIES — kept for older imports/tests. */
+export const PAW_WAVE_BLOCKED_STATIC_MESH = ['hamster', 'cat'] as const;
+
+export type CompanionWaveResponse = 'paw-wave' | 'bounce';
+
+export function companionWaveResponse(
+  species: string | undefined | null
+): CompanionWaveResponse {
+  if (!species) return 'bounce';
+  if (PAW_WAVE_SPECIES.has(species)) return 'paw-wave';
+  return 'bounce';
+}
+
+/** True when Wave should drive a limb channel (not the bounce fallback). */
 export function companionSupportsPawWave(species: string | undefined | null): boolean {
-  if (!species) return false;
-  if ((PAW_WAVE_BLOCKED_STATIC_MESH as readonly string[]).includes(species)) return false;
-  return PAW_WAVE_READY.has(species);
+  return companionWaveResponse(species) === 'paw-wave';
+}
+
+export function companionUsesWaveBounce(species: string | undefined | null): boolean {
+  return companionWaveResponse(species) === 'bounce';
 }

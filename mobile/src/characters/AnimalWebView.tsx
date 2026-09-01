@@ -816,19 +816,9 @@ function doWaveGreeting() {
   const state = beginProcedural('wave', m.durationMs);
   playSemanticClip('wave', { loop: false, speed: m.clipSpeed, fade: 0.65 });
   if (!state) return;
-  // Paw wave requires a real shoulder/forelimb joint. Never fake it with a
-  // whole-body yaw/roll — that reads as the pet spinning, not waving.
-  const hasWaveLimb = Boolean(
-    state.bones.forelimb?.length ||
-    state.bones.wing?.length ||
-    state.bones.flipper?.length
-  );
-  if (!hasWaveLimb) {
-    scheduleProceduralIdle(state, m.durationMs + 100, () => {
-      if (expression === 'waving') goBaseIdle();
-    });
-    return;
-  }
+  // Paw wave needs a real shoulder/forelimb/wing/flipper. Static meshes keep
+  // the overlay active so choreography can drive the centered bounce fallback
+  // (root lift + scaleY) — never a yaw/roll spin.
   scheduleProceduralIdle(state, m.durationMs + 100, () => {
     if (expression === 'waving') goBaseIdle();
   });
