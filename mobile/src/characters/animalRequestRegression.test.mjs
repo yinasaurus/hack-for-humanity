@@ -87,7 +87,7 @@ test('Every requested companion exposes a visible Wave response', () => {
   }
 });
 
-test('Requested Talk actions use verified same-species recordings', () => {
+test('Requested Talk actions use verified, licensed recordings', () => {
   for (const species of ['capybara', 'rabbit', 'koala', 'bear', 'raccoon', 'sloth']) {
     const entry = getAnimalSoundEntry(species, 'talk');
     assert.equal(entry?.species, species);

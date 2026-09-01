@@ -94,10 +94,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'fox',
     label: 'Fox',
-    // Use the smoother textured Mesh2Motion variation shared by the current
-    // dog/cat/panda family instead of the faceted Khronos sample fox.
-    modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-fox.glb',
+    // Mesh2Motion CC0 model bundled locally so the WebView does not depend on
+    // a mutable third-party URL at runtime.
+    modelPath: 'bundled:fox',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Walk'],
@@ -232,9 +231,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'dog',
     label: 'Dog',
-    // Mesh2Motion model variations are CC0.
-    modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-dog.glb',
+    // Mesh2Motion CC0 model bundled locally so the WebView does not depend on
+    // a mutable third-party URL at runtime.
+    modelPath: 'bundled:dog',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Standing'],
@@ -259,8 +258,9 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
   {
     id: 'panda',
     label: 'Panda',
-    modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-panda.glb',
+    // Mesh2Motion CC0 model bundled locally so the WebView does not depend on
+    // a mutable third-party URL at runtime.
+    modelPath: 'bundled:panda',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Standing'],

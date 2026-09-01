@@ -12,7 +12,8 @@ You need **low-poly animals in `.glb`**, preferably with animation clips you can
 
 ## Models currently used by Buddi
 
-- Fox, dog, and panda: the smoother textured Mesh2Motion model-variation family.
+- Fox, dog, and panda: the smoother textured Mesh2Motion model-variation family,
+  bundled locally as CC0 assets under `assets/characters/` (see `ATTRIBUTION.md`).
 - Horse: Jungle Jim's CC-BY 4.0 cartoon horse, bundled locally with original
   `Run` plus Buddi-authored `Idle`, `Talk`, `Wave`, `Play`, `Curious`, and `Gentle` clips.
 - Penguin: Quaternius / FreeModels, CC0, bundled with Buddi-authored flipper joints and `Wave`.

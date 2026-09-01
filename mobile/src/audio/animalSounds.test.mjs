@@ -42,7 +42,7 @@ test('unknown calls fail closed and Play stays silent without a separate cue', (
   }
 });
 
-test('new and repaired companions have verified same-species Talk cues', () => {
+test('new and repaired companions have verified, redistributable Talk cues', () => {
   for (const species of ['sheep', 'duck', 'rabbit', 'seal', 'capybara', 'koala', 'bear', 'raccoon', 'sloth']) {
     const entry = getAnimalSoundEntry(species, 'talk');
     assert.equal(entry?.status, 'ready', species);
@@ -61,7 +61,7 @@ test('Rabbit Talk uses the verified local rabbit recording', () => {
   assert.equal(rabbit?.provenance.sha256, createHash('sha256').update(asset).digest('hex'));
 });
 
-test('Capybara, Rabbit, and Sloth Talk assets match their verified call excerpts', () => {
+test('Capybara, Rabbit, and Sloth Talk assets match their normalized call files', () => {
   const assets = {
     capybara: '../../assets/audio/animal-calls/capybara-talk.m4a',
     rabbit: '../../assets/audio/animal-calls/rabbit-talk.wav',
@@ -80,6 +80,20 @@ test('Capybara, Rabbit, and Sloth Talk assets match their verified call excerpts
     assert.match(entry?.provenance.modifications || '', /high-pass filtered/i, species);
     assert.match(entry?.provenance.modifications || '', /loudness-normalized/i, species);
   }
+});
+
+test('Sloth Talk uses the disclosed CC0 baby-sloth soundalike', () => {
+  const sloth = getAnimalSoundEntry('sloth', 'talk');
+  const asset = readFileSync(new URL('../../assets/audio/animal-calls/sloth-talk.m4a', import.meta.url));
+  assert.equal(sloth?.status, 'ready');
+  assert.equal(sloth?.provenance.license, 'CC0');
+  assert.match(sloth?.provenance.sourceUrl || '', /freesound\.org\/people\/TheKingOfGeeks360\/sounds\/792534/);
+  assert.equal(sloth?.provenance.author, 'TheKingOfGeeks360');
+  assert.match(sloth?.provenance.modifications || '', /kid-goat bleat/i);
+  assert.match(sloth?.provenance.modifications || '', /two-fingered baby sloth/i);
+  assert.equal(sloth?.byteSize, asset.byteLength);
+  assert.equal(sloth?.provenance.sha256, createHash('sha256').update(asset).digest('hex'));
+  assert.ok((sloth?.durationMs || 0) >= 1200 && (sloth?.durationMs || 0) <= 1400);
 });
 
 test('Cat Talk is the verified local CC0 domestic-cat meow derivative', () => {

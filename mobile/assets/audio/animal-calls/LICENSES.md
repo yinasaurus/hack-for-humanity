@@ -6,10 +6,12 @@ SHA-256 values of the exact bundled files, not of the source downloads.
 Playback is explicit Talk only; the separate Play slots remain intentionally
 silent until friendly cues can be licensed and reviewed independently.
 
-Rabbit, capybara, koala, bear, raccoon, and sloth use verified same-species
-recordings for their Talk interactions. Hamster's older cue remains in this
-folder only for auditability and legacy saved companions; it is no longer
-referenced by the selectable-species manifest.
+Rabbit, capybara, koala, bear, and raccoon use verified same-species recordings
+for their Talk interactions. Sloth uses a clearly disclosed kid-goat soundalike:
+the Sloth Conservation Foundation describes two-fingered baby sloths as sounding
+like baby goats when they “meep.” Hamster's older cue remains in this folder only
+for auditability and legacy saved companions; it is no longer referenced by the
+selectable-species manifest.
 
 | Species | Bundled file (duration; bytes) | Verified source page (and acquisition file) | Author / uploader | License | Modifications | SHA-256 | Retrieved |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -30,7 +32,7 @@ referenced by the selectable-species manifest.
 | Koala | `koala-talk.m4a` (1.800 s; 15,979) | [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Perception-of-Male-Caller-Identity-in-Koalas-(Phascolarctos-cinereus)-Acoustic-Analysis-and-pone.0020329.s001.ogv); [source video](https://upload.wikimedia.org/wikipedia/commons/b/be/Perception-of-Male-Caller-Identity-in-Koalas-%28Phascolarctos-cinereus%29-Acoustic-Analysis-and-pone.0020329.s001.ogv) | Charlton B, Ellis W, McKinnon A, Brumm J, Nilsson K, Fitch W | CC-BY 2.5 | Used 0.20–2.00 s of the recorded male-koala bellow; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz, faded, and encoded as AAC-LC 64 kbps M4A. | `aab34c20b86c038311ea837e53fce65653e4fb45dc2748da3121fd4fcd1d6bb0` | 2026-08-29 |
 | Bear | `bear-talk.m4a` (1.800 s; 16,058) | [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Yellowstone_sound_library_-_Grizzly_Bear_Eating_-_001.mp3); [source MP3](https://upload.wikimedia.org/wikipedia/commons/0/08/Yellowstone_sound_library_-_Grizzly_Bear_Eating_-_001.mp3) | National Park Service and MSU Acoustic Atlas / Jennifer Jerrett | Public Domain | Used 0.20–2.00 s of the Yellowstone grizzly-bear eating vocalization; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz, faded, and encoded as AAC-LC 64 kbps M4A. | `8b56e8c0ebdf8a93a560bddb39715c29552ac647cd33c50ed2e8f2d5c4c60dbc` | 2026-08-29 |
 | Raccoon | `raccoon-talk.m4a` (1.800 s; 15,922) | [Freesound page](https://freesound.org/people/MoveAwayPodcast/sounds/555365/); [HQ MP3 preview](https://cdn.freesound.org/previews/555/555365_11888343-hq.mp3) | MoveAwayPodcast | CC-BY 4.0 | Used 0.50–2.30 s of the authentic raccoon-noises recording; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz, faded, and encoded as AAC-LC 64 kbps M4A. | `58d7f8aebb88867fd60ad67faa0f0fb2ec311f273f11a00be87e0116d7b1fb35` | 2026-08-29 |
-| Sloth | `sloth-talk.m4a` (1.800 s; 15,990) | [Wikimedia Commons file page](https://commons.wikimedia.org/wiki/File:Hoffman%27s_Two-toed_Sloth._Choloepus_hoffmanni_video.webm); [source video](https://upload.wikimedia.org/wikipedia/commons/b/b5/Hoffman%27s_Two-toed_Sloth._Choloepus_hoffmanni_video.webm) | Gail (Flickr: gails_pictures) | CC-BY 2.0 | Used 3.00–4.80 s containing the animal's low grunt/hiss-like call; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz, faded, and encoded as AAC-LC 64 kbps M4A. | `9825923c5aaa25d2a7a3fa5b1a65ec26cbaf9d4c37e2aa9a202a2603d8b455dc` | 2026-08-29 |
+| Sloth | `sloth-talk.m4a` (1.299 s; 12,332) | [Freesound source page](https://freesound.org/people/TheKingOfGeeks360/sounds/792534/); [HQ MP3 preview](https://cdn.freesound.org/previews/792/792534_15895934-hq.mp3); [baby-sloth vocalization reference](https://www.slothconservation.org/blog/baby-sloths-everything-you-always-wanted-to-know) | TheKingOfGeeks360 | CC0 | Complete 1.299 s kid-goat bleat used as a zoologically grounded soundalike for a two-fingered baby sloth “meep”; high-pass filtered, loudness-normalized, downmixed to mono 44.1 kHz, given 40 ms linear fades, and encoded as AAC-LC 64 kbps M4A. | `3a36aebd1df0dbd37927d4063a04932751c84115040c8cbeab5522508ea11471` | 2026-09-01 |
 
 ## Review notes
 
@@ -38,10 +40,13 @@ referenced by the selectable-species manifest.
   rejected. It is not bundled. The bundled fox cue is the explicitly
   identified red-fox low-frequency call from the CC-BY PLOS supplementary
   recording.
-- No NC, ND, distress, alarm, aggression, or ambiguous-species recording is
-  bundled. Every Talk entry has an exact source page, author/uploader, allowed
-  license, processing note, final-file hash, measured duration, byte size, and
-  retrieval date in `src/audio/animalSounds.ts` and this ledger.
+- No NC, ND, alarm, aggression, or ambiguous-source recording is bundled. The
+  sloth cue is the sole cross-species soundalike and is disclosed above; it was
+  selected because a conservation source describes the target two-fingered
+  baby-sloth call as goat-like. Every Talk entry has an exact source page,
+  author/uploader, allowed license, processing note, final-file hash, measured
+  duration, byte size, and retrieval date in `src/audio/animalSounds.ts` and
+  this ledger.
 - Expo's SDK 57 local-audio contract is documented by [Expo Audio](https://docs.expo.dev/versions/v57.0.0/sdk/audio/)
   and [Expo Asset](https://docs.expo.dev/versions/v57.0.0/sdk/asset/). The
   manifest uses literal static `require()` calls so Metro can bundle the files;

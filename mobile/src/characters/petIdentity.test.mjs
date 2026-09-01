@@ -63,10 +63,14 @@ test('Bun legacy records render through Rabbit rather than Flamingo', () => {
   assert.equal(characterForPetType('bun').id, 'rabbit');
 });
 
-test('fox stays remote while Horse uses the bundled animated companion', () => {
+test('Mesh2Motion companions use their bundled models while Horse keeps its authored clips', () => {
   const fox = getCharacter('fox');
+  const dog = getCharacter('dog');
+  const panda = getCharacter('panda');
   const horse = getCharacter('horse');
-  assert.match(fox?.modelPath || '', /Mesh2Motion.*fox-fox\.glb/i);
+  assert.equal(fox?.modelPath, 'bundled:fox');
+  assert.equal(dog?.modelPath, 'bundled:dog');
+  assert.equal(panda?.modelPath, 'bundled:panda');
   assert.equal(horse?.modelPath, 'bundled:horse');
   assert.equal(horse?.clips.idle, 'Idle');
   assert.equal(horse?.clips.talk, 'Talk');

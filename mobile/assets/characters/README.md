@@ -7,6 +7,9 @@ Bundled Poly Pizza companions (CC-BY, molochdadev) — see `ATTRIBUTION.md`:
 - `raccoon.glb`, `duck.glb`, `sheep.glb`
 - `cat.glb`, `sloth.glb`
 
+Bundled Mesh2Motion companions (CC0, see `ATTRIBUTION.md`):
+- `fox.glb`, `dog.glb`, `panda.glb`
+
 Other bundled companions — see `ATTRIBUTION.md`:
 - `horse.glb` — Jungle Jim cartoon horse (CC-BY 4.0), with Buddi animation clips
 - `penguin.glb` — Quaternius penguin (CC0), with Buddi flipper rig and Wave clip

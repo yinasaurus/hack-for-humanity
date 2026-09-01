@@ -1,5 +1,20 @@
 # Character model attribution
 
+## Mesh2Motion animal variations (CC0)
+
+`fox.glb`, `dog.glb`, and `panda.glb` are the Mesh2Motion model variations
+from the [`mesh2motion-app` repository](https://github.com/Mesh2Motion/mesh2motion-app),
+downloaded from its `static/models-variation/fox/` directory:
+
+- [`fox.glb`](https://github.com/Mesh2Motion/mesh2motion-app/blob/main/static/models-variation/fox/fox.glb)
+- [`dog.glb`](https://github.com/Mesh2Motion/mesh2motion-app/blob/main/static/models-variation/fox/dog.glb)
+- [`panda.glb`](https://github.com/Mesh2Motion/mesh2motion-app/blob/main/static/models-variation/fox/panda.glb)
+
+The upstream project states that its art assets (3D models, rigs, and
+animations) are released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
+Buddi uses the models unchanged and drives its companion actions through the
+catalog's semantic/procedural overlay.
+
 ## Cartoon Horse with animations by Jungle Jim (CC-BY 4.0)
 
 `horse.glb` is derived from **Cartoon Horse with animations** by

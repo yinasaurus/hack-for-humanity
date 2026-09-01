@@ -8,6 +8,9 @@ import { Platform } from 'react-native';
  * to a fetchable URI (data URI on native so https-based WebViews can load it).
  */
 export const BUNDLED_MODEL_MODULES = {
+  fox: require('../../assets/characters/fox.glb'),
+  dog: require('../../assets/characters/dog.glb'),
+  panda: require('../../assets/characters/panda.glb'),
   horse: require('../../assets/characters/horse.glb'),
   penguin: require('../../assets/characters/penguin.glb'),
   rabbit: require('../../assets/characters/rabbit.glb'),

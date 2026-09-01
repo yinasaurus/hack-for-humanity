@@ -21,7 +21,6 @@ import {
   animalPresentationFor,
   characterForLiveCompanion,
   companionSupportsPawWave,
-  companionVitalityOpacity,
   createAnimalIntent,
   isGrowthMilestoneDay,
 } from '../characters';
@@ -618,10 +617,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           <View style={styles.hero}>
             <View
               accessibilityLabel={`${companion.petName}. Drag to look around, tap to play, hold to talk.`}
-              style={[
-                styles.hero3d,
-                { opacity: companionVitalityOpacity(companion.vitality) },
-              ]}
+              style={styles.hero3d}
             >
               <AnimalWebView
                 ref={petRef}
@@ -630,7 +626,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 growthStage={companion.growthStage}
                 expression={expression}
                 muted={muted}
-                style={styles.hero3d}
+                style={styles.hero3dContent}
                 accessibilityLabel={`${companion.petName} companion, vitality ${companion.vitality || 'bright'}`}
                 onPetTap={runPlayBonding}
                 onPetLongPress={() => runTalk('tap')}
@@ -994,6 +990,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 320,
     borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: colors.mist,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  hero3dContent: {
+    width: '100%',
+    height: '100%',
   },
   petName: {
     marginTop: 10,
