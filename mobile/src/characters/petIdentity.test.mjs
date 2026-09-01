@@ -66,7 +66,7 @@ test('Bun legacy records render through Rabbit rather than Flamingo', () => {
 test('fox stays remote while Horse uses the bundled animated companion', () => {
   const fox = getCharacter('fox');
   const horse = getCharacter('horse');
-  assert.match(fox?.modelPath || '', /Mesh2Motion.*fox-fox\.glb/i);
+  assert.match(fox?.modelPath || '', /Mesh2Motion.*\/fox\/fox\.glb/i);
   assert.equal(horse?.modelPath, 'bundled:horse');
   assert.equal(horse?.clips.idle, 'Idle');
   assert.equal(horse?.clips.talk, 'Talk');

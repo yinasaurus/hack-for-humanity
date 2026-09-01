@@ -4,6 +4,7 @@
  */
 
 import { v4 as uuid } from 'uuid';
+import { redactPatientFacingNutritionLanguage } from './patientNutritionRedact.js';
 import { shiftDay, toDateKey } from './streaks.js';
 
 const MEAL_LABELS = ['morning', 'midday', 'afternoon', 'evening', 'anytime'];
@@ -158,10 +159,13 @@ export function toPatientCarePlan(reminder) {
   if (!reminder?.note) return null;
   const hour = reminder.hour ?? 12;
   const timeOfDay = hour <= 10 ? 'morning' : hour <= 15 ? 'midday' : 'evening';
+  // Scrub calorie/macro numbers at the patient boundary only — clinician
+  // storage and dashboard views keep the original text.
+  const note = redactPatientFacingNutritionLanguage(reminder.note);
   if (!reminder?.carePlan?.slots?.length) {
     return {
       id: reminder.id,
-      note: reminder.note,
+      note,
       frequency: reminder.frequency,
       hour,
       timeOfDay,
@@ -176,19 +180,19 @@ export function toPatientCarePlan(reminder) {
   const moment = todayPending || nextPending || null;
   return {
     id: reminder.id,
-    note: reminder.note,
+    note,
     frequency: reminder.frequency,
     hour,
     timeOfDay,
     carePlan: {
-      summary: reminder.carePlan.summary,
+      summary: redactPatientFacingNutritionLanguage(reminder.carePlan.summary),
       startDate: reminder.carePlan.startDate,
       endDate: reminder.carePlan.endDate,
       slots: slots.map((s) => ({
         id: s.id,
         date: s.date,
         mealLabel: s.mealLabel,
-        prompt: s.prompt,
+        prompt: redactPatientFacingNutritionLanguage(s.prompt),
         status: s.status,
       })),
     },
@@ -197,7 +201,7 @@ export function toPatientCarePlan(reminder) {
           id: moment.id,
           date: moment.date,
           mealLabel: moment.mealLabel,
-          prompt: moment.prompt,
+          prompt: redactPatientFacingNutritionLanguage(moment.prompt),
           isToday: moment.date === today,
         }
       : null,

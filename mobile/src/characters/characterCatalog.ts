@@ -97,7 +97,7 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     // Use the smoother textured Mesh2Motion variation shared by the current
     // dog/cat/panda family instead of the faceted Khronos sample fox.
     modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-fox.glb',
+      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox/fox.glb',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Walk'],
@@ -234,7 +234,7 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     label: 'Dog',
     // Mesh2Motion model variations are CC0.
     modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-dog.glb',
+      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox/dog.glb',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Standing'],
@@ -260,7 +260,7 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     id: 'panda',
     label: 'Panda',
     modelPath:
-      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox-panda.glb',
+      'https://raw.githubusercontent.com/Mesh2Motion/mesh2motion-app/main/static/models-variation/fox/panda.glb',
     clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
     actions: {
       idle: ['Idle', 'Standing'],

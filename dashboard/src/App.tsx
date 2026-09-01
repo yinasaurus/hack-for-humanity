@@ -671,6 +671,10 @@ export default function App() {
                         maxLength={280}
                         aria-label="Optional encouragement note for patient"
                       />
+                      <p className="muted tiny" role="note">
+                        Numeric nutrition wording is automatically redacted before the patient
+                        sees this. Your saved note stays unchanged for your team.
+                      </p>
                     </label>
                     <div className="celebrate-actions">
                       <button type="submit" className="primary" disabled={celebrateBusy}>
@@ -737,6 +741,10 @@ export default function App() {
                       required
                       aria-label={`Care reminder for ${detail.patient.name}`}
                     />
+                    <p className="muted tiny" role="note">
+                      Numeric nutrition wording is automatically redacted before the patient
+                      sees this. Your saved note stays unchanged for your team.
+                    </p>
                   </label>
                   <label className="field">
                     <span>Fallback notification frequency</span>
