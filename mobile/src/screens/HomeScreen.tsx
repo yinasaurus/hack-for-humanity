@@ -59,7 +59,7 @@ import {
   talkVisualDurationMs,
 } from '../companionReactions';
 import type { AnimalWebHandle } from '../characters';
-import { petTypeLabel, resolveScene } from '../pets';
+import { petTypeLabel } from '../pets';
 import { BondingHeartBurst } from '../components/BondingHeartBurst';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useAnimalAudio } from '../audio/useAnimalAudio';
@@ -351,16 +351,6 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
       void syncClinicianReminder(data.clinicianReminder).catch(() => {
         /* Expo Go / permission — in-app card still shows */
       });
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log('[Home] companion appearance', {
-          petType: data.petType,
-          hat: data.hat,
-          neck: data.neck,
-          scene: data.scene,
-          petName: data.petName,
-        });
-      }
       if (data.newlyUnlocked?.length && !newUnlocks.length) {
         setPendingUnlocks(data.newlyUnlocked);
         setShowMilestone(true);
@@ -499,10 +489,9 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
   const quietHours = presence === 'resting';
   const cozyLook = quietHours || napping;
-  const sceneFill = resolveScene(companion?.scene).fill;
-  const gradient = cozyLook
-    ? ([sceneFill, '#DDE5E8', '#D5E0DC'] as const)
-    : ([sceneFill, sceneFill, colors.cream] as const);
+  // Scene color applies only inside AnimalWebView's companion box — keep the
+  // Home chrome on the brand cream gradient.
+  const gradient = cozyLook ? gradients.homeResting : gradients.home;
   const growthIndex = GROWTH_CHAPTERS.indexOf(companion?.growthStage || 'baby');
 
   return (

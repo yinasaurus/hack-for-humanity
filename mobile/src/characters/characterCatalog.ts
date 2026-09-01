@@ -304,8 +304,41 @@ export const CHARACTER_CATALOG: CharacterDef[] = [
     },
     scale: 1,
   },
-  // majkel's supplied CC-BY rabbit, optimized locally for mobile.
-  staticBundledCompanion('rabbit', 'Rabbit'),
+  // Low-poly Sketchfab rabbit (rigged) — previous majkel static mesh kept as rabbit-old.glb.
+  {
+    id: 'rabbit',
+    label: 'Rabbit',
+    modelPath: 'bundled:rabbit',
+    clips: { idle: 'Idle', talk: 'Idle', react: 'Run' },
+    actions: {
+      idle: ['Idle', 'Armature.001|Idle'],
+      talk: ['Idle', 'Armature.001|Idle'],
+      wave: ['Wave', 'Gesture'],
+      play: ['Run', 'Armature.001|Run', 'Play', 'Jump'],
+      curious: ['Idle', 'Armature.001|Idle'],
+      gentle: ['Idle', 'Armature.001|Idle'],
+    },
+    rig: {
+      // Bone.003 is the head joint (ears + face branch from here).
+      head: ['Bone.003_03', 'Bone.003', 'Head', 'head'],
+      neck: ['Bone.002_02', 'Bone.002', 'Neck', 'neck'],
+      jaw: ['Jaw', 'jaw', 'Mouth', 'mouth'],
+      ear: ['ear01.L_04', 'ear01.R_06', 'ear01.L', 'ear01.R'],
+      // fleg01 = front-leg shoulder (wave pivot); lower fleg02/03 stay children.
+      forelimb: [
+        'fleg01.L_08',
+        'fleg01.R_011',
+        'fleg01.L',
+        'fleg01.R',
+        'fleg02.L_09',
+        'fleg02.R_012',
+      ],
+      hand: ['fleg03.L_010', 'fleg03.R_013', 'fleg03.L', 'fleg03.R'],
+      tail: ['Tail', 'tail'],
+      talkMorphs: ['mouthOpen', 'Mouth', 'jaw'],
+    },
+    scale: 1,
+  },
   staticBundledCompanion('capybara', 'Capybara'),
   staticBundledCompanion('hamster', 'Hamster'),
   staticBundledCompanion('koala', 'Koala'),

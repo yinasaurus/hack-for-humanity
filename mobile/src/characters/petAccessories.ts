@@ -48,12 +48,12 @@ export type AnatomicalHeadFrame = {
 
 /** Landmark name hints tried against the live bone map (order = preference). */
 export const HEAD_LANDMARK_HINTS = {
-  head: ['Head', 'head', 'b_Head_05', 'Head_Bone'],
+  head: ['Head', 'head', 'b_Head_05', 'Head_Bone', 'Bone.003_03', 'Bone.003'],
   crown: ['Head.tip', 'Head_Tip', 'head_tip'],
   muzzle: ['Chin', 'chin', 'Nose', 'nose', 'Jaw', 'jaw', 'Muzzle', 'muzzle'],
-  earL: ['Ear_L', 'ear_l', 'EarLeft', 'LeftEar'],
-  earR: ['Ear_R', 'ear_r', 'EarRight', 'RightEar'],
-  neck: ['Neck', 'neck', 'b_Neck_04', 'Spine_4', 'Spine_3'],
+  earL: ['Ear_L', 'ear_l', 'EarLeft', 'LeftEar', 'ear01.L_04', 'ear01.L'],
+  earR: ['Ear_R', 'ear_r', 'EarRight', 'RightEar', 'ear01.R_06', 'ear01.R'],
+  neck: ['Neck', 'neck', 'b_Neck_04', 'Spine_4', 'Spine_3', 'Bone.002_02', 'Bone.002'],
 } as const;
 
 const DEFAULT_FIT: SpeciesAccessoryFit = {
@@ -106,11 +106,11 @@ export const SPECIES_ACCESSORY_FIT: Readonly<Record<string, SpeciesAccessoryFit>
     held: { up: 0.05, forward: 0.18, size: 0.28 },
   },
   rabbit: {
-    // Tall ears — seat hat slightly forward of ear roots so it doesn't float.
-    hat: { up: 0.06, forward: -0.02, size: 0.44, tilt: 0.1 },
-    face: { up: 0.05, forward: 0.55, size: 0.38 },
-    neck: { up: -0.12, forward: 0.12, size: 0.38 },
-    held: { up: 0.05, forward: 0.18, size: 0.26 },
+    // Tall ear roots on the new rigged low-poly — seat hat between ears, glasses closer.
+    hat: { up: 0.1, forward: -0.04, size: 0.48, tilt: 0.12 },
+    face: { up: 0.04, forward: 0.48, size: 0.36 },
+    neck: { up: -0.14, forward: 0.1, size: 0.36 },
+    held: { up: 0.05, forward: 0.16, size: 0.24 },
   },
   parrot: {
     hat: { up: 0.2, forward: -0.05, size: 0.55, tilt: 0.08 },

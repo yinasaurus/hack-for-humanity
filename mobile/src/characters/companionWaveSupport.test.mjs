@@ -36,7 +36,7 @@ test('bounce species list stays aligned with choreography body greeting', async 
     const wave = getAnimalChoreography(id, 'wave');
     assert.ok(wave.root.maxLift > 0, `${id} choreography missing bounce lift`);
   }
-  for (const id of ['dog', 'fox', 'panda', 'horse']) {
+  for (const id of ['dog', 'fox', 'panda', 'horse', 'rabbit']) {
     assert.equal(getAnimalChoreography(id, 'wave').root.maxLift, 0, id);
   }
 });

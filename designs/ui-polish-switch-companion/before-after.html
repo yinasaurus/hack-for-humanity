@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Buddi — Switch companion UI: before / after</title>
+  <style>
+    :root {
+      --cream: #F7F4EF;
+      --mist: #E8EEF0;
+      --sage-wash: #E6EDE8;
+      --sand: #D9CFC3;
+      --sage: #8FA396;
+      --sage-deep: #4E6B5A;
+      --teal: #3F6A75;
+      --ink: #2F3634;
+      --ink-soft: #4F5B57;
+      --white: #FFFFFF;
+      --border: rgba(143, 163, 150, 0.45);
+      --card: rgba(255,255,255,0.88);
+      --error-hardcoded: #A65D5D;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
+      background: #e4e0d8;
+      color: var(--ink);
+      padding: 28px 20px 48px;
+    }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .lede { color: var(--ink-soft); max-width: 720px; margin: 0 0 24px; line-height: 1.45; font-size: 14px; }
+    .pair {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .col { width: 360px; }
+    .label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .label.before { color: #8a4a4a; }
+    .label.after { color: var(--sage-deep); }
+    .phone {
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(47,54,52,0.18);
+      background: linear-gradient(180deg, #F7F4EF, #EDE8E2, #E6EDE8);
+      border: 1px solid var(--sand);
+      height: 720px;
+      display: flex;
+      flex-direction: column;
+    }
+    .preview {
+      padding: 18px 20px 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,248,242,0.96);
+      text-align: center;
+    }
+    .title { font-weight: 800; font-size: 26px; text-align: left; }
+    .stage {
+      margin-top: 8px;
+      height: 120px;
+      border-radius: 20px;
+      background: #dfe8e2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+    }
+    .preview-name {
+      margin-top: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--sage-deep);
+    }
+    .scroll {
+      flex: 1;
+      overflow: auto;
+      padding: 10px 20px 24px;
+    }
+    .path {
+      padding: 14px;
+      border-radius: 16px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .path h3 { margin: 0; font-size: 16px; }
+    .path p { margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+    .section { font-weight: 700; font-size: 15px; margin: 14px 0 8px; }
+    .hint { font-size: 13px; color: var(--ink-soft); margin: 0 0 8px; line-height: 1.35; }
+    .tabs { display: flex; gap: 8px; margin: 12px 0 8px; }
+    .tab {
+      padding: 10px 16px;
+      border-radius: 14px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-soft);
+    }
+    .tab.on { background: var(--sage-deep); color: white; border-color: var(--sage-deep); }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    /* BEFORE cards — mirrors CustomizeScreen companionCard */
+    .b-card {
+      border-radius: 18px;
+      border: 2px solid var(--border);
+      background: var(--card);
+      overflow: hidden;
+      text-align: center;
+      padding-bottom: 10px;
+    }
+    .b-card.on { border-color: var(--sage-deep); background: white; }
+    .b-thumb {
+      height: 88px;
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+    }
+    .b-label { margin-top: 6px; font-weight: 700; font-size: 14px; }
+    .b-check { margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--sage-deep); }
+    .cta {
+      margin-top: 20px;
+      height: 48px;
+      border-radius: 16px;
+      background: var(--sage-deep);
+      color: white;
+      font-weight: 700;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .cancel {
+      margin-top: 12px;
+      text-align: center;
+      color: var(--ink-soft);
+      font-weight: 600;
+      font-size: 15px;
+      padding: 12px;
+    }
+    .notes {
+      margin-top: 28px;
+      max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
+      background: white;
+      border-radius: 16px;
+      padding: 18px 20px;
+      border: 1px solid var(--sand);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .notes h2 { margin: 0 0 10px; font-size: 16px; }
+    .notes ul { margin: 0; padding-left: 18px; }
+    .notes li { margin-bottom: 6px; }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--mist);
+      color: var(--teal);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* AFTER — align with PetSelectionScreen patterns */
+    .a-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .a-card {
+      position: relative;
+      min-height: 132px;
+      padding: 12px 10px 14px;
+      border-radius: 20px;
+      border: 2px solid var(--sand);
+      background: var(--card);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .a-card.on {
+      border-color: var(--sage-deep);
+      background: white;
+    }
+    .a-icon { font-size: 48px; line-height: 1.15; }
+    .a-label { margin-top: 4px; font-weight: 700; font-size: 15px; }
+    .a-card.on .a-label { color: var(--sage-deep); }
+    .a-radio {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--sand);
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .a-card.on .a-radio { border-color: var(--sage-deep); }
+    .a-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--sage-deep);
+    }
+    .a-blurb {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--ink-soft);
+      line-height: 1.25;
+      padding: 0 4px;
+    }
+    .a-hint {
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin: 0 0 12px;
+      line-height: 1.4;
+      padding: 12px 14px;
+      background: var(--mist);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+    .a-cta {
+      margin-top: 24px;
+      min-height: 54px;
+      border-radius: 17px;
+      background: var(--sage-deep);
+      color: white;
+      font-weight: 800;
+      font-size: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .a-cancel {
+      margin-top: 8px;
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ink-soft);
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .scroll::-webkit-scrollbar { width: 6px; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Switch companion — Style → Companion tab</h1>
+  <p class="lede">
+    Code-faithful mock of CustomizeScreen (not a live device screenshot).
+    Left = current styles. Right = proposed polish only (spacing, selection chrome, hierarchy) — same pets, same Save/Cancel actions, no logic change.
+  </p>
+
+  <div class="pair">
+    <div class="col">
+      <div class="label before">Before — current</div>
+      <div class="phone" aria-label="Current companion switch UI">
+        <div class="preview">
+          <div class="title">Style</div>
+          <div class="stage">🦊</div>
+          <div class="preview-name">Maple · Fox · Soft day</div>
+        </div>
+        <div class="scroll">
+          <div class="path">
+            <h3>Coming up</h3>
+            <p>Soft keepsakes from check-in days — no deadlines.</p>
+          </div>
+          <div class="section">Name</div>
+          <div style="height:44px;border:1px solid var(--border);border-radius:14px;background:white;"></div>
+          <div class="tabs">
+            <div class="tab">Outfit</div>
+            <div class="tab on">Companion</div>
+          </div>
+          <div class="section">3D companion</div>
+          <p class="hint">Switch your friend anytime — outfits carry over.</p>
+          <div class="grid">
+            <div class="b-card on">
+              <div class="b-thumb">🦊</div>
+              <div class="b-label" style="color:var(--sage-deep)">Fox</div>
+              <div class="b-check">✓ Current</div>
+            </div>
+            <div class="b-card"><div class="b-thumb">🐴</div><div class="b-label">Horse</div></div>
+            <div class="b-card"><div class="b-thumb">🦜</div><div class="b-label">Parrot</div></div>
+            <div class="b-card"><div class="b-thumb">🦩</div><div class="b-label">Flamingo</div></div>
+            <div class="b-card"><div class="b-thumb">🪽</div><div class="b-label">Stork</div></div>
+            <div class="b-card"><div class="b-thumb">🐶</div><div class="b-label">Dog</div></div>
+          </div>
+          <div class="cta">Save look</div>
+          <div class="cancel">Cancel</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="label after">After — proposed</div>
+      <div class="phone" aria-label="Proposed companion switch UI">
+        <div class="preview">
+          <div class="title">Style</div>
+          <div class="stage">🦊</div>
+          <div class="preview-name">Maple · Fox · Soft day</div>
+        </div>
+        <div class="scroll">
+          <div class="path">
+            <h3>Coming up</h3>
+            <p>Soft keepsakes from check-in days — no deadlines.</p>
+          </div>
+          <div class="section">Name</div>
+          <div style="height:44px;border:2px solid var(--sand);border-radius:16px;background:white;"></div>
+          <div class="tabs">
+            <div class="tab">Outfit</div>
+            <div class="tab on">Companion</div>
+          </div>
+          <div class="section">Companion</div>
+          <p class="a-hint">Pick a friend — hats and scenes stay with you. Preview updates above; tap <strong>Save look</strong> to keep the change.</p>
+          <div class="a-grid">
+            <div class="a-card on">
+              <div class="a-radio"><div class="a-dot"></div></div>
+              <div class="a-icon">🦊</div>
+              <div class="a-label">Fox</div>
+              <div class="a-blurb">A bright, clever friend</div>
+            </div>
+            <div class="a-card">
+              <div class="a-radio"></div>
+              <div class="a-icon">🐴</div>
+              <div class="a-label">Horse</div>
+              <div class="a-blurb">A steady, kind friend</div>
+            </div>
+            <div class="a-card">
+              <div class="a-radio"></div>
+              <div class="a-icon">🦜</div>
+              <div class="a-label">Parrot</div>
+              <div class="a-blurb">A colorful, curious friend</div>
+            </div>
+            <div class="a-card">
+              <div class="a-radio"></div>
+              <div class="a-icon">🦩</div>
+              <div class="a-label">Flamingo</div>
+              <div class="a-blurb">A graceful, sunny friend</div>
+            </div>
+            <div class="a-card">
+              <div class="a-radio"></div>
+              <div class="a-icon">🪽</div>
+              <div class="a-label">Stork</div>
+              <div class="a-blurb">A calm, caring friend</div>
+            </div>
+            <div class="a-card">
+              <div class="a-radio"></div>
+              <div class="a-icon">🐶</div>
+              <div class="a-label">Dog</div>
+              <div class="a-blurb">A loyal, sunny friend</div>
+            </div>
+          </div>
+          <div class="a-cta">Save look</div>
+          <div class="a-cancel">Cancel</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h2>What’s off today <span class="tag">no code changed yet</span></h2>
+    <ul>
+      <li><strong>Stacked cream emoji blocks</strong> — each card has a flat <code>cream</code> thumb strip + giant emoji; feels like a placeholder vs the cleaner onboarding pet cards.</li>
+      <li><strong>Selection chrome mismatch</strong> — Customize uses “✓ Current” text; PetSelection uses a corner radio. Two patterns for the same action.</li>
+      <li><strong>Awkward 47% widths</strong> — grid uses <code>width: '47%'</code> instead of equal flex/gap like onboarding (<code>gap: 12</code> + computed card width).</li>
+      <li><strong>CTA hierarchy soft</strong> — Save is fine but Cancel is a plain centered text link with no min-height style token; Save weight/radius doesn’t match PetSelection’s primary CTA.</li>
+      <li><strong>Hint is thin</strong> — one-line gray text under a redundant “3D companion” heading; doesn’t clarify that preview updates live but persistence needs Save.</li>
+      <li><strong>Blurbs unused</strong> — <code>PET_TYPES[].blurb</code> exists but Customize ignores it (onboarding also doesn’t show blurbs, but cards have more breathing room).</li>
+    </ul>
+    <h2 style="margin-top:16px">Proposed styling-only changes</h2>
+    <ul>
+      <li>Match Companion cards to PetSelection: sand border, radio corner, no cream thumb strip, slightly taller padding.</li>
+      <li>Optional one-line blurb under label (already in data) for clarity without new logic.</li>
+      <li>Rename section “Companion”; wrap hint in mist panel (like Wardrobe intro).</li>
+      <li>Align Save CTA with PetSelection (54px / 17px ExtraBold / radius 17); Cancel gets explicit <code>tapTarget.min</code> style.</li>
+      <li>Use <code>spacing.*</code> + <code>colors.sand</code> borders; replace hardcoded error <code>#A65D5D</code> if we touch that style block.</li>
+    </ul>
+    <p style="margin:14px 0 0;color:var(--ink-soft)">Open this file in a browser to scroll both phones. Reply <strong>approve</strong> (or tweak) and I’ll implement only this screen first.</p>
+  </div>
+</body>
+</html>

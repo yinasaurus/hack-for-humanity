@@ -16,7 +16,9 @@ You need **low-poly animals in `.glb`**, preferably with animation clips you can
 - Horse: Jungle Jim's CC-BY 4.0 cartoon horse, bundled locally with original
   `Run` plus Buddi-authored `Idle`, `Talk`, `Wave`, `Play`, `Curious`, and `Gentle` clips.
 - Penguin: Quaternius / FreeModels, CC0, bundled with Buddi-authored flipper joints and `Wave`.
-- Rabbit: majkel's CC-BY 4.0 Sketchfab Rabbit, optimized and bundled locally.
+- Rabbit: rigged low-poly GLB bundled as `assets/characters/rabbit.glb`
+  (previous majkel static mesh kept as `rabbit-old.glb` for revert).
+  Attribution for the new file is pending confirmation — see `ATTRIBUTION.md`.
 - Seal: Kugatsu Tsukai 3D Models Hub's CC-BY 4.0 dotted white seal, optimized and bundled locally.
 - Cat, sloth, capybara, hamster, koala, bear, raccoon, duck, and sheep:
   Animals by molochdadev [CC-BY] via Poly Pizza — converted OBJ/FBX packs bundled

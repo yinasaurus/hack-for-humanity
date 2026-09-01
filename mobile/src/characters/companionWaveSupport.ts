@@ -12,6 +12,7 @@ export const PAW_WAVE_SPECIES = new Set([
   'horse',
   'dog',
   'panda',
+  'rabbit',
   'parrot',
   'flamingo',
   'stork',
@@ -25,7 +26,6 @@ export const PAW_WAVE_SPECIES = new Set([
 export const WAVE_BOUNCE_SPECIES = [
   'cat',
   'hamster',
-  'rabbit',
   'capybara',
   'koala',
   'bear',

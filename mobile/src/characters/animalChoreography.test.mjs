@@ -28,7 +28,7 @@ test('every species/action has continuous bounded anticipation, primary, seconda
 });
 
 test('rigged quadruped wave is paw-only: lift + side rock, no head/tail/root bob', () => {
-  for (const species of ['dog', 'fox', 'horse', 'panda']) {
+  for (const species of ['dog', 'fox', 'horse', 'panda', 'rabbit']) {
     const wave = getAnimalChoreography(species, 'wave');
     const play = getAnimalChoreography(species, 'play');
     assert.ok(wave.channels.every((channel) => channel.target === 'forelimb'));
@@ -54,7 +54,6 @@ test('static companions use a multi-hop centered bounce greeting', () => {
     'cat',
     'hamster',
     'capybara',
-    'rabbit',
     'koala',
     'bear',
     'raccoon',

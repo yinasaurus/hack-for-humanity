@@ -14,8 +14,8 @@ import {
 
 const requestedWaveSpecies = [
   'penguin',
-  'capybara',
   'rabbit',
+  'capybara',
   'koala',
   'bear',
   'raccoon',
@@ -29,7 +29,6 @@ const staticGreetingSpecies = [
   'cat',
   'hamster',
   'capybara',
-  'rabbit',
   'koala',
   'bear',
   'raccoon',
@@ -62,6 +61,8 @@ test('Rabbit replaces Hamster for new companions and uses the supplied bundled m
   assert.equal(getCharacter('rabbit')?.modelPath, 'bundled:rabbit');
   assert.equal(getCharacter('rabbit')?.proceduralModel, undefined);
   assert.equal(existsSync(bundledGlb('rabbit')), true);
+  assert.ok(getCharacter('rabbit')?.rig?.forelimb?.some((n) => /fleg01/i.test(n)));
+  assert.ok(glbAnimationNames(bundledGlb('rabbit')).some((n) => /Idle/i.test(n)));
 });
 
 test('Seal uses the supplied dotted white model', () => {
@@ -80,7 +81,9 @@ test('Penguin Wave has authored flipper motion', () => {
 test('Every requested companion exposes a visible Wave response', () => {
   assert.equal(companionWaveResponse('penguin'), 'paw-wave');
   assert.equal(companionSupportsPawWave('penguin'), true);
-  for (const species of requestedWaveSpecies.filter((id) => id !== 'penguin')) {
+  assert.equal(companionWaveResponse('rabbit'), 'paw-wave');
+  assert.equal(companionSupportsPawWave('rabbit'), true);
+  for (const species of requestedWaveSpecies.filter((id) => id !== 'penguin' && id !== 'rabbit')) {
     assert.equal(companionWaveResponse(species), 'bounce', species);
     assert.equal(companionUsesWaveBounce(species), true, species);
   }

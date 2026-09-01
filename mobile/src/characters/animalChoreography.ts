@@ -165,7 +165,6 @@ const BODY_GREETING_SPECIES = new Set([
   'cat',
   'hamster',
   'capybara',
-  'rabbit',
   'koala',
   'bear',
   'raccoon',
