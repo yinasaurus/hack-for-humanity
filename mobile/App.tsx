@@ -30,7 +30,7 @@ export type RootStackParamList = {
   Home: { celebrate?: boolean; newUnlocks?: import('./src/api').Unlock[] } | undefined;
   CheckIn: undefined;
   Together: undefined;
-  Customize: Partial<import('./src/api').CompanionState> | undefined;
+  Customize: import('./src/screens/CustomizeScreen').CustomizeParams | undefined;
   Settings: undefined;
 };
 

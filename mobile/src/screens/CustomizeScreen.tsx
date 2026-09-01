@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,13 +37,18 @@ import {
 } from '../wardrobe';
 
 
-type Props = {
-  navigation: { goBack: () => void };
-  route?: { params?: Partial<CompanionState> };
-};
-
 /** Top-level categories: companion animal vs outfit accessories. */
 type TabId = 'companion' | 'outfit';
+
+export type CustomizeParams = Partial<CompanionState> & {
+  /** Open Style on Companion (switch friend) or Outfit. */
+  initialTab?: TabId;
+};
+
+type Props = {
+  navigation: { goBack: () => void };
+  route?: { params?: CustomizeParams };
+};
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'companion', label: 'Companion' },
@@ -127,16 +133,27 @@ function ChipRow<T extends string>({
 
 export function CustomizeScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { width } = useWindowDimensions();
+  const { user, setCompanion } = useAuth();
   const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
+  const [savedPetType, setSavedPetType] = useState<PetTypeId>(
+    () => (route?.params?.petType as PetTypeId) || DEFAULT_APPEARANCE.petType
+  );
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
   const [growthStage, setGrowthStage] = useState<CompanionState['growthStage']>('baby');
-  const [tab, setTab] = useState<TabId>('outfit');
+  const initialTab = route?.params?.initialTab;
+  const [tab, setTab] = useState<TabId>(
+    initialTab === 'companion' || initialTab === 'outfit' ? initialTab : 'outfit'
+  );
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Once the user edits, never let a late fetch overwrite their choice. */
   const dirtyRef = useRef(false);
+  const companionCardWidth = useMemo(
+    () => Math.min(168, (width - spacing.lg * 2 - 12) / 2),
+    [width]
+  );
 
   useEffect(() => {
     if (!user) {
@@ -154,6 +171,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
         if (!dirtyRef.current) {
           const next = appearanceFromPartial(c);
           setA(next);
+          setSavedPetType(next.petType as PetTypeId);
         }
       } catch {
         /* keep route/defaults */
@@ -186,10 +204,13 @@ export function CustomizeScreen({ navigation, route }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await updateAppearance(user.id, {
+      const companion = await updateAppearance(user.id, {
         ...a,
         petName: a.petName.trim() || 'Companion',
       });
+      // Keep Home in sync immediately; focus refetch stays silent (no auto wave/sound).
+      setCompanion(companion);
+      setSavedPetType((a.petType as PetTypeId) || savedPetType);
       dirtyRef.current = false;
       navigation.goBack();
     } catch (e) {
@@ -200,6 +221,8 @@ export function CustomizeScreen({ navigation, route }: Props) {
   };
 
   const liveCharacter = useMemo(() => characterForLiveCompanion(a.petType), [a.petType]);
+  const companionPending = a.petType !== savedPetType;
+  const saveLabel = companionPending ? 'Save companion' : 'Save look';
 
   return (
     <LinearGradient colors={[...gradients.customize]} style={styles.root}>
@@ -237,6 +260,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
               {petTypeLabel(a.petType)}
               {` · ${wardrobeLabel(a)}`}
             </Text>
+            {companionPending ? (
+              <Text style={styles.pendingSwitch} accessibilityLiveRegion="polite">
+                Previewing {petTypeLabel(a.petType)} — tap {saveLabel} to keep
+              </Text>
+            ) : null}
           </>
         )}
       </View>
@@ -247,20 +275,22 @@ export function CustomizeScreen({ navigation, route }: Props) {
           { paddingBottom: Math.max(insets.bottom, 16) + 72 },
         ]}
       >
-        <View style={styles.pathCard} accessibilityRole="summary">
-          <Text style={styles.pathTitle}>Coming up</Text>
-          <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
-          {keepsakePath.map((step) => (
-            <View key={step.milestoneDay} style={styles.pathRow}>
-              <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
-                {step.label}
-              </Text>
-              <Text style={styles.pathAway}>
-                {step.unlocked ? 'Yours' : 'A future keepsake'}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {tab === 'outfit' ? (
+          <View style={styles.pathCard} accessibilityRole="summary">
+            <Text style={styles.pathTitle}>Coming up</Text>
+            <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
+            {keepsakePath.map((step) => (
+              <View key={step.milestoneDay} style={styles.pathRow}>
+                <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
+                  {step.label}
+                </Text>
+                <Text style={styles.pathAway}>
+                  {step.unlocked ? 'Yours' : 'A future keepsake'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={styles.section}>Name</Text>
         <TextInput
@@ -288,10 +318,10 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {tab === 'companion' && (
           <>
-            <Text style={styles.section}>Companion</Text>
+            <Text style={styles.section}>Choose your friend</Text>
             <View style={styles.companionIntro} accessibilityRole="summary">
               <Text style={styles.companionIntroBody}>
-                Pick a friend — hats and scenes stay with you. Preview updates above; tap Save look to keep the change.
+                Tap a companion to preview above. Hats and scenes stay with you. Confirm with Save companion — switching stays quiet (no auto wave or sound).
               </Text>
             </View>
             <View style={styles.companionGrid} accessibilityLabel="Choose companion species">
@@ -303,7 +333,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
                     accessibilityRole="radio"
                     accessibilityState={{ checked: on }}
                     accessibilityLabel={`Choose ${pet.label} as companion`}
-                    style={[styles.companionCard, on && styles.companionCardOn]}
+                    style={[
+                      styles.companionCard,
+                      { width: companionCardWidth },
+                      on && styles.companionCardOn,
+                    ]}
                     onPress={() => {
                       patch('petType', pet.id as PetTypeId);
                     }}
@@ -395,16 +429,16 @@ export function CustomizeScreen({ navigation, route }: Props) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
-          style={styles.cta}
+          style={[styles.cta, companionPending && styles.ctaEmphasis]}
           onPress={save}
           disabled={busy || loadingLook}
           accessibilityRole="button"
-          accessibilityLabel="Save companion look"
+          accessibilityLabel={saveLabel}
         >
           {busy ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.ctaText}>Save look</Text>
+            <Text style={styles.ctaText}>{saveLabel}</Text>
           )}
         </Pressable>
         <Pressable
@@ -451,12 +485,27 @@ const styles = StyleSheet.create({
     color: colors.sageDeep,
     textAlign: 'center',
   },
+  pendingSwitch: {
+    marginTop: spacing.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.mist,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.teal,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
   section: {
     fontFamily: 'Nunito_700Bold',
     fontSize: 15,
     color: colors.ink,
-    marginTop: 14,
-    marginBottom: 8,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   colorHint: {
     fontFamily: 'Nunito_400Regular',
@@ -592,6 +641,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
   },
+  ctaEmphasis: {
+    borderWidth: 2,
+    borderColor: colors.teal,
+  },
   ctaText: { fontFamily: 'Nunito_800ExtraBold', color: colors.white, fontSize: 17 },
   cancelBtn: {
     marginTop: spacing.xs,
@@ -634,7 +687,6 @@ const styles = StyleSheet.create({
   },
   companionCard: {
     position: 'relative',
-    width: '47%',
     minHeight: 132,
     borderRadius: 20,
     borderWidth: 2,

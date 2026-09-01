@@ -64,9 +64,10 @@ test('static companions use a multi-hop centered bounce greeting', () => {
   ]) {
     const wave = getAnimalChoreography(species, 'wave');
     const play = getAnimalChoreography(species, 'play');
-    assert.ok(wave.root.maxLift > 0, `${species} needs visible lift`);
-    assert.ok(wave.root.maxScaleY > 0, `${species} needs visible body compression`);
+    assert.ok(wave.root.maxLift >= 0.14, `${species} bounce must be clearly visible (~10% height)`);
+    assert.ok(wave.root.maxScaleY >= 0.07, `${species} needs visible body compression`);
     assert.ok(wave.root.maxLift < play.root.maxLift, `${species} bounce stays below Play hop`);
+    assert.ok(wave.durationMs >= 2000, `${species} bounce duration should read clearly`);
     assert.ok(wave.samples.some((sample) => sample.root.lift > 0), `${species} wave is static`);
     assert.ok(wave.samples.every((sample) => sample.root.x === 0 && sample.root.z === 0));
     // Multi-cycle bounce: lift should leave and return more than once.
@@ -79,6 +80,12 @@ test('static companions use a multi-hop centered bounce greeting', () => {
     }
     assert.ok(peaks >= 2, `${species} Wave bounce should hop at least twice (got ${peaks})`);
   }
+});
+
+test('rabbit Wave stays on paw-wave path after rigged model swap', () => {
+  const wave = getAnimalChoreography('rabbit', 'wave');
+  assert.equal(wave.root.maxLift, 0);
+  assert.ok(wave.channels.every((channel) => channel.target === 'forelimb'));
 });
 
 test('penguin flaps both flippers on their authored local axis', () => {

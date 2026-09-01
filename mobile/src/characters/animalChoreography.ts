@@ -183,19 +183,22 @@ const quadrupedDefinition = (
   const tailAmplitude = play ? 0.68 : 0.39;
   const tailCycles = play ? 4.8 : 2.7;
   const limbAmplitude = play ? 0.38 : 0.46;
-  const bodyGreeting = !play && BODY_GREETING_SPECIES.has(species);
+  const bounceSpecies = BODY_GREETING_SPECIES.has(species);
+  const bodyGreeting = !play && bounceSpecies;
   return {
     species,
     action,
-    durationMs: play ? 1540 : 1780,
+    // Bounce Wave needs a beat longer than paw-wave so ~2.5 hops read clearly.
+    durationMs: play ? 1540 : bodyGreeting ? 2120 : 1780,
     reducedMotionDurationMs: 520,
     phases,
     // Static GLBs have no limb joints, so Wave is a short centered bounce.
     // Rigged quadrupeds keep planted paw-wave (maxLift/scaleY stay 0).
+    // Bounce peak ≈10% of TARGET_H (1.55) — doubled from the old ~5% twitch.
     root: {
       ...ROOT,
-      maxLift: play ? 0.11 : bodyGreeting ? 0.078 : 0,
-      maxScaleY: play ? 0.08 : bodyGreeting ? 0.042 : 0,
+      maxLift: play ? (bounceSpecies ? 0.2 : 0.11) : bodyGreeting ? 0.15 : 0,
+      maxScaleY: play ? (bounceSpecies ? 0.1 : 0.08) : bodyGreeting ? 0.078 : 0,
     },
     rig: {
       wings: 'available',
@@ -411,10 +414,10 @@ export function sampleAnimalChoreography(
     root.lift = clamp(primary * 0.11 + secondary * 0.04, 0, profile.root.maxLift);
     root.scaleY = clamp(1 - anticipation * profile.root.maxScaleY, 1 - profile.root.maxScaleY, 1);
   } else if (profile.root.maxLift > 0 || profile.root.maxScaleY > 0) {
-    // Static-mesh Wave: ~2.5 vertical hops using the same phase envelopes as
-    // the paw wave (smoothStep), no yaw/roll — enthusiastic but not a spin.
-    const hop = Math.abs(Math.sin(t * Math.PI * 2 * 2.5));
-    const envelope = clamp(anticipation * 0.4 + primary + secondary * 0.55, 0, 1);
+    // Static-mesh Wave: ~2.2 vertical hops (smoothStep envelopes), no yaw/roll.
+    // Slightly fewer hops + higher maxLift reads as a happy bounce, not a twitch.
+    const hop = Math.abs(Math.sin(t * Math.PI * 2 * 2.2));
+    const envelope = clamp(anticipation * 0.45 + primary + secondary * 0.6, 0, 1);
     root.lift = clamp(hop * envelope * profile.root.maxLift, 0, profile.root.maxLift);
     root.scaleY = clamp(
       1 - hop * envelope * profile.root.maxScaleY,
