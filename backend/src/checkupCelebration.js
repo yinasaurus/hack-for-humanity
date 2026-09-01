@@ -3,6 +3,8 @@
  * Never stores or uses body metrics (BMI, weight, scores, etc.).
  */
 
+import { redactPatientFacingNutritionLanguage } from './patientNutritionRedact.js';
+
 /** Patient-facing default when the clinician leaves no note. */
 export const DEFAULT_CHECKUP_CELEBRATION_MESSAGE =
   'Your clinician wanted you to know they are proud of you for being here today.';
@@ -26,7 +28,7 @@ export function normalizeEncouragementNote(value) {
 
 /** Message shown on the patient device — note if present, else warm default. */
 export function patientFacingCelebrationMessage(note) {
-  const trimmed = String(note || '').trim();
+  const trimmed = redactPatientFacingNutritionLanguage(String(note || '').trim());
   return trimmed || DEFAULT_CHECKUP_CELEBRATION_MESSAGE;
 }
 

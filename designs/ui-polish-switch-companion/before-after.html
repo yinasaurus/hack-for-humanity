@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Buddi — Switch companion: before / after (finished)</title>
+  <style>
+    :root {
+      --cream: #F7F4EF; --mist: #E8EEF0; --sand: #D9CFC3; --sage-deep: #4E6B5A;
+      --teal: #3F6A75; --ink: #2F3634; --ink-soft: #4F5B57; --border: rgba(143,163,150,.45);
+      --card: rgba(255,255,255,.88);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Nunito, Segoe UI, system-ui, sans-serif; background: #e4e0d8; color: var(--ink); padding: 28px 20px 48px; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .lede { color: var(--ink-soft); max-width: 760px; margin: 0 0 24px; line-height: 1.45; font-size: 14px; }
+    .pair { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+    .col { width: 360px; }
+    .label { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+    .label.before { color: #8a4a4a; }
+    .label.after { color: var(--sage-deep); }
+    .phone {
+      border-radius: 28px; overflow: hidden; height: 740px; display: flex; flex-direction: column;
+      box-shadow: 0 12px 40px rgba(47,54,52,.18); border: 1px solid var(--sand);
+      background: linear-gradient(180deg, #F7F4EF, #EDE8E2, #E6EDE8);
+    }
+    .preview { padding: 18px 20px 10px; border-bottom: 1px solid var(--border); background: rgba(255,248,242,.96); text-align: center; }
+    .title { font-weight: 800; font-size: 26px; text-align: left; }
+    .stage { margin-top: 8px; height: 110px; border-radius: 20px; background: #dfe8e2; display: flex; align-items: center; justify-content: center; font-size: 48px; }
+    .preview-name { margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--sage-deep); }
+    .pending {
+      margin-top: 8px; padding: 8px 12px; border-radius: 12px; background: var(--mist); border: 1px solid var(--border);
+      font-size: 13px; font-weight: 600; color: var(--teal); line-height: 1.35;
+    }
+    .scroll { flex: 1; overflow: auto; padding: 10px 20px 24px; }
+    .path { padding: 14px; border-radius: 16px; background: white; border: 1px solid var(--border); margin-bottom: 12px; }
+    .path h3 { margin: 0; font-size: 16px; } .path p { margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+    .section { font-weight: 700; font-size: 15px; margin: 12px 0 8px; }
+    .tabs { display: flex; gap: 8px; margin: 12px 0 8px; }
+    .tab { padding: 10px 16px; border-radius: 14px; background: #E6EDE8; font-size: 14px; font-weight: 700; color: var(--ink-soft); }
+    .tab.on { background: var(--sage-deep); color: white; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .b-card { border-radius: 18px; border: 2px solid var(--border); background: var(--card); overflow: hidden; text-align: center; padding-bottom: 10px; }
+    .b-card.on { border-color: var(--sage-deep); background: white; }
+    .b-thumb { height: 88px; background: var(--cream); display: flex; align-items: center; justify-content: center; font-size: 44px; }
+    .b-label { margin-top: 6px; font-weight: 700; font-size: 14px; }
+    .b-check { margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--sage-deep); }
+    .a-hint { font-size: 13px; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.4; padding: 12px 14px; background: var(--mist); border-radius: 14px; border: 1px solid var(--border); }
+    .a-card { position: relative; min-height: 132px; padding: 12px 10px 14px; border-radius: 20px; border: 2px solid var(--sand); background: var(--card); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .a-card.on { border-color: var(--sage-deep); background: white; }
+    .a-icon { font-size: 48px; } .a-label { margin-top: 4px; font-weight: 700; font-size: 15px; color: var(--sage-deep); }
+    .a-blurb { margin-top: 2px; font-size: 11px; color: var(--ink-soft); }
+    .a-radio { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--sage-deep); display: flex; align-items: center; justify-content: center; background: white; }
+    .a-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--sage-deep); }
+    .cta { margin-top: 20px; height: 48px; border-radius: 16px; background: var(--sage-deep); color: white; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .a-cta { margin-top: 24px; min-height: 54px; border-radius: 17px; background: var(--sage-deep); color: white; font-weight: 800; font-size: 17px; display: flex; align-items: center; justify-content: center; border: 2px solid var(--teal); }
+    .cancel { margin-top: 12px; text-align: center; color: var(--ink-soft); font-weight: 600; font-size: 15px; padding: 12px; }
+    .notes { margin: 28px auto 0; max-width: 760px; background: white; border-radius: 16px; padding: 18px 20px; border: 1px solid var(--sand); font-size: 14px; line-height: 1.5; }
+    .notes ul { margin: 0; padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <h1>Switch companion — finished polish</h1>
+  <p class="lede">Code-faithful mock. Left = original messy grid. Right = finished Style → Companion flow (also opened from Settings → Switch companion).</p>
+  <div class="pair">
+    <div class="col">
+      <div class="label before">Before</div>
+      <div class="phone">
+        <div class="preview">
+          <div class="title">Style</div>
+          <div class="stage">🦊</div>
+          <div class="preview-name">Maple · Fox · Soft day</div>
+        </div>
+        <div class="scroll">
+          <div class="path"><h3>Coming up</h3><p>Soft keepsakes…</p></div>
+          <div class="section">Name</div>
+          <div style="height:44px;border:1px solid var(--border);border-radius:14px;background:white"></div>
+          <div class="tabs"><div class="tab">Outfit</div><div class="tab on">Companion</div></div>
+          <div class="section">3D companion</div>
+          <p style="font-size:13px;color:var(--ink-soft);margin:0 0 8px">Switch your friend anytime — outfits carry over.</p>
+          <div class="grid">
+            <div class="b-card on"><div class="b-thumb">🦊</div><div class="b-label" style="color:var(--sage-deep)">Fox</div><div class="b-check">✓ Current</div></div>
+            <div class="b-card"><div class="b-thumb">🐱</div><div class="b-label">Cat</div></div>
+            <div class="b-card"><div class="b-thumb">🐶</div><div class="b-label">Dog</div></div>
+            <div class="b-card"><div class="b-thumb">🐰</div><div class="b-label">Rabbit</div></div>
+          </div>
+          <div class="cta">Save look</div>
+          <div class="cancel">Cancel</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="label after">After (shipped)</div>
+      <div class="phone">
+        <div class="preview">
+          <div class="title">Style</div>
+          <div class="stage">🐱</div>
+          <div class="preview-name">Maple · Cat · Soft day</div>
+          <div class="pending">Previewing Cat — tap Save companion to keep</div>
+        </div>
+        <div class="scroll">
+          <div class="section">Name</div>
+          <div style="height:44px;border:2px solid var(--sand);border-radius:16px;background:white"></div>
+          <div class="tabs"><div class="tab">Outfit</div><div class="tab on">Companion</div></div>
+          <div class="section">Choose your friend</div>
+          <p class="a-hint">Tap a companion to preview above. Hats and scenes stay with you. Confirm with Save companion — switching stays quiet.</p>
+          <div class="grid">
+            <div class="a-card"><div class="a-radio" style="border-color:var(--sand)"></div><div class="a-icon">🦊</div><div class="a-label" style="color:var(--ink)">Fox</div><div class="a-blurb">A bright, clever friend</div></div>
+            <div class="a-card on"><div class="a-radio"><div class="a-dot"></div></div><div class="a-icon">🐱</div><div class="a-label">Cat</div><div class="a-blurb">A calm, curious friend</div></div>
+            <div class="a-card"><div class="a-radio" style="border-color:var(--sand)"></div><div class="a-icon">🐶</div><div class="a-label" style="color:var(--ink)">Dog</div><div class="a-blurb">A loyal, sunny friend</div></div>
+            <div class="a-card"><div class="a-radio" style="border-color:var(--sand)"></div><div class="a-icon">🐰</div><div class="a-label" style="color:var(--ink)">Rabbit</div><div class="a-blurb">A gentle, cozy friend</div></div>
+          </div>
+          <div class="a-cta">Save companion</div>
+          <div class="cancel">Cancel</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <ul>
+      <li>Keepsake “Coming up” card hidden on Companion tab so switch isn’t buried.</li>
+      <li>Pending preview banner + CTA label “Save companion” when species changed.</li>
+      <li>Settings → Switch companion opens this tab directly.</li>
+      <li>Save updates Auth companion; Home focus refetch stays silent (no auto wave/sound).</li>
+    </ul>
+  </div>
+</body>
+</html>

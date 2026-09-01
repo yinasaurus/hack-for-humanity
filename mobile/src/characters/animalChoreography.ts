@@ -3,7 +3,6 @@
  * serialises the bounded profile into its WebView and applies the returned
  * channel deltas to whichever rig parts the model actually exposes.
  */
-
 export const CHOREOGRAPHY_ACTIONS = ['wave', 'play'] as const;
 export type ChoreographyAction = (typeof CHOREOGRAPHY_ACTIONS)[number];
 
@@ -161,9 +160,11 @@ const waveForelimbChannels = (): ChoreographyChannelIntent[] => [
   channel('forelimb', 'z', 0.72, 2.7, 0, 'primary', 'greeting'),
 ];
 
-const STATIC_BODY_GREETING_SPECIES = new Set([
+/** Keep in sync with WAVE_BOUNCE_SPECIES in companionWaveSupport.ts */
+const BODY_GREETING_SPECIES = new Set([
+  'cat',
+  'hamster',
   'capybara',
-  'rabbit',
   'koala',
   'bear',
   'raccoon',
@@ -182,19 +183,22 @@ const quadrupedDefinition = (
   const tailAmplitude = play ? 0.68 : 0.39;
   const tailCycles = play ? 4.8 : 2.7;
   const limbAmplitude = play ? 0.38 : 0.46;
-  const bodyGreeting = !play && STATIC_BODY_GREETING_SPECIES.has(species);
+  const bounceSpecies = BODY_GREETING_SPECIES.has(species);
+  const bodyGreeting = !play && bounceSpecies;
   return {
     species,
     action,
-    durationMs: play ? 1540 : 1780,
+    // Bounce Wave needs a beat longer than paw-wave so ~2.5 hops read clearly.
+    durationMs: play ? 1540 : bodyGreeting ? 2120 : 1780,
     reducedMotionDurationMs: 520,
     phases,
-    // Static GLBs have no limb joints, so their greeting is a small centered
-    // lift/crouch. Rigged quadrupeds keep the planted paw-wave behavior.
+    // Static GLBs have no limb joints, so Wave is a short centered bounce.
+    // Rigged quadrupeds keep planted paw-wave (maxLift/scaleY stay 0).
+    // Bounce peak ≈10% of TARGET_H (1.55) — doubled from the old ~5% twitch.
     root: {
       ...ROOT,
-      maxLift: play ? 0.11 : bodyGreeting ? 0.055 : 0,
-      maxScaleY: play ? 0.08 : bodyGreeting ? 0.035 : 0,
+      maxLift: play ? (bounceSpecies ? 0.2 : 0.11) : bodyGreeting ? 0.15 : 0,
+      maxScaleY: play ? (bounceSpecies ? 0.1 : 0.08) : bodyGreeting ? 0.078 : 0,
     },
     rig: {
       wings: 'available',
@@ -406,14 +410,17 @@ export function sampleAnimalChoreography(
   const primary = phaseEnvelope(profile, 'primary', t);
   const secondary = phaseEnvelope(profile, 'secondary', t);
   if (profile.action === 'play') {
+    // Play: one crouch → hop arc (distinct from Wave's multi-hop bounce).
     root.lift = clamp(primary * 0.11 + secondary * 0.04, 0, profile.root.maxLift);
     root.scaleY = clamp(1 - anticipation * profile.root.maxScaleY, 1 - profile.root.maxScaleY, 1);
   } else if (profile.root.maxLift > 0 || profile.root.maxScaleY > 0) {
-    // Models without movable appendages answer with a restrained, centered
-    // whole-body greeting; rigged pets retain maxLift/maxScaleY of zero.
-    root.lift = clamp(primary * profile.root.maxLift, 0, profile.root.maxLift);
+    // Static-mesh Wave: ~2.2 vertical hops (smoothStep envelopes), no yaw/roll.
+    // Slightly fewer hops + higher maxLift reads as a happy bounce, not a twitch.
+    const hop = Math.abs(Math.sin(t * Math.PI * 2 * 2.2));
+    const envelope = clamp(anticipation * 0.45 + primary + secondary * 0.6, 0, 1);
+    root.lift = clamp(hop * envelope * profile.root.maxLift, 0, profile.root.maxLift);
     root.scaleY = clamp(
-      1 - anticipation * profile.root.maxScaleY,
+      1 - hop * envelope * profile.root.maxScaleY,
       1 - profile.root.maxScaleY,
       1
     );

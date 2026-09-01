@@ -94,4 +94,16 @@ describe('appearance independence', () => {
     );
     assert.equal(findLockedWardrobeChange({ hat: 'none' }, current, new Set()), null);
   });
+
+  it('allows any scene without an unlock', () => {
+    const current = { ...DEFAULT_APPEARANCE };
+    assert.equal(
+      findLockedWardrobeChange({ scene: 'sunny_meadow' }, current, new Set()),
+      null
+    );
+    assert.equal(
+      findLockedWardrobeChange({ scene: 'quiet_garden' }, current, new Set()),
+      null
+    );
+  });
 });

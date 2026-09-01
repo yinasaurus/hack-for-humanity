@@ -22,12 +22,6 @@ app.use(express.json({ limit: '20mb' }));
 // Keep urlencoded small; photos go multipart or JSON base64
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
-// Log upload fetches so photo-link issues are immediately visible in the terminal
-app.use('/uploads', (req, _res, next) => {
-  console.log(`[uploads] ${req.method} ${req.path} — auth: ${req.headers.authorization ? 'yes' : 'MISSING'}`);
-  next();
-});
-
 registerRoutes(app);
 
 app.listen(PORT, '0.0.0.0', () => {

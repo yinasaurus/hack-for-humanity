@@ -97,6 +97,7 @@ export const DEFAULT_APPEARANCE = {
 /**
  * Wardrobe inventory. A null requirement is available from onboarding;
  * everything else needs the matching permanent keepsake unlock.
+ * Scenes (backgrounds) are never gated — all patients may equip any scene.
  */
 export const WARDROBE_UNLOCK_REQUIREMENTS = {
   'hat:none': null,
@@ -104,13 +105,13 @@ export const WARDROBE_UNLOCK_REQUIREMENTS = {
   'neck:none': null,
   'held:none': null,
   'scene:sky': null,
+  'scene:sunny_meadow': null,
+  'scene:cozy_nook': null,
+  'scene:quiet_garden': null,
   'neck:scarf': 'soft_scarf',
-  'scene:sunny_meadow': 'sunny_meadow',
   'hat:flower': 'flower_crown',
-  'scene:cozy_nook': 'cozy_nook',
   'held:star': 'star_pendant',
   'hat:bow': 'ribbon_ball',
-  'scene:quiet_garden': 'quiet_garden',
   'hat:beanie': 'cozy_beanie',
   'face:glasses': 'round_glasses',
   'hat:crown_soft': 'soft_crown',

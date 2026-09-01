@@ -20,7 +20,7 @@ import {
   isQuietBand,
   type CompanionExpression,
 } from '../companionMood';
-import { PET_SCENES, type PetSceneId } from '../pets';
+import { resolveScene } from '../pets';
 
 // Renderer selection is keyed by the declarative spec id; adding another
 // procedural species only extends this registry and does not alter the build path.
@@ -102,11 +102,12 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     [character, resolvedModelPath]
   );
 
+  const stageFill = resolveScene(outfit?.scene).fill;
   const html = useMemo(
     () =>
       resolvedModelPath === null
         ? ''
-        : buildHtml(renderCharacter, startQuiet, reducedMotion, growthStage),
+        : buildHtml(renderCharacter, startQuiet, reducedMotion, growthStage, outfit?.scene),
     [
       renderCharacter,
       character.id,
@@ -123,6 +124,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
       growthStage,
       reducedMotion,
       resolvedModelPath,
+      outfit?.scene,
     ]
   );
 
@@ -237,7 +239,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   if (resolvedModelPath === null) {
     return (
       <View
-        style={[styles.wrap, style, styles.empty]}
+        style={[styles.wrap, { backgroundColor: stageFill }, style, styles.empty]}
         accessible
         accessibilityLabel={`${accessibilityLabel}, loading`}
       />
@@ -247,7 +249,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   if (!character.proceduralModel && !resolvedModelPath) {
     return (
       <View
-        style={[styles.wrap, style, styles.empty]}
+        style={[styles.wrap, { backgroundColor: stageFill }, style, styles.empty]}
         accessible
         accessibilityLabel={`${accessibilityLabel}, model unavailable`}
       />
@@ -256,7 +258,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
 
   return (
     <View
-      style={[styles.wrap, style]}
+      style={[styles.wrap, { backgroundColor: stageFill }, style]}
       accessible
       accessibilityLabel={expressionA11yLabel(accessibilityLabel, active)}
       accessibilityRole="image"
@@ -283,16 +285,12 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
   );
 });
 
-function sceneFill(sceneId?: string) {
-  const hit = PET_SCENES.find((s) => s.id === (sceneId as PetSceneId));
-  return hit?.fill || '#F7F4EF';
-}
-
 function buildHtml(
   character: CharacterDef,
   startQuiet: boolean,
   reducedMotion: boolean,
-  growthStage: GrowthStage = 'baby'
+  growthStage: GrowthStage = 'baby',
+  sceneId?: string
 ) {
   const proceduralModel = character.proceduralModel
     ? PROCEDURAL_MODEL_SPECS.find(({ id }) => id === character.proceduralModel) || null
@@ -322,7 +320,10 @@ function buildHtml(
   const animal = animalPresentationFor(character.id);
   const accessoryFit = accessoryFitForSpecies(character.id);
   const landmarkHints = JSON.stringify(HEAD_LANDMARK_HINTS);
-  const bgAwake = proceduralModel?.framing.background || '#F7F4EF';
+  // Customize → Scene owns this stage color (companion box / WebView only).
+  const stageBg = resolveScene(sceneId).fill;
+  const initialScene = JSON.stringify(resolveScene(sceneId).id);
+  const bgAwake = stageBg;
   const bgSleep = proceduralModel ? '#D5E1E5' : '#E4EBF2';
   const bgExcited = proceduralModel ? '#E1E7D9' : '#E8E4D8';
   const bgCurious = proceduralModel ? '#E3ECEF' : '#EEF2F0';
@@ -453,7 +454,7 @@ let boneByName = {};
 let morphByName = {};
 let eyeMeshes = [];
 let hasSkeleton = false;
-let outfitState = { hat: 'none', face: 'none', neck: 'none', held: 'none', scene: 'sky' };
+let outfitState = { hat: 'none', face: 'none', neck: 'none', held: 'none', scene: ${initialScene} };
 const acc = { hat: null, face: null, neck: null, held: null };
 let proceduralOverlay = null;
 let proceduralSequence = 0;
@@ -816,19 +817,9 @@ function doWaveGreeting() {
   const state = beginProcedural('wave', m.durationMs);
   playSemanticClip('wave', { loop: false, speed: m.clipSpeed, fade: 0.65 });
   if (!state) return;
-  // Paw wave requires a real shoulder/forelimb joint. Never fake it with a
-  // whole-body yaw/roll — that reads as the pet spinning, not waving.
-  const hasWaveLimb = Boolean(
-    state.bones.forelimb?.length ||
-    state.bones.wing?.length ||
-    state.bones.flipper?.length
-  );
-  if (!hasWaveLimb) {
-    scheduleProceduralIdle(state, m.durationMs + 100, () => {
-      if (expression === 'waving') goBaseIdle();
-    });
-    return;
-  }
+  // Paw wave needs a real shoulder/forelimb/wing/flipper. Static meshes keep
+  // the overlay active so choreography can drive the centered bounce fallback
+  // (root lift + scaleY) — never a yaw/roll spin.
   scheduleProceduralIdle(state, m.durationMs + 100, () => {
     if (expression === 'waving') goBaseIdle();
   });
@@ -1067,16 +1058,16 @@ function preferWaveForelimbBones(bones) {
     const n = String(bone.name || '').toLowerCase();
     let s = 0;
     if (/armature|^root$|hips|spine|stomach|pelvis|back_leg|hind|neck|head|ear|tail|chin|nose/.test(n)) s -= 200;
-    if (/front_leg_shoulder_l|forelimb_l/.test(n)) s += 120;
-    if (/front_leg_shoulder_r|forelimb_r/.test(n)) s += 90;
+    if (/front_leg_shoulder_l|forelimb_l|fleg01\.l|fleg01_l/.test(n)) s += 120;
+    if (/front_leg_shoulder_r|forelimb_r|fleg01\.r|fleg01_r/.test(n)) s += 90;
     if (/front_leg_upper_l/.test(n)) s += 100;
     if (/front_leg_upper_r/.test(n)) s += 70;
     if (/shoulder/.test(n) && /front|fore|l$|_l_/.test(n)) s += 80;
-    if (/front_leg|forelimb|forearm|frontleg/.test(n)) s += 40;
-    if (/_l$|_l_|left/.test(n)) s += 12;
-    if (/_r$|_r_|right/.test(n)) s += 4;
+    if (/front_leg|forelimb|forearm|frontleg|fleg01/.test(n)) s += 40;
+    if (/_l$|_l_|left|\.l_/.test(n)) s += 12;
+    if (/_r$|_r_|right|\.r_/.test(n)) s += 4;
     // Tip/ankle/paw are children — rotating them waves from the wrong pivot.
-    if (/paw|foot|ankle|tip|lower|hand/.test(n)) s -= 50;
+    if (/paw|foot|ankle|tip|lower|hand|fleg02|fleg03|bleg/.test(n)) s -= 50;
     return s;
   };
   const ranked = list
@@ -1101,7 +1092,7 @@ function proceduralTargets(action) {
     // Shoulder-only; do not pull head/ear/tail into a greeting wave.
     const fore = preferWaveForelimbBones([
       ...findProceduralActionBones(action, 'forelimb'),
-      ...findRigBones('forelimb', /front_leg_shoulder|forelimb_[lr]|front_leg_upper/i),
+      ...findRigBones('forelimb', /front_leg_shoulder|forelimb_[lr]|front_leg_upper|fleg01/i),
     ]);
     if (fore.length) slots.forelimb = fore;
     if (CHOREOGRAPHY.wave?.channels.some((intent) => intent.target === 'wing')) {

@@ -48,8 +48,13 @@ export {
 } from './animalPresentation';
 export {
   PAW_WAVE_BLOCKED_STATIC_MESH,
+  PAW_WAVE_SPECIES,
+  WAVE_BOUNCE_SPECIES,
   companionSupportsPawWave,
+  companionUsesWaveBounce,
+  companionWaveResponse,
 } from './companionWaveSupport';
+export type { CompanionWaveResponse } from './companionWaveSupport';
 export type {
   AnimalActionMotion,
   AnimalPresentation,

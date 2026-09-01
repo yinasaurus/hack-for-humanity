@@ -6,12 +6,16 @@ import { getAnimalSoundEntry, animalSoundIsPlayable } from '../audio/animalSound
 import { PET_TYPES, LEGACY_PET_TYPES } from '../pets.ts';
 import { getAnimalChoreography } from './animalChoreography.ts';
 import { getCharacter } from './characterCatalog.ts';
-import { companionSupportsPawWave } from './companionWaveSupport.ts';
+import {
+  companionSupportsPawWave,
+  companionUsesWaveBounce,
+  companionWaveResponse,
+} from './companionWaveSupport.ts';
 
 const requestedWaveSpecies = [
   'penguin',
-  'capybara',
   'rabbit',
+  'capybara',
   'koala',
   'bear',
   'raccoon',
@@ -22,8 +26,9 @@ const requestedWaveSpecies = [
 ];
 
 const staticGreetingSpecies = [
+  'cat',
+  'hamster',
   'capybara',
-  'rabbit',
   'koala',
   'bear',
   'raccoon',
@@ -56,6 +61,8 @@ test('Rabbit replaces Hamster for new companions and uses the supplied bundled m
   assert.equal(getCharacter('rabbit')?.modelPath, 'bundled:rabbit');
   assert.equal(getCharacter('rabbit')?.proceduralModel, undefined);
   assert.equal(existsSync(bundledGlb('rabbit')), true);
+  assert.ok(getCharacter('rabbit')?.rig?.forelimb?.some((n) => /fleg01/i.test(n)));
+  assert.ok(glbAnimationNames(bundledGlb('rabbit')).some((n) => /Idle/i.test(n)));
 });
 
 test('Seal uses the supplied dotted white model', () => {
@@ -72,8 +79,13 @@ test('Penguin Wave has authored flipper motion', () => {
 });
 
 test('Every requested companion exposes a visible Wave response', () => {
-  for (const species of requestedWaveSpecies) {
-    assert.equal(companionSupportsPawWave(species), true, species);
+  assert.equal(companionWaveResponse('penguin'), 'paw-wave');
+  assert.equal(companionSupportsPawWave('penguin'), true);
+  assert.equal(companionWaveResponse('rabbit'), 'paw-wave');
+  assert.equal(companionSupportsPawWave('rabbit'), true);
+  for (const species of requestedWaveSpecies.filter((id) => id !== 'penguin' && id !== 'rabbit')) {
+    assert.equal(companionWaveResponse(species), 'bounce', species);
+    assert.equal(companionUsesWaveBounce(species), true, species);
   }
   for (const species of staticGreetingSpecies) {
     const wave = getAnimalChoreography(species, 'wave');

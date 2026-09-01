@@ -27,16 +27,29 @@ mesh, quadruped rig, and run cycle; added smooth looping `Idle`, `Talk`, `Wave`,
 `Play`, `Curious`, and `Gentle` companion clips; renamed the original full-body action
 to `Run`; exported as a mobile-ready binary glTF.
 
-## Rabbit by majkel (CC-BY 4.0)
+## Rabbit (rigged low-poly) — attribution pending confirmation
 
-`rabbit.glb` is derived from **Rabbit** by
+`rabbit.glb` is the bundled `low_poly_rabbit.glb` drop-in (Idle / Run / Die clips,
+skinned with `fleg*` front-leg joints). Previous majkel static mesh is preserved as
+`rabbit-old.glb` for revert.
+
+**Buddi wiring:** catalog path stays `bundled:rabbit`; Wave uses the left front-leg
+shoulder (`fleg01.L`); Talk audio is unchanged (`rabbit-talk.wav`).
+
+**License:** please confirm Sketchfab / author / license so this section can be
+completed the same way as the other character entries.
+
+## Rabbit by majkel (CC-BY 4.0) — previous static mesh
+
+`rabbit-old.glb` is derived from **Rabbit** by
 [majkel](https://sketchfab.com/majkel20), downloaded from
 [Sketchfab](https://sketchfab.com/3d-models/rabbit-c5fdc23b56334f21a7f6edea4ebbfe69)
 under the [Creative Commons Attribution 4.0 license](https://creativecommons.org/licenses/by/4.0/).
 
 **Modifications:** removed unused scene helpers, resized the base-color texture,
 reduced the dense static mesh to about 30,000 polygons, and exported a mobile-ready
-binary glTF. Buddi supplies a centered whole-body greeting because the source has no rig.
+binary glTF. Buddi previously supplied a centered whole-body greeting because that
+source had no rig.
 
 ## Dotted White Seal - Free Giveaway by Kugatsu Tsukai 3D Models Hub (CC-BY 4.0)
 

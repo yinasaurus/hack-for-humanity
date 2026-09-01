@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,13 +37,18 @@ import {
 } from '../wardrobe';
 
 
-type Props = {
-  navigation: { goBack: () => void };
-  route?: { params?: Partial<CompanionState> };
-};
-
 /** Top-level categories: companion animal vs outfit accessories. */
 type TabId = 'companion' | 'outfit';
+
+export type CustomizeParams = Partial<CompanionState> & {
+  /** Open Style on Companion (switch friend) or Outfit. */
+  initialTab?: TabId;
+};
+
+type Props = {
+  navigation: { goBack: () => void };
+  route?: { params?: CustomizeParams };
+};
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'companion', label: 'Companion' },
@@ -127,16 +133,27 @@ function ChipRow<T extends string>({
 
 export function CustomizeScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { width } = useWindowDimensions();
+  const { user, setCompanion } = useAuth();
   const [a, setA] = useState<PetAppearance>(() => appearanceFromPartial(route?.params));
+  const [savedPetType, setSavedPetType] = useState<PetTypeId>(
+    () => (route?.params?.petType as PetTypeId) || DEFAULT_APPEARANCE.petType
+  );
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
   const [growthStage, setGrowthStage] = useState<CompanionState['growthStage']>('baby');
-  const [tab, setTab] = useState<TabId>('outfit');
+  const initialTab = route?.params?.initialTab;
+  const [tab, setTab] = useState<TabId>(
+    initialTab === 'companion' || initialTab === 'outfit' ? initialTab : 'outfit'
+  );
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Once the user edits, never let a late fetch overwrite their choice. */
   const dirtyRef = useRef(false);
+  const companionCardWidth = useMemo(
+    () => Math.min(168, (width - spacing.lg * 2 - 12) / 2),
+    [width]
+  );
 
   useEffect(() => {
     if (!user) {
@@ -154,15 +171,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
         if (!dirtyRef.current) {
           const next = appearanceFromPartial(c);
           setA(next);
-          if (__DEV__) {
-            // eslint-disable-next-line no-console
-            console.log('[Customize] loaded appearance', {
-              petType: next.petType,
-              hat: next.hat,
-              neck: next.neck,
-              scene: next.scene,
-            });
-          }
+          setSavedPetType(next.petType as PetTypeId);
         }
       } catch {
         /* keep route/defaults */
@@ -186,10 +195,6 @@ export function CustomizeScreen({ navigation, route }: Props) {
     dirtyRef.current = true;
     setA((prev) => {
       const next = { ...prev, [key]: value };
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log('[Customize] patch', key, value, '→ petType=', next.petType);
-      }
       return next;
     });
   };
@@ -203,15 +208,9 @@ export function CustomizeScreen({ navigation, route }: Props) {
         ...a,
         petName: a.petName.trim() || 'Companion',
       });
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.log('[Customize] saved', {
-          petType: companion.petType,
-          hat: companion.hat,
-          neck: companion.neck,
-          scene: companion.scene,
-        });
-      }
+      // Keep Home in sync immediately; focus refetch stays silent (no auto wave/sound).
+      setCompanion(companion);
+      setSavedPetType((a.petType as PetTypeId) || savedPetType);
       dirtyRef.current = false;
       navigation.goBack();
     } catch (e) {
@@ -222,6 +221,8 @@ export function CustomizeScreen({ navigation, route }: Props) {
   };
 
   const liveCharacter = useMemo(() => characterForLiveCompanion(a.petType), [a.petType]);
+  const companionPending = a.petType !== savedPetType;
+  const saveLabel = companionPending ? 'Save companion' : 'Save look';
 
   return (
     <LinearGradient colors={[...gradients.customize]} style={styles.root}>
@@ -259,6 +260,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
               {petTypeLabel(a.petType)}
               {` · ${wardrobeLabel(a)}`}
             </Text>
+            {companionPending ? (
+              <Text style={styles.pendingSwitch} accessibilityLiveRegion="polite">
+                Previewing {petTypeLabel(a.petType)} — tap {saveLabel} to keep
+              </Text>
+            ) : null}
           </>
         )}
       </View>
@@ -269,20 +275,22 @@ export function CustomizeScreen({ navigation, route }: Props) {
           { paddingBottom: Math.max(insets.bottom, 16) + 72 },
         ]}
       >
-        <View style={styles.pathCard} accessibilityRole="summary">
-          <Text style={styles.pathTitle}>Coming up</Text>
-          <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
-          {keepsakePath.map((step) => (
-            <View key={step.milestoneDay} style={styles.pathRow}>
-              <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
-                {step.label}
-              </Text>
-              <Text style={styles.pathAway}>
-                {step.unlocked ? 'Yours' : 'A future keepsake'}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {tab === 'outfit' ? (
+          <View style={styles.pathCard} accessibilityRole="summary">
+            <Text style={styles.pathTitle}>Coming up</Text>
+            <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
+            {keepsakePath.map((step) => (
+              <View key={step.milestoneDay} style={styles.pathRow}>
+                <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
+                  {step.label}
+                </Text>
+                <Text style={styles.pathAway}>
+                  {step.unlocked ? 'Yours' : 'A future keepsake'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={styles.section}>Name</Text>
         <TextInput
@@ -310,11 +318,13 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {tab === 'companion' && (
           <>
-            <Text style={styles.section}>3D companion</Text>
-            <Text style={styles.colorHint}>
-              Switch your friend anytime — outfits carry over.
-            </Text>
-            <View style={styles.companionGrid}>
+            <Text style={styles.section}>Choose your friend</Text>
+            <View style={styles.companionIntro} accessibilityRole="summary">
+              <Text style={styles.companionIntroBody}>
+                Tap a companion to preview above. Hats and scenes stay with you. Confirm with Save companion — switching stays quiet (no auto wave or sound).
+              </Text>
+            </View>
+            <View style={styles.companionGrid} accessibilityLabel="Choose companion species">
               {PET_TYPES.map((pet) => {
                 const on = a.petType === pet.id;
                 return (
@@ -323,20 +333,29 @@ export function CustomizeScreen({ navigation, route }: Props) {
                     accessibilityRole="radio"
                     accessibilityState={{ checked: on }}
                     accessibilityLabel={`Choose ${pet.label} as companion`}
-                    style={[styles.companionCard, on && styles.companionCardOn]}
+                    style={[
+                      styles.companionCard,
+                      { width: companionCardWidth },
+                      on && styles.companionCardOn,
+                    ]}
                     onPress={() => {
                       patch('petType', pet.id as PetTypeId);
                     }}
                   >
-                    <View style={styles.companionThumb}>
-                      <Text style={styles.companionIcon} importantForAccessibility="no">
-                        {pet.icon}
-                      </Text>
+                    <View style={[styles.companionRadio, on && styles.companionRadioOn]}>
+                      {on ? <View style={styles.companionRadioDot} /> : null}
                     </View>
+                    <Text style={styles.companionIcon} importantForAccessibility="no">
+                      {pet.icon}
+                    </Text>
                     <Text style={[styles.companionLabel, on && styles.companionLabelOn]}>
                       {pet.label}
                     </Text>
-                    {on && <Text style={styles.companionCheck}>✓ Current</Text>}
+                    {pet.blurb ? (
+                      <Text style={styles.companionBlurb} importantForAccessibility="no">
+                        {pet.blurb}
+                      </Text>
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -388,19 +407,17 @@ export function CustomizeScreen({ navigation, route }: Props) {
             <View style={styles.swatches}>
               {WEAR_SCENES.map((s) => {
                 const on = s.id === a.scene;
-                const available = canEquipWardrobeItem('scene', s.id, unlockIds);
                 return (
                   <Pressable
                     key={s.id}
-                    onPress={() => available && patch('scene', s.id)}
-                    disabled={!available}
-                    style={[styles.swatchWide, { backgroundColor: s.fill }, !available && styles.swatchLocked, on && styles.swatchOn]}
+                    onPress={() => patch('scene', s.id)}
+                    style={[styles.swatchWide, { backgroundColor: s.fill }, on && styles.swatchOn]}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: on, disabled: !available }}
+                    accessibilityState={{ selected: on }}
                   >
                     <Text style={styles.swatchLabel}>{s.label}</Text>
-                    <Text style={[styles.inventoryTag, available && styles.inventoryTagAvailable]}>
-                      {on ? 'In use' : available ? 'Available' : 'Locked · future keepsake'}
+                    <Text style={[styles.inventoryTag, styles.inventoryTagAvailable]}>
+                      {on ? 'In use' : 'Available'}
                     </Text>
                   </Pressable>
                 );
@@ -412,23 +429,23 @@ export function CustomizeScreen({ navigation, route }: Props) {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
-          style={styles.cta}
+          style={[styles.cta, companionPending && styles.ctaEmphasis]}
           onPress={save}
           disabled={busy || loadingLook}
           accessibilityRole="button"
-          accessibilityLabel="Save companion look"
+          accessibilityLabel={saveLabel}
         >
           {busy ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.ctaText}>Save look</Text>
+            <Text style={styles.ctaText}>{saveLabel}</Text>
           )}
         </Pressable>
         <Pressable
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
           accessibilityLabel="Leave without saving"
-          style={{ minHeight: tapTarget.min, justifyContent: 'center' }}
+          style={styles.cancelBtn}
         >
           <Text style={styles.back}>Cancel</Text>
         </Pressable>
@@ -468,12 +485,27 @@ const styles = StyleSheet.create({
     color: colors.sageDeep,
     textAlign: 'center',
   },
+  pendingSwitch: {
+    marginTop: spacing.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.mist,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.teal,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
   section: {
     fontFamily: 'Nunito_700Bold',
     fontSize: 15,
     color: colors.ink,
-    marginTop: 14,
-    marginBottom: 8,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   colorHint: {
     fontFamily: 'Nunito_400Regular',
@@ -603,71 +635,115 @@ const styles = StyleSheet.create({
   cta: {
     marginTop: spacing.lg,
     backgroundColor: colors.sageDeep,
-    borderRadius: 16,
-    minHeight: tapTarget.min,
+    borderRadius: 17,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
   },
-  ctaText: { fontFamily: 'Nunito_700Bold', color: colors.white, fontSize: 16 },
+  ctaEmphasis: {
+    borderWidth: 2,
+    borderColor: colors.teal,
+  },
+  ctaText: { fontFamily: 'Nunito_800ExtraBold', color: colors.white, fontSize: 17 },
+  cancelBtn: {
+    marginTop: spacing.xs,
+    minHeight: tapTarget.min,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   back: {
-    marginTop: 12,
     textAlign: 'center',
     fontFamily: 'Nunito_600SemiBold',
     color: colors.inkSoft,
     fontSize: 15,
   },
   error: {
-    marginTop: 12,
+    marginTop: spacing.sm,
     fontFamily: 'Nunito_600SemiBold',
     color: '#A65D5D',
     fontSize: 14,
   },
+  companionIntro: {
+    marginBottom: spacing.sm,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.mist,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  companionIntroBody: {
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.inkSoft,
+  },
   companionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: spacing.xs,
   },
   companionCard: {
-    width: '47%',
-    borderRadius: 18,
+    position: 'relative',
+    minHeight: 132,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: colors.sand,
     backgroundColor: colors.card,
-    overflow: 'hidden',
     alignItems: 'center',
-    paddingBottom: 10,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.md,
+    paddingBottom: 14,
   },
   companionCardOn: {
     borderColor: colors.sageDeep,
     backgroundColor: colors.white,
   },
-  companionThumb: {
-    width: '100%',
-    height: 110,
-    borderRadius: 0,
+  companionRadio: {
+    position: 'absolute',
+    top: 11,
+    right: 11,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.sand,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.cream,
+    backgroundColor: colors.white,
+  },
+  companionRadioOn: {
+    borderColor: colors.sageDeep,
+  },
+  companionRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.sageDeep,
   },
   companionIcon: {
-    fontSize: 52,
-    lineHeight: 60,
+    fontSize: 48,
+    lineHeight: 56,
   },
   companionLabel: {
-    marginTop: 6,
+    marginTop: 4,
     fontFamily: 'Nunito_700Bold',
-    fontSize: 14,
+    fontSize: 15,
     color: colors.ink,
   },
   companionLabelOn: {
     color: colors.sageDeep,
   },
-  companionCheck: {
+  companionBlurb: {
     marginTop: 2,
-    fontFamily: 'Nunito_600SemiBold',
+    fontFamily: 'Nunito_400Regular',
     fontSize: 11,
-    color: colors.sageDeep,
+    lineHeight: 15,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    paddingHorizontal: 2,
   },
 });
