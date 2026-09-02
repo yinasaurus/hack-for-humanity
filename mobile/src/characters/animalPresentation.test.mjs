@@ -105,9 +105,9 @@ test('species voices remain distinct without becoming harsh', () => {
   }
 });
 
-test('vitality feedback keeps the animal recognizable', () => {
+test('vitality no longer dims the companion (opacity stays full)', () => {
   assert.equal(companionVitalityOpacity('bright'), 1);
-  assert.ok(companionVitalityOpacity('fatigued') > companionVitalityOpacity('dim'));
-  assert.ok(companionVitalityOpacity('dim') > companionVitalityOpacity('dormant'));
-  assert.ok(companionVitalityOpacity('dormant') >= 0.6);
+  assert.equal(companionVitalityOpacity('fatigued'), 1);
+  assert.equal(companionVitalityOpacity('dim'), 1);
+  assert.equal(companionVitalityOpacity('dormant'), 1);
 });

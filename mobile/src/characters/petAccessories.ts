@@ -51,8 +51,27 @@ export const HEAD_LANDMARK_HINTS = {
   head: ['Head', 'head', 'b_Head_05', 'Head_Bone', 'Bone.003_03', 'Bone.003'],
   crown: ['Head.tip', 'Head_Tip', 'head_tip'],
   muzzle: ['Chin', 'chin', 'Nose', 'nose', 'Jaw', 'jaw', 'Muzzle', 'muzzle'],
-  earL: ['Ear_L', 'ear_l', 'EarLeft', 'LeftEar', 'ear01.L_04', 'ear01.L'],
-  earR: ['Ear_R', 'ear_r', 'EarRight', 'RightEar', 'ear01.R_06', 'ear01.R'],
+  // Prefer ear *base* joints (ear01) over mid/tip (ear02) so crown sits on the skull.
+  earL: [
+    'Ear_L',
+    'ear_l',
+    'EarLeft',
+    'LeftEar',
+    'ear01.L_04',
+    'ear01.L',
+    'ear02.L_05',
+    'ear02.L',
+  ],
+  earR: [
+    'Ear_R',
+    'ear_r',
+    'EarRight',
+    'RightEar',
+    'ear01.R_06',
+    'ear01.R',
+    'ear02.R_07',
+    'ear02.R',
+  ],
   neck: ['Neck', 'neck', 'b_Neck_04', 'Spine_4', 'Spine_3', 'Bone.002_02', 'Bone.002'],
 } as const;
 
@@ -106,33 +125,35 @@ export const SPECIES_ACCESSORY_FIT: Readonly<Record<string, SpeciesAccessoryFit>
     held: { up: 0.05, forward: 0.18, size: 0.28 },
   },
   rabbit: {
-    // Tall ear roots on the new rigged low-poly — seat hat between ears, glasses closer.
-    hat: { up: 0.1, forward: -0.04, size: 0.48, tilt: 0.12 },
-    face: { up: 0.04, forward: 0.48, size: 0.36 },
-    neck: { up: -0.14, forward: 0.1, size: 0.36 },
-    held: { up: 0.05, forward: 0.16, size: 0.24 },
+    // New rigged rabbit: ear01 roots sit close together (narrow span) while ears
+    // are tall — use a larger size fraction (like horse) and a low crown seat so
+    // the party hat nests between ears instead of floating / clipping tips.
+    hat: { up: 0.02, forward: -0.05, size: 0.78, tilt: 0.1 },
+    face: { up: 0.1, forward: 0.62, size: 0.55 },
+    neck: { up: -0.12, forward: 0.12, size: 0.42 },
+    held: { up: 0.05, forward: 0.16, size: 0.26 },
   },
   parrot: {
-    hat: { up: 0.2, forward: -0.05, size: 0.55, tilt: 0.08 },
-    face: { up: 0.05, forward: 0.45, size: 0.4 },
+    hat: { up: 0.16, forward: -0.04, size: 0.58, tilt: 0.08 },
+    face: { up: 0.06, forward: 0.48, size: 0.42 },
     neck: { up: -0.12, forward: 0.1, size: 0.4 },
     held: { up: 0.05, forward: 0.18, size: 0.28 },
   },
   flamingo: {
-    hat: { up: 0.18, forward: -0.04, size: 0.52, tilt: 0.08 },
-    face: { up: 0.04, forward: 0.48, size: 0.38 },
+    hat: { up: 0.14, forward: -0.03, size: 0.55, tilt: 0.08 },
+    face: { up: 0.05, forward: 0.52, size: 0.4 },
     neck: { up: -0.22, forward: 0.1, size: 0.4 },
     held: { up: 0.05, forward: 0.18, size: 0.26 },
   },
   stork: {
-    hat: { up: 0.18, forward: -0.04, size: 0.52, tilt: 0.08 },
-    face: { up: 0.04, forward: 0.55, size: 0.4 },
+    hat: { up: 0.14, forward: -0.03, size: 0.55, tilt: 0.08 },
+    face: { up: 0.05, forward: 0.58, size: 0.42 },
     neck: { up: -0.24, forward: 0.1, size: 0.42 },
     held: { up: 0.05, forward: 0.18, size: 0.26 },
   },
   hamster: {
-    hat: { up: 0.14, forward: -0.08, size: 0.5, tilt: 0.12 },
-    face: { up: 0.06, forward: 0.48, size: 0.4 },
+    hat: { up: 0.12, forward: -0.06, size: 0.55, tilt: 0.12 },
+    face: { up: 0.08, forward: 0.52, size: 0.44 },
     neck: { up: -0.12, forward: 0.12, size: 0.4 },
     held: { up: 0.05, forward: 0.2, size: 0.28 },
   },
@@ -143,8 +164,8 @@ export const SPECIES_ACCESSORY_FIT: Readonly<Record<string, SpeciesAccessoryFit>
     held: { up: 0.05, forward: 0.2, size: 0.3 },
   },
   koala: {
-    hat: { up: 0.14, forward: -0.1, size: 0.5, tilt: 0.12 },
-    face: { up: 0.05, forward: 0.48, size: 0.4 },
+    hat: { up: 0.12, forward: -0.08, size: 0.52, tilt: 0.12 },
+    face: { up: 0.06, forward: 0.5, size: 0.42 },
     neck: { up: -0.14, forward: 0.12, size: 0.42 },
     held: { up: 0.05, forward: 0.2, size: 0.28 },
   },
@@ -156,13 +177,13 @@ export const SPECIES_ACCESSORY_FIT: Readonly<Record<string, SpeciesAccessoryFit>
   },
   raccoon: {
     hat: { up: 0.12, forward: -0.1, size: 0.48, tilt: 0.14 },
-    face: { up: 0.05, forward: 0.48, size: 0.4 },
+    face: { up: 0.05, forward: 0.5, size: 0.4 },
     neck: { up: -0.14, forward: 0.12, size: 0.4 },
     held: { up: 0.05, forward: 0.2, size: 0.28 },
   },
   duck: {
-    hat: { up: 0.16, forward: -0.04, size: 0.5, tilt: 0.1 },
-    face: { up: 0.05, forward: 0.5, size: 0.4 },
+    hat: { up: 0.14, forward: -0.02, size: 0.55, tilt: 0.08 },
+    face: { up: 0.06, forward: 0.55, size: 0.42 },
     neck: { up: -0.12, forward: 0.12, size: 0.4 },
     held: { up: 0.05, forward: 0.18, size: 0.26 },
   },
@@ -173,14 +194,15 @@ export const SPECIES_ACCESSORY_FIT: Readonly<Record<string, SpeciesAccessoryFit>
     held: { up: 0.05, forward: 0.2, size: 0.28 },
   },
   seal: {
-    hat: { up: 0.16, forward: -0.05, size: 0.5, tilt: 0.1 },
-    face: { up: 0.08, forward: 0.48, size: 0.4 },
-    neck: { up: -0.12, forward: 0.12, size: 0.4 },
+    // Round head + synthetic landmarks — seat slightly lower, glasses a touch larger.
+    hat: { up: 0.1, forward: -0.02, size: 0.58, tilt: 0.08 },
+    face: { up: 0.1, forward: 0.52, size: 0.46 },
+    neck: { up: -0.1, forward: 0.12, size: 0.42 },
     held: { up: 0.05, forward: 0.18, size: 0.26 },
   },
   sloth: {
-    hat: { up: 0.14, forward: -0.08, size: 0.5, tilt: 0.12 },
-    face: { up: 0.06, forward: 0.5, size: 0.4 },
+    hat: { up: 0.12, forward: -0.06, size: 0.52, tilt: 0.1 },
+    face: { up: 0.08, forward: 0.52, size: 0.42 },
     neck: { up: -0.14, forward: 0.12, size: 0.42 },
     held: { up: 0.05, forward: 0.2, size: 0.28 },
   },

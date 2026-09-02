@@ -6,7 +6,6 @@ import {
   milestonesReached,
   consecutiveMisses,
   checkInRate,
-  walksUnlocked,
   shiftDay,
   toDateKey,
   vitalityState,
@@ -195,13 +194,6 @@ describe('checkInRate', () => {
   it('computes window rate', () => {
     const rate = checkInRate([ci(0), ci(1), ci(2)], 7, today);
     assert.ok(Math.abs(rate - 3 / 7) < 0.001);
-  });
-});
-
-describe('walksUnlocked', () => {
-  it('unlocks with streak >= 2', () => {
-    assert.equal(walksUnlocked([ci(0), ci(1)]), true);
-    assert.equal(walksUnlocked([ci(0)]), false);
   });
 });
 

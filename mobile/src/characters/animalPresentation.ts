@@ -564,14 +564,10 @@ export function animalPresentationFor(species?: string | null): AnimalPresentati
 
 export type CompanionVitality = 'bright' | 'fatigued' | 'dim' | 'dormant';
 
-const VITALITY_OPACITY: Record<CompanionVitality, number> = {
-  bright: 1,
-  fatigued: 0.9,
-  dim: 0.76,
-  dormant: 0.62,
-};
-
-/** Keep vitality feedback visible without washing away the animal's identity. */
-export function companionVitalityOpacity(vitality?: string | null): number {
-  return VITALITY_OPACITY[(vitality || 'bright') as CompanionVitality] ?? 1;
+/**
+ * Opacity fade was retired — lower vitality uses resting/sleepy idle presentation
+ * instead (see calmExpressionForVitality). Kept as a no-op for callers/tests.
+ */
+export function companionVitalityOpacity(_vitality?: string | null): number {
+  return 1;
 }

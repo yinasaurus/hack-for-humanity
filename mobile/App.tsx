@@ -21,6 +21,7 @@ import { TogetherScreen } from './src/screens/TogetherScreen';
 import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { PetSelectionScreen } from './src/screens/PetSelectionScreen';
+import { DemoAccountSwitcher } from './src/components/DemoAccountSwitcher';
 import { colors } from './src/theme';
 
 export type RootStackParamList = {
@@ -37,7 +38,7 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 function RootNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, demoSwitching } = useAuth();
   const [transparencyCompletedFor, setTransparencyCompletedFor] = useState<string | null>(null);
 
   if (loading) {
@@ -56,35 +57,59 @@ function RootNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-      {!user ? (
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      ) : !user.onboarded && transparencyCompletedFor !== user.id ? (
-        <Stack.Screen name="Transparency">
-          {() => (
-            <TransparencyScreen onDone={() => setTransparencyCompletedFor(user.id)} />
-          )}
-        </Stack.Screen>
-      ) : !user.onboarded ? (
-        <Stack.Screen name="PetSelection" component={PetSelectionScreen} />
-      ) : (
-        <>
-          <Stack.Screen name="Home">
-            {({ navigation, route }) => (
-              <HomeScreen
-                navigation={navigation}
-                celebrate={Boolean(route.params?.celebrate)}
-                newUnlocks={route.params?.newUnlocks || []}
-              />
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+        {!user ? (
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        ) : !user.onboarded && transparencyCompletedFor !== user.id ? (
+          <Stack.Screen name="Transparency">
+            {() => (
+              <TransparencyScreen onDone={() => setTransparencyCompletedFor(user.id)} />
             )}
           </Stack.Screen>
-          <Stack.Screen name="CheckIn" component={CheckInScreen} />
-          <Stack.Screen name="Together" component={TogetherScreen} />
-          <Stack.Screen name="Customize" component={CustomizeScreen} />
-          <Stack.Screen name="Settings" component={SettingsScreen} />
-        </>
-      )}
-    </Stack.Navigator>
+        ) : !user.onboarded ? (
+          <Stack.Screen name="PetSelection" component={PetSelectionScreen} />
+        ) : (
+          <>
+            <Stack.Screen name="Home">
+              {({ navigation, route }) => (
+                <HomeScreen
+                  key={user.id}
+                  navigation={navigation}
+                  celebrate={Boolean(route.params?.celebrate)}
+                  newUnlocks={route.params?.newUnlocks || []}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="CheckIn" component={CheckInScreen} />
+            <Stack.Screen name="Together" component={TogetherScreen} />
+            <Stack.Screen name="Customize" component={CustomizeScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+      {/* Presenter tool — self-gates to __DEV__ / DEMO_MODE + @demo.local */}
+      <DemoAccountSwitcher />
+      {demoSwitching ? (
+        <View
+          pointerEvents="auto"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            zIndex: 2000,
+            elevation: 2000,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: colors.cream,
+          }}
+        >
+          <ActivityIndicator color={colors.sageDeep} size="large" />
+        </View>
+      ) : null}
+    </View>
   );
 }
 

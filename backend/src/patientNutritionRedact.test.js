@@ -6,6 +6,7 @@ import {
 } from './patientNutritionRedact.js';
 import { toPatientCarePlan } from './careSchedule.js';
 import { patientFacingCelebrationMessage } from './checkupCelebration.js';
+import { toDateKey } from './streaks.js';
 
 describe('redactPatientFacingNutritionLanguage', () => {
   it('redacts calorie counts while keeping the surrounding sentence', () => {
@@ -43,6 +44,8 @@ describe('patient vs clinician care-reminder boundary', () => {
   const rawNote = 'Gentle check-in — aim for 2000 kcal, maybe 50g protein if ready.';
 
   it('redacts nutrition language in the patient-facing care plan payload', () => {
+    // Slot date must be today (or future) so todayMoment resolves — not a fixed calendar day.
+    const today = toDateKey(new Date());
     const patientView = toPatientCarePlan({
       id: 'rem-1',
       note: rawNote,
@@ -50,12 +53,12 @@ describe('patient vs clinician care-reminder boundary', () => {
       hour: 12,
       carePlan: {
         summary: 'Soft plan toward 1800 calories this week',
-        startDate: '2026-09-01',
-        endDate: '2026-09-07',
+        startDate: today,
+        endDate: today,
         slots: [
           {
             id: 'slot-1',
-            date: '2026-09-01',
+            date: today,
             mealLabel: 'midday',
             prompt: 'A soft midday hello about “2000 kcal” — only if it feels okay.',
             status: 'pending',
@@ -69,6 +72,7 @@ describe('patient vs clinician care-reminder boundary', () => {
     assert.equal(patientView.note.includes('50g'), false);
     assert.match(patientView.note, new RegExp(REDACTED));
     assert.equal(patientView.carePlan.summary.includes('1800'), false);
+    assert.ok(patientView.todayMoment);
     assert.equal(patientView.todayMoment.prompt.includes('2000'), false);
     assert.match(patientView.todayMoment.prompt, new RegExp(REDACTED));
   });

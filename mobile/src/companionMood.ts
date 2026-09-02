@@ -4,10 +4,38 @@
  *
  * Presence (from check-ins, server): happy | resting
  * Presentation (client overlays): waving | excited | curious | sleepy
+ *
+ * Vitality (server categorical: bright | fatigued | dim | dormant) is presentation-only
+ * here — maps to calm resting/sleepy idle, never opacity fade or “unwell” cues.
+ * Computation stays on the backend; this file only chooses how it looks.
  */
 
 export const COMPANION_PRESENCE = ['happy', 'resting'] as const;
 export type CompanionPresence = (typeof COMPANION_PRESENCE)[number];
+
+/** Mirrors backend vitality categories — presentation mapping only. */
+export type CompanionVitalityBand = 'bright' | 'fatigued' | 'dim' | 'dormant';
+
+/** Lower-engagement vitality → calm nap presentation (not dimming). */
+export function isEngagementResting(vitality?: string | null): boolean {
+  return vitality === 'fatigued' || vitality === 'dim' || vitality === 'dormant';
+}
+
+/**
+ * Map categorical vitality to a calm expression.
+ * bright → active happy; softer gaps → resting; longer gaps → sleepy (slow breath).
+ */
+export function calmExpressionForVitality(vitality?: string | null): CompanionExpression {
+  switch (vitality) {
+    case 'dormant':
+    case 'dim':
+      return 'sleepy';
+    case 'fatigued':
+      return 'resting';
+    default:
+      return 'happy';
+  }
+}
 
 export const COMPANION_EXPRESSIONS = [
   'happy',

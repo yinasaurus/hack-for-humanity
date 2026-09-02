@@ -25,13 +25,36 @@ test('cat and rabbit fits differ so accessories adapt across head shapes', () =>
   const horse = SPECIES_ACCESSORY_FIT.horse;
   assert.notDeepEqual(cat.face, rabbit.face);
   assert.ok(horse.hat.size > cat.hat.size, 'horse head needs a larger hat fraction');
+  // Narrow ear-span species need larger size fractions so cosmetics stay readable.
+  assert.ok(rabbit.hat.size >= 0.7, 'rabbit hat compensates for close ear roots');
+  assert.ok(rabbit.hat.up <= 0.05, 'rabbit hat seats low between tall ears');
+  assert.ok(rabbit.face.forward > cat.face.forward, 'rabbit glasses sit further forward');
 });
 
 test('landmark hints expose head, ears, and muzzle anchors', () => {
   assert.ok(HEAD_LANDMARK_HINTS.head.includes('Head'));
-  assert.ok(HEAD_LANDMARK_HINTS.earL.includes('Ear_L'));
-  assert.ok(HEAD_LANDMARK_HINTS.earR.includes('Ear_R'));
+  assert.ok(HEAD_LANDMARK_HINTS.head.includes('Bone.003_03'));
+  assert.ok(HEAD_LANDMARK_HINTS.earL.includes('ear01.L_04'));
+  assert.ok(HEAD_LANDMARK_HINTS.earR.includes('ear01.R_06'));
+  // Base ear joints are preferred before tip joints.
+  assert.ok(
+    HEAD_LANDMARK_HINTS.earL.indexOf('ear01.L_04') <
+      HEAD_LANDMARK_HINTS.earL.indexOf('ear02.L_05')
+  );
   assert.ok(HEAD_LANDMARK_HINTS.muzzle.includes('Chin'));
+});
+
+test('rabbit-like narrow ear span still yields readable hat/glasses sizes', () => {
+  const frame = buildAnatomicalHeadFrame({
+    head: [0, 1.0, 0.5],
+    earL: [-0.08, 1.32, 0.45],
+    earR: [0.08, 1.32, 0.45],
+  });
+  const hat = placeHeadAccessory('hat', frame, SPECIES_ACCESSORY_FIT.rabbit.hat);
+  const glasses = placeHeadAccessory('face', frame, SPECIES_ACCESSORY_FIT.rabbit.face);
+  assert.ok(hat.size >= 0.1, `rabbit hat size ${hat.size}`);
+  assert.ok(glasses.size >= 0.08, `rabbit glasses size ${glasses.size}`);
+  assert.ok(glasses.position[2] > hat.position[2] - 0.02);
 });
 
 test('anatomical frame prefers ear-mid crown and muzzle forward over bone axes', () => {

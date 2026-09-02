@@ -70,7 +70,6 @@ export type CompanionState = {
   vitality: 'bright' | 'fatigued' | 'dim' | 'dormant';
   growthStage: 'baby' | 'little' | 'growing' | 'playful' | 'adventurer' | 'grown';
   petGender: PetGender;
-  walksAvailable: boolean;
   unlocks: Unlock[];
   newlyUnlocked: Unlock[];
   /** YYYY-MM-DD days with a check-in (for soft presence dots). */

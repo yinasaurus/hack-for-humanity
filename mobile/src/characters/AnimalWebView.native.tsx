@@ -582,6 +582,42 @@ function applyEyeProfile() {
   });
 }
 
+/** Soft closed/half-open eyes when resting — no color wash or opacity fade. */
+function rememberEyeBases() {
+  eyeMeshes.forEach((mesh) => {
+    if (!mesh.userData.baseEyeScale) mesh.userData.baseEyeScale = mesh.scale.clone();
+  });
+}
+
+function applyRestingEyes(mode) {
+  rememberEyeBases();
+  const yMul = mode === 'closed' ? 0.14 : mode === 'soft' ? 0.52 : 1;
+  const xzMul = mode === 'open' ? 1 : 1.05;
+  eyeMeshes.forEach((mesh) => {
+    const base = mesh.userData.baseEyeScale;
+    if (!base) return;
+    mesh.scale.set(base.x * xzMul, base.y * yMul, base.z * xzMul);
+  });
+}
+
+/** Slow looping breath for nap presentation (cancelled via animToken). */
+function startRestBreath({ amp = 0.014, period = 3200, scalePulse = 0.018 } = {}) {
+  if (!root || reducedMotion) return;
+  const token = ++animToken;
+  const startY = root.position.y;
+  const startScale = root.scale.clone();
+  const t0 = performance.now();
+  function step(now) {
+    if (token !== animToken || !root) return;
+    const e = ((now - t0) / period) % 1;
+    const w = 0.5 - 0.5 * Math.cos(e * Math.PI * 2);
+    root.position.y = startY + w * amp;
+    root.scale.copy(startScale).multiplyScalar(1 + w * scalePulse);
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 function proceduralMaterial(spec) {
   return new THREE.MeshPhysicalMaterial({
     color: spec.color,
@@ -774,12 +810,20 @@ function goBaseIdle() {
   quiet = isQuietExpr(expression);
   setBackground(expression);
   applyQuietPose(quiet, expression === 'sleepy');
+  if (expression === 'sleepy') applyRestingEyes('closed');
+  else if (expression === 'resting') applyRestingEyes('soft');
+  else applyRestingEyes('open');
   if (reducedMotion) {
     playSemanticClip('idle', { loop: true, speed: 0, fade: 0.8 });
     if (current) { current.paused = true; current.setEffectiveTimeScale(0); }
     return;
   }
   playSemanticClip('idle', { loop: true, speed: idleSpeed(), fade: 0.7 });
+  if (expression === 'sleepy') {
+    startRestBreath({ amp: 0.016, period: 3400, scalePulse: 0.022 });
+  } else if (expression === 'resting') {
+    startRestBreath({ amp: 0.012, period: 3000, scalePulse: 0.015 });
+  }
 }
 
 function softBob({ amp = 0.035, dur = 1600, yaw = 0, roll = 0, scalePulse = 0 } = {}) {
@@ -827,6 +871,8 @@ function doReactGentle() {
 
 function doWaveGreeting() {
   if (reducedMotion) return doReactGentle();
+  animToken += 1;
+  applyRestingEyes('open');
   const m = ANIMAL.actions.wave;
   const state = beginProcedural('wave', m.durationMs);
   playSemanticClip('wave', { loop: false, speed: m.clipSpeed, fade: 0.65 });
@@ -840,8 +886,10 @@ function doWaveGreeting() {
 }
 
 function doExcited() {
+  animToken += 1;
   quiet = false;
   applyQuietPose(false);
+  applyRestingEyes('open');
   setBackground('excited');
   if (reducedMotion) return softBob({ amp: 0.03, dur: 1800, scalePulse: 0.02 });
   const m = ANIMAL.actions.play;
@@ -854,8 +902,10 @@ function doExcited() {
 }
 
 function doCurious() {
+  animToken += 1;
   quiet = true;
   applyQuietPose(true, false);
+  applyRestingEyes('open');
   setBackground('curious');
   if (reducedMotion) return;
   const m = ANIMAL.actions.curious;
@@ -875,9 +925,10 @@ function doSleepy() {
   quiet = true;
   talking = false;
   applyQuietPose(true, true);
+  applyRestingEyes('closed');
   setBackground('sleepy');
-  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.8 });
-  softBob({ amp: 0.018, dur: 2400, scalePulse: 0.025 });
+  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.22, fade: 0.85 });
+  startRestBreath({ amp: 0.016, period: 3400, scalePulse: 0.022 });
 }
 
 function doResting() {
@@ -885,13 +936,17 @@ function doResting() {
   quiet = true;
   talking = false;
   applyQuietPose(true, false);
+  applyRestingEyes('soft');
   setBackground('resting');
-  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.28, fade: 0.8 });
+  playSemanticClip('idle', { loop: true, speed: reducedMotion ? 0 : 0.28, fade: 0.85 });
+  startRestBreath({ amp: 0.012, period: 3000, scalePulse: 0.015 });
 }
 
 function doHappy() {
+  animToken += 1;
   quiet = false;
   applyQuietPose(false);
+  applyRestingEyes('open');
   setBackground('happy');
   goBaseIdle();
 }
@@ -910,8 +965,10 @@ function setExpression(next) {
 
 function doReact() {
   if (talking || reducedMotion) return doReactGentle();
+  animToken += 1;
   quiet = false;
   applyQuietPose(false);
+  applyRestingEyes('open');
   setBackground('excited');
   const m = ANIMAL.actions.play;
   const state = beginProcedural('play', m.durationMs);
@@ -925,7 +982,9 @@ function doAnimalTalk(durationMs = 0) {
   const duration = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : m.durationMs;
   talking = true;
   quiet = false;
+  animToken += 1;
   applyQuietPose(false);
+  applyRestingEyes('open');
   setBackground('happy');
   const state = beginProcedural('talk', duration);
   playSemanticClip('talk', { loop: false, speed: m.clipSpeed, fade: 0.55 });

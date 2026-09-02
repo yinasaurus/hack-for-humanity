@@ -20,6 +20,7 @@ import {
 import type { AlertRow, PatientRow } from './api';
 import './App.css';
 import { AuthenticatedMealImage } from './AuthenticatedMealImage';
+import { DEMO_CLINICIAN, DEMO_PASSWORD, isDemoToolsEnabled } from './demoMode';
 
 function pct(n: number) {
   return `${Math.round(n * 100)}%`;
@@ -104,6 +105,9 @@ export default function App() {
   const [planBusy, setPlanBusy] = useState(false);
   const [clinical, setClinical] = useState<ClinicalProfile>({ heightCm: null, weightKg: null, dailyCalorieTarget: null, customGoals: [] });
   const [clinicalBusy, setClinicalBusy] = useState(false);
+  const [demoMenuOpen, setDemoMenuOpen] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const showDemoSwitcher = isDemoToolsEnabled();
 
   const load = async () => {
     setLoading(true);
@@ -188,6 +192,30 @@ export default function App() {
       setAuthed(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not sign in');
+    }
+  };
+
+  const onDemoClinicSwitch = async () => {
+    if (!showDemoSwitcher) return;
+    setDemoBusy(true);
+    setError(null);
+    setDemoMenuOpen(false);
+    try {
+      setClinicToken(null);
+      setSelectedId(null);
+      setDetail(null);
+      setPatients([]);
+      setAlerts([]);
+      setEmail(DEMO_CLINICIAN.email);
+      setPassword(DEMO_PASSWORD);
+      await clinicLogin(DEMO_CLINICIAN.email, DEMO_PASSWORD);
+      setAuthed(true);
+      await load();
+    } catch (err) {
+      setAuthed(false);
+      setError(err instanceof Error ? err.message : 'Demo clinic sign-in failed');
+    } finally {
+      setDemoBusy(false);
     }
   };
 
@@ -379,6 +407,38 @@ export default function App() {
           <p className="header-tagline">Photos · patterns · notes — you decide</p>
         </div>
         <div className="header-right">
+          {showDemoSwitcher ? (
+            <div className="demo-switcher">
+              <button
+                type="button"
+                className="demo-switcher-chip"
+                aria-label="Demo account switcher"
+                aria-expanded={demoMenuOpen}
+                onClick={() => setDemoMenuOpen((v) => !v)}
+                disabled={demoBusy}
+              >
+                {demoBusy ? '…' : 'Demo ▾'}
+              </button>
+              {demoMenuOpen ? (
+                <div className="demo-switcher-menu" role="menu">
+                  <p className="demo-switcher-title">DEMO ONLY</p>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="demo-switcher-item"
+                    onClick={() => void onDemoClinicSwitch()}
+                    disabled={demoBusy}
+                  >
+                    <strong>{DEMO_CLINICIAN.label}</strong>
+                    <span>{DEMO_CLINICIAN.blurb}</span>
+                  </button>
+                  <p className="demo-switcher-foot">
+                    Dev build only · patient jump is in the mobile app
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <span
             className={`ai-pill ${liveAi ? 'ai-pill-live' : 'ai-pill-mock'}`}
             role="status"
@@ -460,6 +520,9 @@ export default function App() {
           )}
 
           <ul className="patient-list">
+            {patients.length === 0 ? (
+              <li className="empty-side">No patients in this clinic yet.</li>
+            ) : null}
             {patients.map((p) => {
               const flags = alertCountByPatient.get(p.id) || 0;
               const unreadNotes = p.unreadVisitNotes || 0;
@@ -904,7 +967,9 @@ export default function App() {
                       )
                     )}
                   </ul>
-                ) : null}
+                ) : (
+                  <p className="muted tiny">No clinician notes yet.</p>
+                )}
               </section>
 
               <section className="block">
@@ -914,6 +979,9 @@ export default function App() {
                   Soft “possible screen photo” hints stay here too — check-in still counts.
                 </p>
                 <ul className="checkins">
+                  {detail.checkIns.length === 0 ? (
+                    <li className="muted tiny">No check-ins yet for this patient.</li>
+                  ) : null}
                   {detail.checkIns.slice(0, 3).map(
                     (c: {
                       id: string;

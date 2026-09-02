@@ -142,6 +142,11 @@ export function HelloCalendar({ helloDays, userId }: Props) {
         Check-ins
       </Text>
       <Text style={styles.sub}>Newest on the left · tap a filled day</Text>
+      {helloDays.length === 0 ? (
+        <Text style={styles.emptyHint}>
+          No check-ins yet — when you’re ready, a filled day will show up here.
+        </Text>
+      ) : null}
 
       <View style={styles.dotRow}>
         {dots.map((d) => (
@@ -229,6 +234,13 @@ const styles = StyleSheet.create({
   },
   sub: {
     marginTop: 4,
+    fontFamily: 'Nunito_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkSoft,
+  },
+  emptyHint: {
+    marginTop: 10,
     fontFamily: 'Nunito_400Regular',
     fontSize: 13,
     lineHeight: 18,

@@ -27,17 +27,23 @@ mesh, quadruped rig, and run cycle; added smooth looping `Idle`, `Talk`, `Wave`,
 `Play`, `Curious`, and `Gentle` companion clips; renamed the original full-body action
 to `Run`; exported as a mobile-ready binary glTF.
 
-## Rabbit (rigged low-poly) — attribution pending confirmation
+## Rabbit (rigged low-poly) — attribution **pending**
 
-`rabbit.glb` is the bundled `low_poly_rabbit.glb` drop-in (Idle / Run / Die clips,
-skinned with `fleg*` front-leg joints). Previous majkel static mesh is preserved as
-`rabbit-old.glb` for revert.
+`rabbit.glb` is the currently wired companion mesh (`bundled:rabbit` in the catalog).
 
-**Buddi wiring:** catalog path stays `bundled:rabbit`; Wave uses the left front-leg
-shoulder (`fleg01.L`); Talk audio is unchanged (`rabbit-talk.wav`).
+**Status: ATTRIBUTION PENDING — do not treat this entry as cleared.**
 
-**License:** please confirm Sketchfab / author / license so this section can be
-completed the same way as the other character entries.
+We do not yet have a confirmed author, source page, or license string for this
+rigged low-poly drop-in (Idle / Run clips; `fleg*` / `ear01*` joints). The file
+remains in the bundle for the hackathon demo only. Before any public
+redistribution beyond the event, replace it with a fully attributed asset or
+complete this section with verified Sketchfab/Poly Pizza (or other) credits.
+
+Previous majkel static mesh is preserved as `rabbit-old.glb` (see below) for
+revert.
+
+**Buddi wiring:** Wave uses left front-leg shoulder (`fleg01.L*`); Talk audio is
+`rabbit-talk.wav` (separately licensed — see audio LICENSES.md).
 
 ## Rabbit by majkel (CC-BY 4.0) — previous static mesh
 
@@ -88,3 +94,25 @@ The following bundled `.glb` companions are derived from:
 | `sloth.glb` | Sloth |
 
 **Modifications:** OBJ/MTL/PNG packs (and the Sloth FBX) converted to binary glTF (`.glb`); large base-color textures resized to 512×512 before export to keep the mobile bundle small. Models are static (no animation clips); Buddi drives idle/talk/play via its procedural choreography overlay. The Hamster remains bundled only so older saved companions keep rendering.
+
+## Parrot / Flamingo / Stork (three.js example birds) — remote models
+
+These selectable companions are **not** bundled as local `.glb` files. They load
+at runtime from the three.js r152 examples CDN:
+
+- [Parrot.glb](https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/models/gltf/Parrot.glb)
+- [Flamingo.glb](https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/models/gltf/Flamingo.glb)
+- [Stork.glb](https://cdn.jsdelivr.net/gh/mrdoob/three.js@r152/examples/models/gltf/Stork.glb)
+
+**Credit:** Models by [mirada](https://mirada.com/) from the [rome / ro.me](http://www.ro.me/)
+project, as credited in the three.js example
+[`webgl_gpgpu_birds_gltf`](https://threejs.org/examples/webgl_gpgpu_birds_gltf.html)
+(“Flamingo by mirada from rome”). Catalog paths live in
+`mobile/src/characters/characterCatalog.ts`.
+
+**License status:** The three.js **code** is MIT; these **example models are not**
+covered by a blanket MIT grant. Upstream does not ship a dedicated license file
+beside Parrot/Flamingo/Stork (see [three.js#23089](https://github.com/mrdoob/three.js/issues/23089)).
+For this hackathon demo we attribute mirada / rome and load the published example
+assets. **Before wider redistribution, confirm permission or replace with
+clearly licensed alternatives.**

@@ -40,7 +40,9 @@ import {
 } from '../notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  calmExpressionForVitality,
   expressionCaption,
+  isEngagementResting,
   nextAmbientIdle,
   nextQuietIdle,
   type CompanionExpression,
@@ -203,6 +205,21 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     if (handoffCompanion) setLocalCompanion(handoffCompanion);
   }, [handoffCompanion]);
 
+  // Demo account jumps remount Home via key={user.id}; also clear if user changes in-place.
+  useEffect(() => {
+    setLocalCompanion(null);
+    setLoading(true);
+    setShowMilestone(false);
+    setPendingUnlocks([]);
+    setShowCheckup(false);
+    setCheckupMoment(null);
+    setTalkLine(null);
+    setVisibleTalkLine(null);
+    setPlayActive(false);
+    setNapping(false);
+    setExpression('happy');
+  }, [user?.id]);
+
   const clearExpressionTimer = () => {
     if (expressionTimer.current) {
       clearTimeout(expressionTimer.current);
@@ -210,10 +227,26 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
     }
   };
 
-  /** After a short gesture, return to a calm expression. */
-  const settleAfterGesture = useCallback((nap: boolean) => {
-    setExpression(nap ? 'sleepy' : 'happy');
-  }, []);
+  /** After a short gesture, return to vitality-/quiet-appropriate calm expression. */
+  const settleAfterGesture = useCallback(
+    (preferQuiet: boolean) => {
+      const vitality = companion?.vitality;
+      const quietBand =
+        preferQuiet ||
+        presence === 'resting' ||
+        isEngagementResting(vitality);
+      if (!quietBand) {
+        setExpression('happy');
+        return;
+      }
+      setExpression(
+        isEngagementResting(vitality)
+          ? calmExpressionForVitality(vitality)
+          : 'sleepy'
+      );
+    },
+    [companion?.vitality, presence]
+  );
 
   /** Lightweight anytime play — bounce/trick, never gated or required. */
   const runPlayBonding = useCallback(() => {
@@ -424,18 +457,29 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
 
   useEffect(() => {
     if (!companion) return;
-    const band = companion.mood === 'resting' ? 'resting' : 'happy';
-    setPresence(band);
-    // Quiet hours start cozy-looking; user can still Talk / Wave / Play anytime
-    if (band === 'happy') {
+    const quietHoursBand = companion.mood === 'resting';
+    const engagementRest = isEngagementResting(companion.vitality);
+    setPresence(quietHoursBand ? 'resting' : 'happy');
+    // Active engagement only clears Quiet-Time napping; vitality rest keeps calm idle.
+    if (!quietHoursBand && !engagementRest) {
       setNapping(false);
     }
     setExpression((prev) => {
       if (prev === 'waving' || prev === 'excited') return prev;
       if (nappingRef.current) return 'sleepy';
-      return band === 'resting' ? 'sleepy' : 'happy';
+      if (quietHoursBand) return 'sleepy';
+      if (engagementRest) return calmExpressionForVitality(companion.vitality);
+      return 'happy';
     });
-  }, [companion?.petType, companion?.mood, companion?.hat, companion?.neck, companion?.scene, companion?.petName]);
+  }, [
+    companion?.petType,
+    companion?.mood,
+    companion?.vitality,
+    companion?.hat,
+    companion?.neck,
+    companion?.scene,
+    companion?.petName,
+  ]);
 
   // Milestone → excited (visual only; no numeric streak callout)
   useEffect(() => {
@@ -454,19 +498,23 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   // No auto wave/sound on Home focus or app resume — companion switches (and
   // returning from Style) must stay silent. Wave / Talk are button-only.
 
-  // While napping: soft quiet idle rotation
+  const engagementResting = isEngagementResting(companion?.vitality);
+  const quietPresentation =
+    napping || presence === 'resting' || engagementResting;
+
+  // While in quiet / engagement-rest presentation: soft quiet idle rotation
   useEffect(() => {
-    if (!napping) return;
+    if (!quietPresentation) return;
     if (expression === 'waving' || expression === 'excited') return;
     const id = setInterval(() => {
       setExpression((prev) => nextQuietIdle(prev));
     }, 14000);
     return () => clearInterval(id);
-  }, [napping, expression]);
+  }, [quietPresentation, expression]);
 
   // Ambient naps during awake idle — clock-based only (not check-in / miss gated)
   useEffect(() => {
-    if (napping) return;
+    if (quietPresentation) return;
     if (expression === 'waving' || expression === 'excited') return;
     const id = setInterval(() => {
       setExpression((prev) => {
@@ -475,7 +523,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
       });
     }, 20000);
     return () => clearInterval(id);
-  }, [napping, expression]);
+  }, [quietPresentation, expression]);
 
   if (loading && !companion) {
     return (
@@ -487,7 +535,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
   }
 
   const quietHours = presence === 'resting';
-  const cozyLook = quietHours || napping;
+  const cozyLook = quietPresentation;
   // Scene color applies only inside AnimalWebView's companion box — keep the
   // Home chrome on the brand cream gradient.
   const gradient = cozyLook ? gradients.homeResting : gradients.home;
@@ -615,7 +663,11 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
                 expression={expression}
                 muted={muted}
                 style={styles.hero3dContent}
-                accessibilityLabel={`${companion.petName} companion, vitality ${companion.vitality || 'bright'}`}
+                accessibilityLabel={
+                  isEngagementResting(companion.vitality)
+                    ? `${companion.petName} companion, resting`
+                    : `${companion.petName} companion`
+                }
                 onPetTap={runPlayBonding}
                 onPetLongPress={() => runTalk('tap')}
                 outfit={{
@@ -812,7 +864,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
           <HelloCalendar helloDays={companion.helloDays || []} userId={user.id} />
         ) : null}
 
-        {napping && companion ? (
+        {(napping || engagementResting) && companion ? (
           <View style={styles.restCard} accessibilityRole="summary">
             <Text style={styles.restTitle}>Resting</Text>
             <Text style={styles.restBody}>
@@ -832,7 +884,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
         <Text style={styles.skipHint}>Optional · skip anytime</Text>
 
         <View style={styles.linkRow}>
-          {companion?.walksAvailable ? (
+          {companion ? (
             <Pressable
               onPress={() => navigation.navigate('Together')}
               accessibilityRole="button"

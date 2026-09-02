@@ -11,14 +11,23 @@ import {
   User,
 } from './api';
 import { useSettings } from './SettingsContext';
+import {
+  DEMO_PASSWORD,
+  findDemoPatientAccount,
+  isDemoToolsEnabled,
+} from './demoMode';
 
 type AuthContextValue = {
   user: User | null;
   companion: CompanionState | null;
   loading: boolean;
+  /** True while presenter is jumping between seeded demo accounts. */
+  demoSwitching: boolean;
   signIn: (email: string, password: string) => Promise<User>;
   signUp: (email: string, password: string, name: string) => Promise<User>;
   signOut: () => Promise<void>;
+  /** Dev/demo only — instant jump between seeded @demo.local patients. */
+  switchDemoAccount: (email: string) => Promise<User>;
   setUser: (u: User | null) => void;
   setCompanion: React.Dispatch<React.SetStateAction<CompanionState | null>>;
 };
@@ -33,6 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // truth. Home refreshes from the API on focus after a cold start.
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoSwitching, setDemoSwitching] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -102,9 +112,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setUser(null);
   };
 
+  const switchDemoAccount = async (email: string) => {
+    if (!isDemoToolsEnabled()) {
+      throw new Error('Demo account switcher is disabled in this build');
+    }
+    const target = findDemoPatientAccount(email);
+    if (!target) {
+      throw new Error('Unknown demo account');
+    }
+    setDemoSwitching(true);
+    // Drop companion immediately so Home cannot paint the previous pet.
+    setCompanion(null);
+    try {
+      await saveToken(null);
+      const { user: u } = await apiLogin(target.email, DEMO_PASSWORD, 'patient');
+      await setUser(u);
+      void syncTimezone(u.id, getDeviceTimezone()).catch(() => undefined);
+      return u;
+    } finally {
+      setDemoSwitching(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, companion, loading, signIn, signUp, signOut, setUser, setCompanion }}
+      value={{
+        user,
+        companion,
+        loading,
+        demoSwitching,
+        signIn,
+        signUp,
+        signOut,
+        switchDemoAccount,
+        setUser,
+        setCompanion,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -9,9 +9,12 @@ silent until friendly cues can be licensed and reviewed independently.
 Rabbit, capybara, koala, bear, and raccoon use verified same-species recordings
 for their Talk interactions. Sloth uses a clearly disclosed kid-goat soundalike:
 the Sloth Conservation Foundation describes two-fingered baby sloths as sounding
-like baby goats when they “meep.” Hamster's older cue remains in this folder only
-for auditability and legacy saved companions; it is no longer referenced by the
-selectable-species manifest.
+like baby goats when they “meep.”
+
+**Hamster:** no Talk audio file is bundled. Hamster is a legacy companion id only
+(not offered to new patients). `animalSounds.ts` has no hamster entry — Talk is
+silent if an old profile still has that species. Do not invent a ledger row for a
+missing file.
 
 | Species | Bundled file (duration; bytes) | Verified source page (and acquisition file) | Author / uploader | License | Modifications | SHA-256 | Retrieved |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -47,6 +50,9 @@ selectable-species manifest.
   author/uploader, allowed license, processing note, final-file hash, measured
   duration, byte size, and retrieval date in `src/audio/animalSounds.ts` and
   this ledger.
+- Hamster has **no** talk file on disk and no ready entry in `animalSounds.ts`.
+- Quiet Time ambient bed lives outside this folder — see
+  `../ATTRIBUTION-AMBIENT.md` (Mixkit SFX).
 - Expo's SDK 57 local-audio contract is documented by [Expo Audio](https://docs.expo.dev/versions/v57.0.0/sdk/audio/)
   and [Expo Asset](https://docs.expo.dev/versions/v57.0.0/sdk/asset/). The
   manifest uses literal static `require()` calls so Metro can bundle the files;

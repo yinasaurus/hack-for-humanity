@@ -245,9 +245,3 @@ export function vitalityState(
   if (misses >= 1 || (dailyDeficitPct != null && dailyDeficitPct > 0)) return 'fatigued';
   return 'bright';
 }
-
-/** Walks unlock when the patient has any streak of at least 2 (bonding, not content-gated). */
-export function walksUnlocked(checkIns, timeZone = UTC_TIMEZONE) {
-  const todayKey = toDateKey(new Date(), timeZone);
-  return currentStreak(checkIns, todayKey, timeZone) >= 2 || uniqueSortedDays(checkIns, timeZone).length >= 3;
-}

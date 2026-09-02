@@ -727,3 +727,81 @@
   border-radius: 10px;
   margin-bottom: 12px;
 }
+
+/* —— Presenter-only demo switcher (Vite DEV / VITE_DEMO_MODE) —— */
+.demo-switcher {
+  position: relative;
+}
+
+.demo-switcher-chip {
+  min-width: 64px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(20, 24, 28, 0.78);
+  color: #e8ecf0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.demo-switcher-chip:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.demo-switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 260px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1a1f24;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.demo-switcher-title {
+  margin: 0 0 6px 4px;
+  color: #8b939c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.demo-switcher-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f2f4f6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.demo-switcher-item:hover {
+  background: rgba(90, 140, 120, 0.28);
+}
+
+.demo-switcher-item strong {
+  font-size: 14px;
+}
+
+.demo-switcher-item span {
+  color: #9aa3ab;
+  font-size: 11px;
+}
+
+.demo-switcher-foot {
+  margin: 8px 4px 2px;
+  color: #6b737a;
+  font-size: 9px;
+}
