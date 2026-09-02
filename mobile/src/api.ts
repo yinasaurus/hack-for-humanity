@@ -12,6 +12,7 @@ export const API_BASE =
   (Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://localhost:3001');
 
 const TOKEN_KEY = 'kindplate.token';
+const CHECK_IN_TIMEOUT_MS = 25_000;
 
 export type PetGender = 'male' | 'female';
 
@@ -143,6 +144,21 @@ async function authHeaders(json = true): Promise<Record<string, string>> {
   const token = await getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+async function fetchCheckInWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHECK_IN_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error('Saving took too long. Please try again — your photo was not saved.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function login(
@@ -322,7 +338,7 @@ export async function submitCheckIn(
   const body: Record<string, string> = { imageBase64: cleaned, mimeType };
   const note = (visitNote || '').trim();
   if (note) body.visitNote = note;
-  const res = await fetch(`${API_BASE}/api/patient/${userId}/check-in`, {
+  const res = await fetchCheckInWithTimeout(`${API_BASE}/api/patient/${userId}/check-in`, {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify(body),
@@ -350,7 +366,7 @@ export async function submitCheckInPhoto(
   if (note) form.append('visitNote', note);
 
   const headers = await authHeaders(false);
-  const res = await fetch(`${API_BASE}/api/patient/${userId}/check-in`, {
+  const res = await fetchCheckInWithTimeout(`${API_BASE}/api/patient/${userId}/check-in`, {
     method: 'POST',
     headers,
     body: form,

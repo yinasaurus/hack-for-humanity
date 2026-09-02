@@ -6,7 +6,13 @@ dotenv.config();
 
 const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
 const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.7-flash').trim();
+const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.6-flash,gemini-3.5-flash')
+  .split(',')
+  .map((model) => model.trim())
+  .filter(Boolean);
+const GEMINI_MODELS = [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS])];
+const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 7_000);
 
 /** Prefer Gemini when set; else OpenAI; else mock. */
 export function aiProvider() {
@@ -24,13 +30,44 @@ function openaiClient() {
   return new OpenAI({ apiKey: openaiKey });
 }
 
-function geminiModel() {
+function geminiModel(modelName = GEMINI_MODEL) {
   if (!geminiKey) return null;
   const genAI = new GoogleGenerativeAI(geminiKey);
   return genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
+    model: modelName,
     generationConfig: { responseMimeType: 'application/json' },
   });
+}
+
+function isTemporaryGeminiError(err) {
+  const status = Number(err?.status);
+  return (
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    /timed out|timeout|aborted/i.test(String(err?.message || ''))
+  );
+}
+
+/**
+ * Each model gets one bounded attempt. Capacity failures move to the next
+ * stable model; invalid keys and invalid requests fail immediately.
+ */
+async function generateGeminiContent(parts) {
+  let lastError;
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = geminiModel(modelName);
+      return await model.generateContent(parts, { timeout: GEMINI_REQUEST_TIMEOUT_MS });
+    } catch (err) {
+      lastError = err;
+      if (!isTemporaryGeminiError(err)) throw err;
+      console.warn(`Gemini ${modelName} unavailable; trying fallback if available.`);
+    }
+  }
+  throw lastError;
 }
 
 function parseJsonLoose(text) {
@@ -92,8 +129,7 @@ export async function analyzeFoodPhoto({ imageBase64, mimeType = 'image/jpeg' })
 
   try {
     if (provider === 'gemini') {
-      const model = geminiModel();
-      const result = await model.generateContent([
+      const result = await generateGeminiContent([
         { text: `${MEAL_GATE_PROMPT}\n\nClassify this image. If it is not clearly a meal, set isMeal to false.` },
         {
           inlineData: {

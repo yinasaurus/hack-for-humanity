@@ -367,7 +367,9 @@ const styles = StyleSheet.create({
   },
   photoWrap: {
     marginTop: spacing.md,
-    minHeight: 180,
+    width: 180,
+    height: 180,
+    alignSelf: 'center',
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: colors.mist,
@@ -376,7 +378,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     width: '100%',
-    height: 220,
+    height: '100%',
     resizeMode: 'cover',
   },
   sheetMuted: {
