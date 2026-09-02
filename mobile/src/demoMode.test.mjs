@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DEMO_PATIENT_ACCOUNTS,
+  canShowCosmeticFitDebug,
   canShowDemoAccountSwitcher,
   findDemoPatientAccount,
   isDemoLocalEmail,
@@ -41,8 +42,10 @@ test('isDemoToolsEnabled stays false when DEMO_MODE is not set and __DEV__ is of
   delete process.env.EXPO_PUBLIC_DEMO_MODE;
   // In this runner __DEV__ is undefined → should be false.
   assert.equal(isDemoToolsEnabled(), false);
+  assert.equal(canShowCosmeticFitDebug(), false);
   process.env.EXPO_PUBLIC_DEMO_MODE = '1';
   assert.equal(isDemoToolsEnabled(), true);
+  assert.equal(canShowCosmeticFitDebug(), true);
   if (prev === undefined) delete process.env.EXPO_PUBLIC_DEMO_MODE;
   else process.env.EXPO_PUBLIC_DEMO_MODE = prev;
 });

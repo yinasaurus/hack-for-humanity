@@ -84,6 +84,15 @@ export function canShowDemoAccountSwitcher(userEmail?: string | null): boolean {
   return isDemoToolsEnabled() && isDemoLocalEmail(userEmail);
 }
 
+/**
+ * Cosmetic fit debugger — same build gate as demo tools (`__DEV__` /
+ * `EXPO_PUBLIC_DEMO_MODE`). Available whenever demo tools are on so fits can
+ * be tuned without requiring a @demo.local session.
+ */
+export function canShowCosmeticFitDebug(): boolean {
+  return isDemoToolsEnabled();
+}
+
 export function findDemoPatientAccount(email: string): DemoPatientAccount | undefined {
   const normalized = email.trim().toLowerCase();
   return DEMO_PATIENT_ACCOUNTS.find((a) => a.email === normalized);

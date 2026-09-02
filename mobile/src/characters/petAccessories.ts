@@ -323,6 +323,79 @@ export function placeHeadAccessory(
   };
 }
 
+/**
+ * Neck-worn placement: offsets from a neck-bone world origin, using the same
+ * anatomical axes / headSpan as hats & glasses so scarves scale with the head
+ * while sitting on an independent neck anchor.
+ */
+export function placeNeckAccessory(
+  neckOrigin: Vec3,
+  frame: AnatomicalHeadFrame,
+  fit: AccessoryFit
+): AccessoryPlacement {
+  const position = vAdd(
+    neckOrigin,
+    vAdd(
+      vScale(frame.up, (fit.up || 0) * frame.span),
+      vAdd(
+        vScale(frame.forward, (fit.forward || 0) * frame.span),
+        vScale(frame.right, (fit.right || 0) * frame.span)
+      )
+    )
+  );
+  return {
+    position,
+    size: Math.max(0.04, (fit.size || 0.4) * frame.span),
+    tilt: fit.tilt || 0,
+    up: frame.up,
+    forward: frame.forward,
+    right: frame.right,
+  };
+}
+
+export function cloneAccessoryFit(fit: SpeciesAccessoryFit): SpeciesAccessoryFit {
+  return {
+    hat: { ...fit.hat },
+    face: { ...fit.face },
+    neck: { ...fit.neck },
+    held: { ...fit.held },
+  };
+}
+
+function fmtNum(n: number): string {
+  const rounded = Math.round(n * 1000) / 1000;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+function formatFitObject(fit: AccessoryFit): string {
+  const parts = [`up: ${fmtNum(fit.up)}`, `forward: ${fmtNum(fit.forward)}`];
+  if (fit.right != null && fit.right !== 0) parts.push(`right: ${fmtNum(fit.right)}`);
+  parts.push(`size: ${fmtNum(fit.size)}`);
+  if (fit.tilt != null && fit.tilt !== 0) parts.push(`tilt: ${fmtNum(fit.tilt)}`);
+  return `{ ${parts.join(', ')} }`;
+}
+
+/** Snippet matching SPECIES_ACCESSORY_FIT entries in petAccessories.ts. */
+export function formatSpeciesFitSnippet(speciesId: string, fit: SpeciesAccessoryFit): string {
+  return [
+    `  ${speciesId}: {`,
+    `    hat: ${formatFitObject(fit.hat)},`,
+    `    face: ${formatFitObject(fit.face)},`,
+    `    neck: ${formatFitObject(fit.neck)},`,
+    `    held: ${formatFitObject(fit.held)},`,
+    `  },`,
+  ].join('\n');
+}
+
+export function formatSlotFitSnippet(
+  speciesId: string,
+  slot: AccessorySlot,
+  fit: AccessoryFit
+): string {
+  return `  // ${speciesId}.${slot}\n  ${slot}: ${formatFitObject(fit)},`;
+}
+
 /** Hats / faces built as reusable low-poly attachments (not per-animal meshes). */
 export const LOW_POLY_HATS = ['party_hat', 'beanie', 'bow', 'flower', 'crown_soft'] as const;
 export const LOW_POLY_FACES = ['glasses'] as const;
+export const LOW_POLY_NECKS = ['scarf'] as const;

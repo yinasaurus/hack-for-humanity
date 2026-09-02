@@ -47,11 +47,13 @@ export function DemoAccountSwitcher() {
     }
   };
 
+  const headerClearance = Math.max(insets.top, 8) + 52;
+
   return (
     <>
       <View
         pointerEvents="box-none"
-        style={[styles.anchor, { top: Math.max(insets.top, 8) + 4 }]}
+        style={[styles.anchor, { top: headerClearance }]}
       >
         <Pressable
           accessibilityRole="button"
@@ -75,7 +77,7 @@ export function DemoAccountSwitcher() {
       >
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View
-            style={[styles.menu, { top: Math.max(insets.top, 8) + 44 }]}
+            style={[styles.menu, { top: headerClearance + 36 }]}
             // Prevent backdrop press from closing when tapping inside the menu
             onStartShouldSetResponder={() => true}
           >
@@ -109,9 +111,10 @@ export function DemoAccountSwitcher() {
 }
 
 const styles = StyleSheet.create({
+  // Top-left — Home keeps Support + Settings in the top-right header.
   anchor: {
     position: 'absolute',
-    right: 10,
+    left: 10,
     zIndex: 1000,
     elevation: 1000,
   },
@@ -139,7 +142,7 @@ const styles = StyleSheet.create({
   },
   menu: {
     position: 'absolute',
-    right: 10,
+    left: 10,
     width: 260,
     backgroundColor: '#1A1F24',
     borderRadius: 8,

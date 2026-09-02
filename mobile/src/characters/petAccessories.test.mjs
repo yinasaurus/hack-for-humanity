@@ -4,6 +4,9 @@ import {
   accessoryFitForSpecies,
   buildAnatomicalHeadFrame,
   placeHeadAccessory,
+  placeNeckAccessory,
+  formatSpeciesFitSnippet,
+  formatSlotFitSnippet,
   SPECIES_ACCESSORY_FIT,
   HEAD_LANDMARK_HINTS,
 } from './petAccessories.ts';
@@ -71,16 +74,25 @@ test('anatomical frame prefers ear-mid crown and muzzle forward over bone axes',
   assert.ok(frame.up[1] > 0.4, 'up is mostly world-up after orthonormalize');
 });
 
-test('hat seats on crown; glasses sit forward at eye line', () => {
+test('neck placement offsets from neck origin using head anatomical axes', () => {
   const frame = buildAnatomicalHeadFrame({
     head: [0, 1.2, 0.6],
     earL: [-0.25, 1.45, 0.58],
     earR: [0.25, 1.45, 0.58],
     muzzle: [0, 1.0, 1.0],
   });
-  const hat = placeHeadAccessory('hat', frame, SPECIES_ACCESSORY_FIT.dog.hat);
-  const glasses = placeHeadAccessory('face', frame, SPECIES_ACCESSORY_FIT.dog.face);
-  assert.ok(hat.position[1] >= frame.crown[1] - 0.05, 'hat near crown height');
-  assert.ok(glasses.position[2] > hat.position[2], 'glasses further forward than hat');
-  assert.ok(glasses.size > 0.05 && hat.size > 0.05);
+  const neckOrigin = [0, 0.95, 0.45];
+  const placed = placeNeckAccessory(neckOrigin, frame, SPECIES_ACCESSORY_FIT.dog.neck);
+  assert.ok(placed.size > 0.05);
+  assert.ok(placed.position[1] < frame.origin[1], 'scarf sits below head origin');
+});
+
+test('fit snippets match SPECIES_ACCESSORY_FIT paste shape', () => {
+  const snippet = formatSpeciesFitSnippet('rabbit', SPECIES_ACCESSORY_FIT.rabbit);
+  assert.match(snippet, /rabbit: \{/);
+  assert.match(snippet, /hat: \{ up:/);
+  assert.match(snippet, /neck: \{/);
+  const slot = formatSlotFitSnippet('rabbit', 'neck', SPECIES_ACCESSORY_FIT.rabbit.neck);
+  assert.match(slot, /rabbit\.neck/);
+  assert.match(slot, /neck: \{/);
 });

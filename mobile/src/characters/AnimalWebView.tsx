@@ -11,7 +11,11 @@ import {
 import { animalPresentationFor } from './animalPresentation';
 import { RABBIT_PROCEDURAL_MODEL } from './rabbitProceduralModel';
 import { CAT_PROCEDURAL_MODEL } from './catProceduralModel';
-import { accessoryFitForSpecies, HEAD_LANDMARK_HINTS } from './petAccessories';
+import {
+  accessoryFitForSpecies,
+  HEAD_LANDMARK_HINTS,
+  type SpeciesAccessoryFit,
+} from './petAccessories';
 import { useResolvedModelPath } from './useResolvedModelPath';
 import { colors } from '../theme';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -53,6 +57,11 @@ type Props = {
   accessibilityLabel?: string;
   /** Decorative outfit — bone-parented when the GLB has head/neck/hand bones */
   outfit?: AnimalOutfit;
+  /**
+   * Dev-only live override of per-species accessory fits. Ephemeral — never
+   * written back to SPECIES_ACCESSORY_FIT unless the caller copies/saves.
+   */
+  accessoryFit?: SpeciesAccessoryFit | null;
   /** Short tap on the canvas (not a drag/orbit). */
   onPetTap?: () => void;
   /** Long-press on the canvas without dragging. */
@@ -82,6 +91,7 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     muted = true,
     accessibilityLabel = 'Companion character',
     outfit,
+    accessoryFit = null,
     onPetTap,
     onPetLongPress,
   },
@@ -213,6 +223,11 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
     character.id,
   ]);
 
+  useEffect(() => {
+    if (!accessoryFit) return;
+    post('setAccessoryFit', { fit: accessoryFit });
+  }, [accessoryFit, character.id]);
+
   const onMessage = (e: WebViewMessageEvent) => {
     try {
       const msg = JSON.parse(e.nativeEvent.data);
@@ -225,6 +240,9 @@ export const AnimalWebView = forwardRef<AnimalWebHandle, Props>(function AnimalW
           held: outfit?.held || 'none',
           scene: outfit?.scene || 'sky',
         });
+        if (accessoryFit) {
+          post('setAccessoryFit', { fit: accessoryFit });
+        }
         post('setExpression', { expression: active });
       } else if (msg?.type === 'petTap') {
         onPetTap?.();
@@ -372,7 +390,7 @@ const GROWTH_BODY_SCALE = ${JSON.stringify(growthChannels.body)};
 const GROWTH_HEAD_SCALE = ${growthChannels.head};
 const GROWTH_CHANNELS = ${JSON.stringify(growthChannels)};
 const ANIMAL = ${JSON.stringify(animal)};
-const ACCESSORY_FIT = ${JSON.stringify(accessoryFit)};
+let ACCESSORY_FIT = ${JSON.stringify(accessoryFit)};
 const LANDMARK_HINTS = ${landmarkHints};
 const PROCEDURAL_MODEL = ${JSON.stringify(proceduralModel)};
 const IS_PROCEDURAL = Boolean(PROCEDURAL_MODEL);
@@ -1693,6 +1711,22 @@ function attachHeadAccessory(slot, head, mesh, fit) {
   attachOriented(slot, head, mesh, target, size, frame, fit.tilt || 0);
 }
 
+/** Scarf / neck items: parent to neck bone, offsets in anatomical (head) frame. */
+function attachNeckAccessory(neck, head, mesh, fit) {
+  if (!neck || !mesh || !fit) return clearAcc('neck');
+  const frame = resolveHeadFrame(head || neck);
+  neck.updateWorldMatrix(true, false);
+  const neckPos = new THREE.Vector3();
+  neck.getWorldPosition(neckPos);
+  const target = neckPos
+    .clone()
+    .addScaledVector(frame.up, (fit.up || 0) * frame.span)
+    .addScaledVector(frame.forward, (fit.forward || 0) * frame.span)
+    .addScaledVector(frame.right, (fit.right || 0) * frame.span);
+  const size = Math.max(0.04, (fit.size || 0.4) * frame.span);
+  attachOriented('neck', neck, mesh, target, size, frame, fit.tilt || 0);
+}
+
 /**
  * Static Poly Pizza meshes have no skeleton — plant world-aligned landmark nodes
  * on the bbox so hats/glasses still parent to a head anchor (whole-body only).
@@ -1790,21 +1824,11 @@ function applyOutfit(next) {
     attachHeadAccessory('face', head, makeFace(outfitState.face), faceFit);
   } else clearAcc('face');
 
-  const frame = resolveHeadFrame(head);
   if (outfitState.neck && outfitState.neck !== 'none' && neck) {
-    attachWorld(
-      'neck',
-      neck,
-      makeScarf(outfitState.neck),
-      {
-        up: (neckFit.up || 0) * frame.span,
-        forward: (neckFit.forward || 0) * frame.span,
-        right: (neckFit.right || 0) * frame.span,
-      },
-      Math.max(0.04, (neckFit.size || 0.4) * frame.span)
-    );
+    attachNeckAccessory(neck, head, makeScarf(outfitState.neck), neckFit);
   } else clearAcc('neck');
   if (outfitState.held && outfitState.held !== 'none' && hand) {
+    const frame = resolveHeadFrame(head);
     attachWorld(
       'held',
       hand,
@@ -1817,6 +1841,21 @@ function applyOutfit(next) {
       Math.max(0.04, (heldFit.size || 0.28) * frame.span)
     );
   } else clearAcc('held');
+}
+
+function applyAccessoryFit(next) {
+  if (!next || typeof next !== 'object') return;
+  const mergeSlot = (slot) => ({
+    ...(ACCESSORY_FIT[slot] || {}),
+    ...(next[slot] || {}),
+  });
+  ACCESSORY_FIT = {
+    hat: mergeSlot('hat'),
+    face: mergeSlot('face'),
+    neck: mergeSlot('neck'),
+    held: mergeSlot('held'),
+  };
+  applyOutfit({});
 }
 
 window.__kpCmd = (msg) => {
@@ -1847,6 +1886,7 @@ window.__kpCmd = (msg) => {
     goBaseIdle();
   }
   if (msg.type === 'setOutfit') applyOutfit(msg);
+  if (msg.type === 'setAccessoryFit') applyAccessoryFit(msg.fit);
   if (msg.type === 'stop') {
     animToken += 1;
     goBaseIdle();

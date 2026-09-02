@@ -22,6 +22,7 @@ import { CustomizeScreen } from './src/screens/CustomizeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { PetSelectionScreen } from './src/screens/PetSelectionScreen';
 import { DemoAccountSwitcher } from './src/components/DemoAccountSwitcher';
+import { CosmeticFitDebugPanel } from './src/components/CosmeticFitDebugPanel';
 import { colors } from './src/theme';
 
 export type RootStackParamList = {
@@ -88,8 +89,9 @@ function RootNavigator() {
           </>
         )}
       </Stack.Navigator>
-      {/* Presenter tool — self-gates to __DEV__ / DEMO_MODE + @demo.local */}
+      {/* Presenter / fit tools — self-gate to __DEV__ / DEMO_MODE */}
       <DemoAccountSwitcher />
+      <CosmeticFitDebugPanel />
       {demoSwitching ? (
         <View
           pointerEvents="auto"

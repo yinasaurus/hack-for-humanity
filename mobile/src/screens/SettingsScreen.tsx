@@ -162,24 +162,12 @@ export function SettingsScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.navigate('Customize')}
             accessibilityRole="button"
-            accessibilityLabel="Customize companion looks"
+            accessibilityLabel="Style companion looks or switch friend"
             style={styles.linkRow}
           >
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Style companion</Text>
-              <Text style={styles.rowBody}>Looks and keepsakes.</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => navigation.navigate('Customize', { initialTab: 'companion' })}
-            accessibilityRole="button"
-            accessibilityLabel="Switch companion"
-            style={styles.linkRow}
-          >
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>Switch companion</Text>
-              <Text style={styles.rowBody}>Pick a different friend anytime.</Text>
+              <Text style={styles.rowBody}>Looks, keepsakes, or switch friends.</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
