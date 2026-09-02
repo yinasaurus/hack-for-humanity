@@ -142,9 +142,7 @@ export function CustomizeScreen({ navigation, route }: Props) {
   const [unlocks, setUnlocks] = useState<Unlock[]>([]);
   const [growthStage, setGrowthStage] = useState<CompanionState['growthStage']>('baby');
   const initialTab = route?.params?.initialTab;
-  const [tab, setTab] = useState<TabId>(
-    initialTab === 'companion' || initialTab === 'outfit' ? initialTab : 'outfit'
-  );
+  const [tab, setTab] = useState<TabId>('companion');
   const [busy, setBusy] = useState(false);
   const [loadingLook, setLoadingLook] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +152,14 @@ export function CustomizeScreen({ navigation, route }: Props) {
     () => Math.min(168, (width - spacing.lg * 2 - 12) / 2),
     [width]
   );
+
+  useEffect(() => {
+    if (initialTab === 'companion' || initialTab === 'outfit') {
+      setTab(initialTab);
+    } else {
+      setTab('companion');
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     if (!user) {
@@ -255,10 +261,11 @@ export function CustomizeScreen({ navigation, route }: Props) {
                 }}
               />
             </View>
+            <Text style={styles.outfitStats} accessibilityLiveRegion="polite">
+              {wardrobeLabel(a)}
+            </Text>
             <Text style={styles.previewName} accessibilityLiveRegion="polite">
-              {a.petName.trim() || 'Companion'} ·{' '}
-              {petTypeLabel(a.petType)}
-              {` · ${wardrobeLabel(a)}`}
+              {a.petName.trim() || 'Companion'} · {petTypeLabel(a.petType)}
             </Text>
             {companionPending ? (
               <Text style={styles.pendingSwitch} accessibilityLiveRegion="polite">
@@ -275,22 +282,20 @@ export function CustomizeScreen({ navigation, route }: Props) {
           { paddingBottom: Math.max(insets.bottom, 16) + 72 },
         ]}
       >
-        {tab === 'outfit' ? (
-          <View style={styles.pathCard} accessibilityRole="summary">
-            <Text style={styles.pathTitle}>Coming up</Text>
-            <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
-            {keepsakePath.map((step) => (
-              <View key={step.milestoneDay} style={styles.pathRow}>
-                <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
-                  {step.label}
-                </Text>
-                <Text style={styles.pathAway}>
-                  {step.unlocked ? 'Yours' : 'A future keepsake'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
+        <View style={styles.pathCard} accessibilityRole="summary">
+          <Text style={styles.pathTitle}>Coming up</Text>
+          <Text style={styles.pathBlurb}>Soft keepsakes from check-in days — no deadlines.</Text>
+          {keepsakePath.map((step) => (
+            <View key={step.milestoneDay} style={styles.pathRow}>
+              <Text style={[styles.pathLabel, step.unlocked && styles.pathLabelOn]}>
+                {step.label}
+              </Text>
+              <Text style={styles.pathAway}>
+                {step.unlocked ? 'Yours' : 'A future keepsake'}
+              </Text>
+            </View>
+          ))}
+        </View>
 
         <Text style={styles.section}>Name</Text>
         <TextInput
@@ -365,9 +370,9 @@ export function CustomizeScreen({ navigation, route }: Props) {
 
         {tab === 'outfit' && (
           <>
-            <View style={styles.inventoryIntro} accessibilityRole="summary">
-              <Text style={styles.inventoryTitle}>Wardrobe</Text>
-              <Text style={styles.inventoryBody}>
+            <Text style={styles.section}>Wardrobe</Text>
+            <View style={styles.companionIntro} accessibilityRole="summary">
+              <Text style={styles.companionIntroBody}>
                 Earned keepsakes stay yours. Locked pieces remain visible here and open automatically in a future chapter.
               </Text>
             </View>
@@ -478,8 +483,15 @@ const styles = StyleSheet.create({
     color: colors.ink,
     alignSelf: 'flex-start',
   },
-  previewName: {
+  outfitStats: {
     marginTop: 4,
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 13,
+    color: colors.teal,
+    textAlign: 'center',
+  },
+  previewName: {
+    marginTop: 2,
     fontFamily: 'Nunito_700Bold',
     fontSize: 14,
     color: colors.sageDeep,

@@ -10,17 +10,17 @@ export const MILESTONE_REWARDS: Record<
   number,
   { type: string; id: string; label: string }
 > = {
-  5: { type: 'accessory', id: 'soft_scarf', label: 'Soft scarf' },
-  10: { type: 'background', id: 'sunny_meadow', label: 'Sunny meadow' },
-  20: { type: 'accessory', id: 'flower_crown', label: 'Flower crown' },
+  5: { type: 'accessory', id: 'soft_scarf', label: 'Scarf' },
+  10: { type: 'background', id: 'sunny_meadow', label: 'Meadow' },
+  20: { type: 'accessory', id: 'flower_crown', label: 'Flower' },
   50: { type: 'background', id: 'cozy_nook', label: 'Cozy nook' },
-  100: { type: 'accessory', id: 'star_pendant', label: 'Star pendant' },
-  120: { type: 'toy', id: 'ribbon_ball', label: 'Ribbon ball' },
-  140: { type: 'background', id: 'quiet_garden', label: 'Quiet garden' },
-  160: { type: 'accessory', id: 'cozy_beanie', label: 'Cozy beanie' },
+  100: { type: 'accessory', id: 'star_pendant', label: 'Star' },
+  120: { type: 'toy', id: 'ribbon_ball', label: 'Bow' },
+  140: { type: 'background', id: 'quiet_garden', label: 'Garden' },
+  160: { type: 'accessory', id: 'cozy_beanie', label: 'Beanie' },
   180: { type: 'accessory', id: 'round_glasses', label: 'Round glasses' },
   200: { type: 'accessory', id: 'soft_crown', label: 'Soft crown' },
-  220: { type: 'accessory', id: 'pocket_heart', label: 'Pocket heart' },
+  220: { type: 'accessory', id: 'pocket_heart', label: 'Heart' },
 };
 
 export type KeepsakeStep = {

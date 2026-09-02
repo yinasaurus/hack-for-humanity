@@ -35,7 +35,7 @@ test('all renderer adapters use the shared Rabbit spec and procedural build seam
     assert.match(source, /flatShading: Boolean\(spec\.flatShading\)/);
     assert.match(source, /new THREE\.MeshPhysicalMaterial/);
     assert.match(source, /initializeRoot\(buildProceduralModel\(PROCEDURAL_MODEL\), \[\]\)/);
-    assert.match(source, /proceduralModel\?\.framing\.background/);
+    assert.match(source, /proceduralModel\?\.framing\.ground/);
     assert.match(source, /const GROUND_COLOR = \$\{JSON\.stringify\(groundColor\)\}/);
     assert.match(source, /PROCEDURAL_MODEL\?\.growthTargets/);
     assert.match(source, /RIG_HINTS\.eye/);

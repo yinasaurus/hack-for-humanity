@@ -44,6 +44,7 @@ export const ALLOWED = {
     'bow',
     'flower',
     'beanie',
+    'party_hat',
     'leaf',
     'cloud_hat',
     'beret',
@@ -108,6 +109,7 @@ export const WARDROBE_UNLOCK_REQUIREMENTS = {
   'scene:sunny_meadow': null,
   'scene:cozy_nook': null,
   'scene:quiet_garden': null,
+  'hat:party_hat': null,
   'neck:scarf': 'soft_scarf',
   'hat:flower': 'flower_crown',
   'held:star': 'star_pendant',
@@ -124,7 +126,6 @@ export function findLockedWardrobeChange(body = {}, current = {}, unlockIds = ne
     const value = body[field];
     if (value == null || value === current[field]) continue;
     const key = `${field}:${value}`;
-    if (!(key in WARDROBE_UNLOCK_REQUIREMENTS)) return { field, value };
     const required = WARDROBE_UNLOCK_REQUIREMENTS[key];
     if (required && !unlockIds.has(required)) return { field, value, required };
   }

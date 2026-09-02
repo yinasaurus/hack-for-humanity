@@ -72,21 +72,44 @@ export function HelloCalendar({ helloDays, userId }: Props) {
     };
   }, [userId, helloDays]);
 
-  const dots = useMemo(() => {
+  const { dots, monthName, year } = useMemo(() => {
     const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    // Most recent (today) starts on the left; older days shift right.
-    const out: { key: string; hello: boolean; isToday: boolean }[] = [];
-    for (let i = 0; i < WINDOW; i++) {
-      const d = shiftDays(today, -i);
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const mName = today.toLocaleString('en-US', { month: 'long' });
+    const todayKey = toKey(today);
+
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const out: {
+      key: string;
+      dayNum: number;
+      status: 'checked-in' | 'missed' | 'future';
+      isToday: boolean;
+    }[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(currentYear, currentMonth, day);
       const key = toKey(d);
+      const isToday = key === todayKey;
+      let status: 'checked-in' | 'missed' | 'future';
+
+      if (helloSet.has(key)) {
+        status = 'checked-in';
+      } else if (key > todayKey) {
+        status = 'future';
+      } else {
+        status = 'missed';
+      }
+
       out.push({
         key,
-        hello: helloSet.has(key),
-        isToday: i === 0,
+        dayNum: day,
+        status,
+        isToday,
       });
     }
-    return out;
+
+    return { dots: out, monthName: mName, year: currentYear };
   }, [helloSet]);
 
   const dayEntries = useMemo(() => {
@@ -111,7 +134,6 @@ export function HelloCalendar({ helloDays, userId }: Props) {
         if (!res.ok) throw new Error('photo');
         const blob = await res.blob();
         if (cancelled) return;
-        // React Native Image can use a data URI when blob URLs are unavailable.
         const reader = new FileReader();
         const dataUri: string = await new Promise((resolve, reject) => {
           reader.onloadend = () => resolve(String(reader.result || ''));
@@ -132,43 +154,64 @@ export function HelloCalendar({ helloDays, userId }: Props) {
     };
   }, [dayEntries]);
 
+  const checkedInCount = dots.filter((d) => d.status === 'checked-in').length;
+
   return (
     <View style={styles.card}>
       <Text
         style={styles.title}
         accessibilityRole="header"
-        accessibilityLabel="Check-ins. Tap a filled day for details."
+        accessibilityLabel={`Check-ins for ${monthName} ${year}. Tap a filled day for details.`}
       >
-        Check-ins
+        Check-ins · {monthName} {year}
       </Text>
-      <Text style={styles.sub}>Newest on the left · tap a filled day</Text>
-      {helloDays.length === 0 ? (
-        <Text style={styles.emptyHint}>
-          No check-ins yet — when you’re ready, a filled day will show up here.
-        </Text>
-      ) : null}
+      <Text style={styles.sub}>
+        {monthName} ({dots.length} days) · {checkedInCount} check-in{checkedInCount === 1 ? '' : 's'} so far
+      </Text>
 
       <View style={styles.dotRow}>
-        {dots.map((d) => (
-          <Pressable
-            key={d.key}
-            disabled={!d.hello}
-            onPress={() => d.hello && setSelectedDay(d.key)}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !d.hello }}
-            accessibilityLabel={
-              d.hello
-                ? `Check-in on ${d.key}${d.isToday ? ', today' : ''}`
-                : `No check-in on ${d.key}`
-            }
-            style={[
-              styles.dot,
-              d.hello ? styles.dotFilled : styles.dotEmpty,
-              d.isToday && styles.dotToday,
-              d.hello && styles.dotPressable,
-            ]}
-          />
-        ))}
+        {dots.map((d) => {
+          const isClickable = d.status === 'checked-in';
+          return (
+            <Pressable
+              key={d.key}
+              disabled={!isClickable}
+              onPress={() => isClickable && setSelectedDay(d.key)}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isClickable }}
+              accessibilityLabel={
+                d.status === 'checked-in'
+                  ? `${monthName} ${d.dayNum}, checked in${d.isToday ? ' (today)' : ''}`
+                  : d.status === 'future'
+                  ? `${monthName} ${d.dayNum}, upcoming`
+                  : `${monthName} ${d.dayNum}, no check-in`
+              }
+              style={[
+                styles.dot,
+                d.status === 'checked-in' && styles.dotFilled,
+                d.status === 'missed' && styles.dotEmpty,
+                d.status === 'future' && styles.dotFuture,
+                d.isToday && styles.dotToday,
+                isClickable && styles.dotPressable,
+              ]}
+            />
+          );
+        })}
+      </View>
+
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.dotSample, styles.dotFilled]} />
+          <Text style={styles.legendText}>Checked-in</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.dotSample, styles.dotEmpty]} />
+          <Text style={styles.legendText}>Missed</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.dotSample, styles.dotFuture]} />
+          <Text style={styles.legendText}>Upcoming</Text>
+        </View>
       </View>
 
       <Modal
@@ -264,17 +307,41 @@ const styles = StyleSheet.create({
   },
   dotFilled: {
     backgroundColor: colors.sageDeep,
+    borderRadius: 5,
   },
   dotEmpty: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
     borderColor: colors.border,
+    borderRadius: 8,
+  },
+  dotFuture: {
+    backgroundColor: '#CBD5E1',
+    borderRadius: 8,
   },
   dotToday: {
-    shadowColor: colors.sageDeep,
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 0 },
+    borderWidth: 2,
+    borderColor: colors.teal,
+  },
+  legendRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dotSample: {
+    width: 12,
+    height: 12,
+  },
+  legendText: {
+    fontFamily: 'Nunito_600SemiBold',
+    fontSize: 12,
+    color: colors.inkSoft,
   },
   backdrop: {
     flex: 1,

@@ -889,7 +889,7 @@ export function HomeScreen({ navigation, celebrate, newUnlocks = [] }: Props) {
               onPress={() => navigation.navigate('Together')}
               accessibilityRole="button"
               accessibilityLabel="Open Quiet time"
-              style={styles.quietTimeBtn}
+              style={[styles.quietTimeBtn, cozyLook && styles.quietTimeBtnResting]}
             >
               <Text style={styles.quietTimeBtnText}>Quiet time</Text>
             </Pressable>
@@ -1249,20 +1249,21 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   quietTimeBtn: {
-    minHeight: Math.max(tapTarget.min, 52),
+    backgroundColor: colors.sageDeep,
     borderRadius: 18,
-    backgroundColor: colors.sage,
-    borderWidth: 1.5,
-    borderColor: colors.sageDeep,
+    minHeight: tapTarget.min,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+  },
+  quietTimeBtnResting: {
+    backgroundColor: colors.teal,
   },
   quietTimeBtnText: {
-    fontFamily: 'Nunito_800ExtraBold',
-    fontSize: 17,
+    fontFamily: 'Nunito_700Bold',
     color: colors.white,
+    fontSize: 17,
   },
   linkHit: {
     minHeight: tapTarget.min,
