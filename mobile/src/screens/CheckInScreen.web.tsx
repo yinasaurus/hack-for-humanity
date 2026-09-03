@@ -34,6 +34,9 @@ import {
 } from '../api';
 import { SupportChip } from '../components/SupportChip';
 
+/** After this, reassure the patient that analysis is still running. */
+const STILL_CHECKING_AFTER_MS = 9_000;
+
 type Props = {
   navigation: {
     goBack: () => void;
@@ -58,6 +61,7 @@ export function CheckInScreen({ navigation }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stillCheckingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [camState, setCamState] = useState<CamState>('idle');
   const [camError, setCamError] = useState<string | null>(null);
@@ -72,11 +76,32 @@ export function CheckInScreen({ navigation }: Props) {
   const [postNoteBusy, setPostNoteBusy] = useState(false);
   const [postNoteSaved, setPostNoteSaved] = useState(false);
 
+  const clearStillCheckingTimer = () => {
+    if (stillCheckingTimer.current) {
+      clearTimeout(stillCheckingTimer.current);
+      stillCheckingTimer.current = null;
+    }
+  };
+
+  const beginPhotoCheckStatus = (initial: string) => {
+    clearStillCheckingTimer();
+    setStatus(initial);
+    stillCheckingTimer.current = setTimeout(() => {
+      setStatus('Still checking your photo…');
+    }, STILL_CHECKING_AFTER_MS);
+  };
+
   /** Stop all tracks and drop the MediaStream reference. */
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearStillCheckingTimer();
+    };
   }, []);
 
   /** Ask for camera permission and start the live preview. */
@@ -183,10 +208,11 @@ export function CheckInScreen({ navigation }: Props) {
       // only the upload and food check are still in progress.
       setCapturedPhoto(dataUrl);
       stopStream();
-      setStatus('Checking photo…');
+      beginPhotoCheckStatus('Checking your photo…');
       const noteForCareTeam = visitNote.trim();
       const result = await submitCheckIn(user.id, dataUrl, 'image/jpeg', noteForCareTeam || undefined);
 
+      clearStillCheckingTimer();
       setStatus(null);
       const unlocks = (result.companion as { newlyUnlocked?: Unlock[] })?.newlyUnlocked || [];
       setPendingUnlocks(unlocks);
@@ -205,6 +231,7 @@ export function CheckInScreen({ navigation }: Props) {
             ? '\n\nTry a food or drink photo, or skip.'
             : '';
       setError(`${msg}${hint}`);
+      clearStillCheckingTimer();
       setStatus(null);
     } finally {
       setBusy(false);
@@ -215,6 +242,7 @@ export function CheckInScreen({ navigation }: Props) {
     if (busy) return;
     setCapturedPhoto(null);
     setError(null);
+    clearStillCheckingTimer();
     setStatus(null);
     startCamera();
   };
@@ -424,7 +452,12 @@ export function CheckInScreen({ navigation }: Props) {
           />
         </View>
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
+        {status ? (
+          <View style={styles.statusRow} accessibilityLiveRegion="polite">
+            {busy ? <ActivityIndicator color={colors.sageDeep} style={styles.statusSpin} /> : null}
+            <Text style={styles.status}>{status}</Text>
+          </View>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -608,10 +641,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_600SemiBold',
   },
   status: {
-    marginTop: spacing.sm,
+    marginTop: 0,
     color: colors.inkSoft,
     textAlign: 'center',
     fontFamily: 'Nunito_600SemiBold',
+    flexShrink: 1,
+  },
+  statusRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statusSpin: {
+    marginRight: 2,
   },
   error: {
     marginTop: spacing.sm,

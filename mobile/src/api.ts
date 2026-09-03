@@ -12,7 +12,8 @@ export const API_BASE =
   (Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://localhost:3001');
 
 const TOKEN_KEY = 'kindplate.token';
-const CHECK_IN_TIMEOUT_MS = 25_000;
+/** Must exceed Gemini meal-analysis budget (22s) plus upload overhead. */
+const CHECK_IN_TIMEOUT_MS = 45_000;
 
 export type PetGender = 'male' | 'female';
 

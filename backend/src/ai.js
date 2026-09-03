@@ -12,7 +12,7 @@ const GEMINI_FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.
   .map((model) => model.trim())
   .filter(Boolean);
 const GEMINI_MODELS = [...new Set([GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS])];
-const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 7_000);
+const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 22_000);
 
 /** Prefer Gemini when set; else OpenAI; else mock. */
 export function aiProvider() {

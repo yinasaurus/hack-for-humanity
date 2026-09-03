@@ -187,7 +187,7 @@ const clinician = {
 // ——— Check-in histories (relative to today) ———
 
 /** Maya: steady recent presence (skip a couple older days only). */
-const mayaCheckIns = checkInsAcross('patient-maya', 0, 16, { skip: [4, 9] });
+const mayaCheckIns = checkInsAcross('patient-maya', 1, 16, { skip: [4, 9] });
 
 /**
  * Riley: soft rest — last log two calendar days ago, missed yesterday (1 miss).
@@ -204,7 +204,7 @@ const jordanCheckIns = checkInsAcross('patient-jordan', 8, 25, { skip: [12, 18] 
 const blakeCheckIns = checkInsAcross('patient-blake', 1, 4);
 
 /** Casey: ten consecutive days including today — day 10 cosmetics. */
-const caseyCheckIns = checkInsAcross('patient-casey', 0, 9);
+const caseyCheckIns = checkInsAcross('patient-casey', 1, 9);
 
 /**
  * Sam: mixed 30-day pattern (logged + gaps) for a non-trivial clinician digest.

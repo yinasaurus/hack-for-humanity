@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +25,8 @@ import {
 } from '../api';
 import { SupportChip } from '../components/SupportChip';
 
+/** After this, reassure the patient that analysis is still running. */
+const STILL_CHECKING_AFTER_MS = 9_000;
 type Props = {
   navigation: {
     goBack: () => void;
@@ -49,6 +51,29 @@ export function CheckInScreen({ navigation }: Props) {
   const [pendingUnlocks, setPendingUnlocks] = useState<Unlock[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [visitNote, setVisitNote] = useState('');
+  const stillCheckingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (stillCheckingTimer.current) clearTimeout(stillCheckingTimer.current);
+    };
+  }, []);
+
+  const clearStillCheckingTimer = () => {
+    if (stillCheckingTimer.current) {
+      clearTimeout(stillCheckingTimer.current);
+      stillCheckingTimer.current = null;
+    }
+  };
+
+  const beginPhotoCheckStatus = (initial: string) => {
+    clearStillCheckingTimer();
+    setStatus(initial);
+    stillCheckingTimer.current = setTimeout(() => {
+      setStatus('Still checking your photo…');
+    }, STILL_CHECKING_AFTER_MS);
+  };
+
   const [noteSentWithCheckIn, setNoteSentWithCheckIn] = useState(false);
   const [postNoteBusy, setPostNoteBusy] = useState(false);
   const [postNoteSaved, setPostNoteSaved] = useState(false);
@@ -122,7 +147,7 @@ export function CheckInScreen({ navigation }: Props) {
     setBusy(true);
     setError(null);
     setDoneMessage(null);
-    setStatus('Capturing…');
+      setStatus('Capturing…');
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -136,7 +161,7 @@ export function CheckInScreen({ navigation }: Props) {
         throw new Error('Camera did not return a photo. Try again.');
       }
 
-      setStatus('Saving…');
+      beginPhotoCheckStatus('Checking your photo…');
       const noteForCareTeam = visitNote.trim();
 
       let result: Awaited<ReturnType<typeof submitCheckInPhoto>>;
@@ -148,7 +173,7 @@ export function CheckInScreen({ navigation }: Props) {
           noteForCareTeam || undefined
         );
       } catch (uploadErr) {
-        setStatus('Saving (backup path)…');
+        beginPhotoCheckStatus('Still checking your photo…');
         const b64 = await FileSystem.readAsStringAsync(photo.uri, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -165,6 +190,7 @@ export function CheckInScreen({ navigation }: Props) {
         );
       }
 
+      clearStillCheckingTimer();
       setStatus(null);
       const unlocks = result.companion?.newlyUnlocked || [];
       setPendingUnlocks(unlocks);
@@ -187,6 +213,7 @@ export function CheckInScreen({ navigation }: Props) {
             ? '\n\nTry a food or drink photo, or skip.'
             : '';
       setError(`${msg}${hint}`);
+      clearStillCheckingTimer();
       setStatus(null);
     } finally {
       setBusy(false);
@@ -346,7 +373,12 @@ export function CheckInScreen({ navigation }: Props) {
           />
         </View>
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
+        {status ? (
+          <View style={styles.statusRow} accessibilityLiveRegion="polite">
+            {busy ? <ActivityIndicator color={colors.sageDeep} style={styles.statusSpin} /> : null}
+            <Text style={styles.status}>{status}</Text>
+          </View>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -531,10 +563,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito_600SemiBold',
   },
   status: {
-    marginTop: spacing.sm,
+    marginTop: 0,
     color: colors.inkSoft,
     textAlign: 'center',
     fontFamily: 'Nunito_600SemiBold',
+    flexShrink: 1,
+  },
+  statusRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statusSpin: {
+    marginRight: 2,
   },
   error: {
     marginTop: spacing.sm,
